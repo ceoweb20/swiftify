@@ -120,7 +120,7 @@ void Settings::load()
         m_songCacheMegabytes = cache == 500 || cache == 2000 ? cache : 1000;
     }
     m_crossfadeEnabled = stored<bool>(m_store, "crossfadeEnabled", m_crossfadeEnabled);
-    m_spotifyConnect = stored<bool>(m_store, "spotifyConnect", m_spotifyConnect);
+    m_spotifyConnect = stored<bool>(m_store, "reportToSpotify", m_spotifyConnect);
     m_connectDeviceName = stored<QString>(m_store, "connectDeviceName", m_connectDeviceName).trimmed().left(64);
     if (m_connectDeviceName.isEmpty()) {
         m_connectDeviceName = QStringLiteral("Swiftify");
@@ -290,7 +290,7 @@ void Settings::setSpotifyConnect(bool value)
         return;
     }
     m_spotifyConnect = value;
-    m_store.setValue(QStringLiteral("spotifyConnect"), value);
+    m_store.setValue(QStringLiteral("reportToSpotify"), value);
     emit spotifyConnectChanged();
 }
 
