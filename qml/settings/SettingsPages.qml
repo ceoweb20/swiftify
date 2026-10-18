@@ -518,7 +518,7 @@ Item {
                         ? qsTr("Enter a valid numeric Application ID (17–20 digits).")
                         : !Settings.discordEnabled ? qsTr("Listening activity is private. Enable to share track, artist and progress with Discord.")
                         : Settings.discordApplicationId.length === 0 ? qsTr("Create an application in the Discord Developer Portal and paste its Application ID above. No token or secret is needed.")
-                        : Discord.connected ? qsTr("Connected to Discord") : qsTr("Waiting for the Discord desktop app…")
+                        : Discord.status
                 }
                 TextButton {
                     x: 8

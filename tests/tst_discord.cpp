@@ -7,6 +7,8 @@
 #include "system/DiscordPresence.h"
 
 #include <QJsonDocument>
+#include <QDir>
+#include <QFile>
 #include <QLocalServer>
 #include <QNetworkAccessManager>
 #include <QScopeGuard>
@@ -19,7 +21,127 @@ using swiftify::testing::FakeCore;
 
 class DiscordTest : public QObject {
     Q_OBJECT
+private:
+    struct Rig {
+        // Nested sandbox layouts exceed macOS's Unix socket path limit under
+        // the default long per-user temporary directory.
+        QTemporaryDir directory {QStringLiteral("/tmp/swiftify-rpc-XXXXXX")};
+        Settings settings {directory.filePath(QStringLiteral("settings.ini"))};
+        ErrorCenter errors {nullptr};
+        MemoryCredentialStore credentials;
+        QNetworkAccessManager network;
+        FakeCore core;
+        SpotifySession session {&core, &credentials, &network, &errors};
+        PlaybackController player {&core, &session, &settings, &errors};
+        QStringList candidates;
+        DiscordPresence presence {&player, &settings, nullptr, [this] { return candidates; }};
+
+        void enable()
+        {
+            settings.setDiscordApplicationId(QStringLiteral("123456789012345678"));
+            settings.setDiscordEnabled(true);
+        }
+    };
+
+    static bool readMessage(QLocalSocket *peer, QByteArray &buffer, QJsonObject &message)
+    {
+        if (!message.isEmpty()) return true;
+        buffer += peer->readAll();
+        quint32 opcode;
+        QByteArray payload;
+        if (discord::takeFrame(buffer, opcode, payload) != discord::FrameResult::Complete) return false;
+        message = QJsonDocument::fromJson(payload).object();
+        return !message.isEmpty();
+    }
+
 private slots:
+    void discoversSandboxSockets_data()
+    {
+        QTest::addColumn<QString>("suffix");
+        for (const char *suffix : {"", "app/com.discordapp.Discord", "app/com.discordapp.DiscordCanary",
+             "app/com.discordapp.DiscordPTB", "app/dev.vencord.Vesktop", ".flatpak/com.discordapp.Discord/xdg-run",
+             ".flatpak/com.discordapp.DiscordCanary/xdg-run", ".flatpak/dev.vencord.Vesktop/xdg-run",
+             "snap.discord", "snap.discord-canary"}) {
+            QTest::newRow(*suffix ? suffix : "native") << QString::fromLatin1(suffix);
+        }
+    }
+
+    void discoversSandboxSockets()
+    {
+#ifdef Q_OS_WIN
+        QSKIP("Unix filesystem socket layouts");
+#else
+        QFETCH(QString, suffix);
+        QTemporaryDir directory(QStringLiteral("/tmp/swiftify-rpc-XXXXXX"));
+        const QString folder = QDir(directory.path()).filePath(suffix);
+        QVERIFY(QDir().mkpath(folder));
+        QLocalServer server;
+        QVERIFY2(server.listen(QDir(folder).filePath(QStringLiteral("discord-ipc-7"))), qPrintable(server.errorString()));
+        const auto found = discord::socketCandidates({QString(), QStringLiteral("relative"), directory.path(), directory.path()});
+        QCOMPARE(found.size(), 1);
+        QCOMPARE(found.first(), server.fullServerName());
+#endif
+    }
+
+    void skipsUnreachableCandidateAndExplainsProtocolRejections()
+    {
+#ifdef Q_OS_WIN
+        QSKIP("Unix filesystem socket layouts");
+#else
+        Rig rig;
+        QFile stale(rig.directory.filePath(QStringLiteral("discord-ipc-0")));
+        QVERIFY(stale.open(QIODevice::WriteOnly));
+        stale.close();
+        QLocalServer server;
+        QVERIFY(server.listen(rig.directory.filePath(QStringLiteral("discord-ipc-1"))));
+        rig.candidates = discord::socketCandidates({rig.directory.path()});
+        QCOMPARE(rig.candidates.size(), 2);
+        rig.enable();
+        QTRY_VERIFY_WITH_TIMEOUT(server.hasPendingConnections(), 2000);
+        std::unique_ptr<QLocalSocket> peer(server.nextPendingConnection());
+        QByteArray buffer;
+        QJsonObject message;
+        QTRY_VERIFY(readMessage(peer.get(), buffer, message));
+        peer->write(discord::frame(1, QByteArrayLiteral("{\"evt\":\"READY\"}")));
+        peer->flush();
+        QTRY_VERIFY(rig.presence.connected());
+        QCOMPARE(rig.presence.status(), QStringLiteral("Connected to Discord"));
+        peer->write(discord::frame(1, QByteArrayLiteral("{\"evt\":\"ERROR\",\"data\":{\"code\":4002,\"message\":\"sensitive payload\"}}")));
+        peer->flush();
+        QTRY_VERIFY(!rig.presence.connected());
+        QVERIFY(rig.presence.status().contains(QStringLiteral("activity")));
+        QVERIFY(rig.presence.status().contains(QStringLiteral("4002")));
+        QVERIFY(!rig.presence.status().contains(QStringLiteral("sensitive")));
+#endif
+    }
+
+    void reportsHandshakeCloseCodeAndMissingSockets()
+    {
+#ifdef Q_OS_WIN
+        QSKIP("Unix filesystem socket layouts");
+#else
+        Rig rig;
+        rig.enable();
+        QTRY_VERIFY(rig.presence.status().contains(QStringLiteral("No reachable Discord IPC")));
+        rig.settings.setDiscordEnabled(false);
+        QLocalServer server;
+        QVERIFY(server.listen(rig.directory.filePath(QStringLiteral("discord-ipc-0"))));
+        rig.candidates = {server.fullServerName()};
+        rig.settings.setDiscordEnabled(true);
+        QTRY_VERIFY(server.hasPendingConnections());
+        std::unique_ptr<QLocalSocket> peer(server.nextPendingConnection());
+        QByteArray buffer;
+        QJsonObject message;
+        QTRY_VERIFY(readMessage(peer.get(), buffer, message));
+        peer->write(discord::frame(2, QByteArrayLiteral("{\"code\":4000,\"message\":\"sensitive payload\"}")));
+        peer->flush();
+        QTRY_VERIFY(rig.presence.status().contains(QStringLiteral("4000")));
+        QVERIFY(!rig.presence.connected());
+        QVERIFY(rig.presence.status().contains(QStringLiteral("connection")));
+        QVERIFY(!rig.presence.status().contains(QStringLiteral("sensitive")));
+#endif
+    }
+
     void fragmentedAndCoalescedFrames()
     {
         const QByteArray first = discord::frame(1, QByteArrayLiteral("{\"evt\":\"READY\"}"));
@@ -72,7 +194,7 @@ private slots:
         FakeCore core;
         SpotifySession session(&core, &credentials, &network, &errors);
         PlaybackController player(&core, &session, &settings, &errors);
-        DiscordPresence presence(&player, &settings);
+        DiscordPresence presence(&player, &settings, nullptr, [&] { return QStringList {server.fullServerName()}; });
         QVERIFY(!presence.connected());
         QCoreApplication::processEvents();
         QVERIFY(!server.hasPendingConnections());

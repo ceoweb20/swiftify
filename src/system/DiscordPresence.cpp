@@ -9,11 +9,17 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJSEngine>
+#include <QLoggingCategory>
 #include <QSignalBlocker>
 #include <QUuid>
 #include <QtEndian>
+#include <utility>
+#ifdef Q_OS_LINUX
+#include <unistd.h>
+#endif
 
 namespace swiftify {
+Q_LOGGING_CATEGORY(lcDiscord, "swiftify.discord", QtInfoMsg)
 namespace {
 DiscordPresence *s_instance = nullptr;
 
@@ -26,17 +32,11 @@ QStringList endpoints()
     QStringList directories {qEnvironmentVariable("XDG_RUNTIME_DIR"), qEnvironmentVariable("TMPDIR"),
                              qEnvironmentVariable("TMP"), qEnvironmentVariable("TEMP"),
                              QDir::tempPath(), QStringLiteral("/tmp")};
-    const QString runtime = qEnvironmentVariable("XDG_RUNTIME_DIR");
-    if (!runtime.isEmpty()) directories << runtime + QStringLiteral("/app/com.discordapp.Discord")
-                                          << runtime + QStringLiteral("/snap.discord");
-    directories.removeAll(QString());
-    directories.removeDuplicates();
-    for (int i = 0; i < 10; ++i) {
-        for (const auto &directory : directories) {
-            const QString path = QDir(directory).filePath(QStringLiteral("discord-ipc-%1").arg(i));
-            if (QFileInfo::exists(path)) result << path;
-        }
-    }
+#ifdef Q_OS_LINUX
+    // Launchers need not inherit Discord's runtime/TMP environment.
+    directories << QStringLiteral("/run/user/%1").arg(getuid());
+#endif
+    result = discord::socketCandidates(directories);
 #endif
     return result;
 }
@@ -68,6 +68,35 @@ QByteArray discord::frame(quint32 opcode, const QByteArray &payload)
     return result;
 }
 
+QStringList discord::socketCandidates(const QStringList &roots)
+{
+    // Apply sandbox layouts to every root, not only XDG_RUNTIME_DIR: Discord
+    // and wrappers may choose different runtime/TMP variables than Swiftify.
+    static const QStringList suffixes {QString(),
+        QStringLiteral("app/com.discordapp.Discord"),
+        QStringLiteral("app/com.discordapp.DiscordCanary"),
+        QStringLiteral("app/com.discordapp.DiscordPTB"),
+        QStringLiteral("app/dev.vencord.Vesktop"),
+        QStringLiteral(".flatpak/com.discordapp.Discord/xdg-run"),
+        QStringLiteral(".flatpak/com.discordapp.DiscordCanary/xdg-run"),
+        QStringLiteral(".flatpak/dev.vencord.Vesktop/xdg-run"),
+        QStringLiteral("snap.discord"), QStringLiteral("snap.discord-canary")};
+    QStringList directories;
+    for (const QString &root : roots) {
+        if (root.isEmpty() || !QDir::isAbsolutePath(root)) continue;
+        for (const QString &suffix : suffixes) directories << QDir::cleanPath(QDir(root).filePath(suffix));
+    }
+    directories.removeDuplicates();
+    QStringList result;
+    for (int slot = 0; slot < 10; ++slot) {
+        for (const auto &directory : directories) {
+            const QString path = QDir(directory).filePath(QStringLiteral("discord-ipc-%1").arg(slot));
+            if (QFileInfo::exists(path)) result << path;
+        }
+    }
+    return result;
+}
+
 discord::FrameResult discord::takeFrame(QByteArray &buffer, quint32 &opcode, QByteArray &payload)
 {
     if (buffer.size() < 8) return FrameResult::Incomplete;
@@ -80,8 +109,10 @@ discord::FrameResult discord::takeFrame(QByteArray &buffer, quint32 &opcode, QBy
     return FrameResult::Complete;
 }
 
-DiscordPresence::DiscordPresence(PlaybackController *player, Settings *settings, QObject *parent)
-    : QObject(parent), m_player(player), m_settings(settings)
+DiscordPresence::DiscordPresence(PlaybackController *player, Settings *settings, QObject *parent,
+                                 std::function<QStringList()> socketLocator)
+    : QObject(parent), m_player(player), m_settings(settings),
+      m_socketLocator(socketLocator ? std::move(socketLocator) : endpoints)
 {
     s_instance = this;
     m_retry.setInterval(15000);
@@ -91,13 +122,13 @@ DiscordPresence::DiscordPresence(PlaybackController *player, Settings *settings,
     m_update.setInterval(250);
     m_socket.setReadBufferSize(discord::maxFrameSize + 8);
     connect(&m_retry, &QTimer::timeout, this, [this] {
-        m_endpoints = endpoints();
+        m_endpoints = m_socketLocator();
         m_endpoint = 0;
+        if (m_endpoints.isEmpty()) fail(Failure::Unavailable);
         connectNext();
     });
     connect(&m_deadline, &QTimer::timeout, this, [this] {
-        m_socket.abort();
-        disconnected();
+        fail(Failure::TimedOut);
     });
     connect(&m_update, &QTimer::timeout, this, &DiscordPresence::update);
     connect(&m_socket, &QLocalSocket::connected, this, [this] {
@@ -106,7 +137,10 @@ DiscordPresence::DiscordPresence(PlaybackController *player, Settings *settings,
     });
     connect(&m_socket, &QLocalSocket::readyRead, this, &DiscordPresence::readFrames);
     connect(&m_socket, &QLocalSocket::disconnected, this, &DiscordPresence::disconnected);
-    connect(&m_socket, &QLocalSocket::errorOccurred, this, [this] { disconnected(); });
+    connect(&m_socket, &QLocalSocket::errorOccurred, this, [this](QLocalSocket::LocalSocketError error) {
+        qCDebug(lcDiscord) << "IPC socket error" << int(error);
+        fail(error == QLocalSocket::SocketAccessError ? Failure::AccessDenied : Failure::Unavailable);
+    });
     connect(settings, &Settings::discordEnabledChanged, this, &DiscordPresence::configure);
     connect(settings, &Settings::discordApplicationIdChanged, this, &DiscordPresence::configure);
     connect(player, &PlaybackController::mediaStateChanged, this, &DiscordPresence::scheduleUpdate);
@@ -137,6 +171,38 @@ void DiscordPresence::setReady(bool ready)
     if (m_ready == ready) return;
     m_ready = ready;
     emit connectedChanged();
+    emit statusChanged();
+}
+
+QString DiscordPresence::status() const
+{
+    if (!m_settings->discordEnabled()) return tr("Listening activity is private. Enable to share track, artist and progress with Discord.");
+    if (m_settings->discordApplicationId().isEmpty()) return tr("Enter your Discord Application ID to connect.");
+    if (m_ready) return tr("Connected to Discord");
+    switch (m_failure) {
+    case Failure::Unavailable: return tr("No reachable Discord IPC socket. Start Discord and enable its RPC integration.");
+    case Failure::AccessDenied: return tr("Discord IPC access denied. Check sandbox permissions.");
+    case Failure::TimedOut: return tr("Discord IPC handshake timed out.");
+    case Failure::InvalidFrame: return tr("Discord returned an invalid IPC frame.");
+    case Failure::RejectedConnection: return tr("Discord rejected the connection (code %1).").arg(m_failureCode);
+    case Failure::RejectedActivity: return tr("Discord rejected the activity (code %1).").arg(m_failureCode);
+    case Failure::None: return tr("Waiting for the Discord desktop app…");
+    }
+    return {};
+}
+
+void DiscordPresence::fail(Failure failure, int code)
+{
+    m_failure = failure;
+    m_failureCode = code;
+    // Never log Discord's raw error message or payload (it may echo track data).
+    qCDebug(lcDiscord) << "IPC failure" << int(failure) << "code" << code;
+    {
+        const QSignalBlocker blocker(&m_socket);
+        m_socket.abort();
+    }
+    disconnected();
+    emit statusChanged();
 }
 
 void DiscordPresence::configure()
@@ -153,8 +219,11 @@ void DiscordPresence::configure()
     m_published = false;
     m_buffer.clear();
     m_endpoints.clear();
+    m_failure = Failure::None;
+    m_failureCode = -1;
+    emit statusChanged();
     if (!m_settings->discordEnabled() || m_settings->discordApplicationId().isEmpty()) return;
-    m_endpoints = endpoints();
+    m_endpoints = m_socketLocator();
     m_endpoint = 0;
     m_retry.start();
     QTimer::singleShot(0, this, &DiscordPresence::connectNext);
@@ -162,6 +231,10 @@ void DiscordPresence::configure()
 
 void DiscordPresence::connectNext()
 {
+    if (m_endpoints.isEmpty() && m_settings->discordEnabled() && !m_settings->discordApplicationId().isEmpty()) {
+        m_failure = Failure::Unavailable;
+        emit statusChanged();
+    }
     if (!m_settings->discordEnabled() || m_settings->discordApplicationId().isEmpty()
         || m_socket.state() != QLocalSocket::UnconnectedState || m_endpoint >= m_endpoints.size()) return;
     m_buffer.clear();
@@ -175,6 +248,7 @@ void DiscordPresence::disconnected()
     setReady(false);
     m_published = false;
     m_buffer.clear();
+    if (m_settings->discordEnabled() && !m_settings->discordApplicationId().isEmpty() && !m_retry.isActive()) m_retry.start();
     QTimer::singleShot(0, this, &DiscordPresence::connectNext);
 }
 
@@ -196,17 +270,29 @@ void DiscordPresence::readFrames()
     while (true) {
         const auto result = discord::takeFrame(m_buffer, opcode, payload);
         if (result == discord::FrameResult::Incomplete) return;
-        if (result == discord::FrameResult::Invalid) { m_socket.abort(); return; }
+        if (result == discord::FrameResult::Invalid) { fail(Failure::InvalidFrame); return; }
         if (opcode == 3) { send(4, payload); continue; } // ping / pong
         if (opcode == 4) continue;
-        if (opcode != 1) { m_socket.abort(); return; } // close or unknown
+        if (opcode == 2) {
+            const auto error = QJsonDocument::fromJson(payload).object();
+            fail(Failure::RejectedConnection, error.value(QStringLiteral("code")).toInt(-1));
+            return;
+        }
+        if (opcode != 1) { fail(Failure::InvalidFrame); return; }
         QJsonParseError error;
         const auto document = QJsonDocument::fromJson(payload, &error);
-        if (error.error != QJsonParseError::NoError || !document.isObject()) { m_socket.abort(); return; }
+        if (error.error != QJsonParseError::NoError || !document.isObject()) { fail(Failure::InvalidFrame); return; }
         const QString event = document.object().value(QStringLiteral("evt")).toString();
-        if (event == QLatin1StringView("ERROR")) { m_socket.abort(); return; }
+        if (event == QLatin1StringView("ERROR")) {
+            const int code = document.object().value(QStringLiteral("data")).toObject().value(QStringLiteral("code")).toInt(-1);
+            fail(m_ready ? Failure::RejectedActivity : Failure::RejectedConnection, code);
+            return;
+        }
         if (event == QLatin1StringView("READY") && !m_ready) {
             m_deadline.stop();
+            m_retry.stop();
+            m_failure = Failure::None;
+            m_failureCode = -1;
             setReady(true);
             update();
         }

@@ -71,6 +71,14 @@ is no additional SDK or dependency. Local file paths and private cover URLs are
 never included. The RPC protocol has automated tests against a fake local Discord
 server; testing the real Discord status requires a valid application ID and Discord.
 
+On Linux, native sockets and common Flatpak/Canary/PTB/Vesktop/Snap layouts are
+searched under the runtime and temporary directories. Sandbox permissions still
+need to allow communication, and clients such as Vesktop need their RPC integration
+enabled. Account settings distinguish missing sockets, permission failures, handshake
+timeouts and Discord rejection codes instead of silently retrying every failure.
+For transport diagnostics, launch with `QT_LOGGING_RULES="swiftify.discord.debug=true"`;
+logs contain only transport/error codes, not activity payloads or credentials.
+
 ### Build requirements
 
 - Qt 6.9 or newer: Qt Base, Qt Declarative and Qt Shader Tools

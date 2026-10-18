@@ -4,7 +4,9 @@
 #include <QLocalSocket>
 #include <QObject>
 #include <QTimer>
+#include <QStringList>
 #include <QtQml/qqmlregistration.h>
+#include <functional>
 
 class QQmlEngine;
 class QJSEngine;
@@ -20,6 +22,7 @@ QByteArray frame(quint32 opcode, const QByteArray &payload);
 // A complete frame is removed from buffer. Invalid lengths abort the connection.
 enum class FrameResult { Incomplete, Complete, Invalid };
 FrameResult takeFrame(QByteArray &buffer, quint32 &opcode, QByteArray &payload);
+QStringList socketCandidates(const QStringList &roots);
 }
 
 /// Local Discord IPC only. No token, SDK, external service, or background thread.
@@ -30,14 +33,18 @@ class DiscordPresence : public QObject {
     QML_NAMED_ELEMENT(Discord)
     QML_SINGLETON
     Q_PROPERTY(bool connected READ connected NOTIFY connectedChanged FINAL)
+    Q_PROPERTY(QString status READ status NOTIFY statusChanged FINAL)
 public:
-    DiscordPresence(PlaybackController *player, Settings *settings, QObject *parent = nullptr);
+    DiscordPresence(PlaybackController *player, Settings *settings, QObject *parent = nullptr,
+                    std::function<QStringList()> socketLocator = {});
     ~DiscordPresence() override;
     static DiscordPresence *create(QQmlEngine *, QJSEngine *);
     bool connected() const { return m_ready; }
+    QString status() const;
 
 signals:
     void connectedChanged();
+    void statusChanged();
 
 private:
     void configure();
@@ -49,9 +56,14 @@ private:
     void update();
     void clear();
     void setReady(bool ready);
+    enum class Failure { None, Unavailable, AccessDenied, TimedOut, InvalidFrame, RejectedConnection, RejectedActivity };
+    void fail(Failure failure, int code = -1);
 
     PlaybackController *m_player;
     Settings *m_settings;
+    std::function<QStringList()> m_socketLocator;
+    Failure m_failure = Failure::None;
+    int m_failureCode = -1;
     QLocalSocket m_socket;
     QTimer m_retry;
     QTimer m_deadline;
