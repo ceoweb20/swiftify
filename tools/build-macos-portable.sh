@@ -31,7 +31,7 @@ cmake -S "$SOURCE" -B "$WORK/app" "${common[@]}" \
     "-DSWIFTIFY_UPDATE_PUBLIC_KEY=${SWIFTIFY_UPDATE_PUBLIC_KEY:-}" -DSWIFTIFY_COMPILE_APP_ICON=OFF
 cmake --build "$WORK/app" --parallel "$JOBS"
 APP="$WORK/app/swiftify.app"
-"$QT/bin/macdeployqt" "$APP" -qmldir="$SOURCE/qml" -always-overwrite
+"$QT/bin/macdeployqt" "$APP" -qmldir="$SOURCE/qml" -always-overwrite -appstore-compliant
 python3 "$SOURCE/tools/package-portable.py" --root "$APP" --target "$TARGET" --mark-only
 # This project does not have a Developer ID certificate/notarization secret.
 # Keep Gatekeeper intact; do not strip quarantine on the user's machine.

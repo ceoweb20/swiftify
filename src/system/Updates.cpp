@@ -97,7 +97,11 @@ Updates::Updates(Settings *settings, QObject *parent) : QObject(parent), m_setti
 #ifdef Q_OS_WIN
     m_helperPath += QStringLiteral(".exe");
 #endif
+#ifdef Q_OS_MACOS
+    QFile marker(m_root + QStringLiteral("/Contents/Resources/swiftify-portable.json"));
+#else
     QFile marker(m_root + QStringLiteral("/.swiftify-portable.json"));
+#endif
     QJsonObject identity;
     if (!m_root.isEmpty() && marker.open(QIODevice::ReadOnly) && marker.size() <= 1024)
         identity = QJsonDocument::fromJson(marker.readAll()).object();

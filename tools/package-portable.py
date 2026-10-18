@@ -26,7 +26,7 @@ def package(root, target, output, mark_only=False):
     helper = str(Path(executable).with_name("swiftify-update-helper" + (".exe" if target.startswith("windows-") else "")))
     if not (root / executable).is_file() or not (root / helper).is_file():
         raise ValueError("The application or standalone update helper is missing")
-    marker = root / ".swiftify-portable.json"
+    marker = root / ("Contents/Resources/swiftify-portable.json" if mac else ".swiftify-portable.json")
     identity = {"product": "Swiftify", "format": 1, "target": target}
     if marker.exists():
         if json.loads(marker.read_text()) != identity:
@@ -34,6 +34,7 @@ def package(root, target, output, mark_only=False):
     elif mac and not mark_only:
         raise ValueError("Mark the macOS bundle before signing it")
     else:
+        marker.parent.mkdir(parents=True, exist_ok=True)
         marker.write_text(json.dumps(identity, sort_keys=True) + "\n")
     if mark_only:
         return

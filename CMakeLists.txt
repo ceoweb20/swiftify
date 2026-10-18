@@ -466,6 +466,11 @@ if(APPLE)
     # requirement the same from build to build, so the keychain hands over
     # the stored logins without asking again after each one
     set(SWIFTIFY_CODESIGN_IDENTITY "-" CACHE STRING "codesign identity for the app bundle; - signs ad hoc")
+    if(SWIFTIFY_BUILD_UPDATER)
+        add_custom_command(TARGET swiftify POST_BUILD
+            COMMAND codesign --force --sign ${SWIFTIFY_CODESIGN_IDENTITY} $<TARGET_FILE_DIR:swiftify>/swiftify-update-helper
+            COMMENT "Signing the update helper before sealing the bundle")
+    endif()
     add_custom_command(TARGET swiftify POST_BUILD
         COMMAND xattr -cr $<TARGET_BUNDLE_DIR:swiftify>
         COMMAND codesign --force --sign ${SWIFTIFY_CODESIGN_IDENTITY} $<TARGET_BUNDLE_DIR:swiftify>

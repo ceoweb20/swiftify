@@ -49,7 +49,7 @@ class UpdateToolsTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 packager.package(root, "macos-aarch64", root.parent / "out")
             packager.package(root, "macos-aarch64", root.parent / "out", mark_only=True)
-            self.assertTrue((root / ".swiftify-portable.json").is_file())
+            self.assertTrue((root / "Contents/Resources/swiftify-portable.json").is_file())
 
     def test_signed_manifests_cover_exact_bytes_and_require_matching_key(self):
         try:

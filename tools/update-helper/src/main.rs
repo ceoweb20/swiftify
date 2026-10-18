@@ -223,11 +223,16 @@ fn validate_installation(root: &Path) -> Result<()> {
     if fs::symlink_metadata(root)?.file_type().is_symlink() || !root.is_dir() {
         return Err("Installation must be a real directory".into());
     }
-    let marker: serde_json::Value = serde_json::from_slice(&read_limited(&root.join(".swiftify-portable.json"), 1024)?)?;
+    let marker: serde_json::Value = serde_json::from_slice(&read_limited(&root.join(marker_path()), 1024)?)?;
     if marker["product"] != "Swiftify" || marker["format"] != 1 || marker["target"] != target() {
         return Err("Only official portable installations support in-app updates".into());
     }
     Ok(())
+}
+
+fn marker_path() -> &'static str {
+    if cfg!(target_os = "macos") { "Contents/Resources/swiftify-portable.json" }
+    else { ".swiftify-portable.json" }
 }
 
 #[cfg(unix)]
@@ -411,8 +416,8 @@ mod tests {
         let temporary = tempfile::tempdir().unwrap();
         let marker = serde_json::to_vec(&serde_json::json!({"product":"Swiftify", "format":1, "target":target()})).unwrap();
         let binary = format!("{}/{}", root_name(), executable());
-        let marker_path = format!("{}/.swiftify-portable.json", root_name());
-        let zip = archive(temporary.path(), &[(&binary, b"fixture, never executed"), (&marker_path, &marker)]);
+        let marker_name = format!("{}/{}", root_name(), marker_path());
+        let zip = archive(temporary.path(), &[(&binary, b"fixture, never executed"), (&marker_name, &marker)]);
         let output = temporary.path().join("output");
         let root = extract(&zip, &output).unwrap();
         assert_eq!(fs::read(root.join(executable())).unwrap(), b"fixture, never executed");
