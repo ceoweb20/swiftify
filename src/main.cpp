@@ -3,6 +3,7 @@
 #include "app/Fonts.h"
 #include "app/Paths.h"
 #include "app/Settings.h"
+#include "system/DiscordPresence.h"
 #include "app/Translations.h"
 #include "artwork/ArtworkCache.h"
 #include "audio/AudioShaping.h"
@@ -298,6 +299,7 @@ int main(int argc, char *argv[])
     CachedCredentialStore credentials(&keychain);
     SpotifySession session(&core, &credentials, &network, &errors);
     PlaybackController player(&core, &session, &settings, &errors);
+    DiscordPresence discord(&player, &settings);
     LibraryStore library(&session, &settings, &errors);
     library.attachPlayer(&player);
     AudioShaping sound(&core, &settings, &session);

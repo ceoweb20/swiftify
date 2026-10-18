@@ -1,5 +1,12 @@
 {
   "Language": "Язык",
+  "Enter your Discord Application ID to connect.": "Введите Application ID Discord для подключения.",
+  "No reachable Discord IPC socket. Start Discord and enable its RPC integration.": "IPC-сокет Discord недоступен. Запустите Discord и включите интеграцию RPC.",
+  "Discord IPC access denied. Check sandbox permissions.": "Нет доступа к IPC Discord. Проверьте разрешения песочницы.",
+  "Discord IPC handshake timed out.": "Истекло время ожидания подключения к Discord.",
+  "Discord returned an invalid IPC frame.": "Discord вернул некорректный пакет IPC.",
+  "Discord rejected the connection (code %1).": "Discord отклонил подключение (код %1).",
+  "Discord rejected the activity (code %1).": "Discord отклонил активность (код %1).",
   "Made for You": "Для тебя",
   "Refresh collections": "Обновить подборки",
   "Loading your mixes…": "Загрузка ваших миксов…",

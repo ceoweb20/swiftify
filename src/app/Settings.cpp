@@ -1,6 +1,7 @@
 #include "app/Settings.h"
 
 #include <QQmlEngine>
+#include <QRegularExpression>
 
 #include <algorithm>
 #include <initializer_list>
@@ -164,6 +165,11 @@ void Settings::load()
     m_nativeTitleBar = stored<bool>(m_store, "nativeTitleBar", m_nativeTitleBar);
     m_trayIcon = stored<bool>(m_store, "trayIcon", m_trayIcon);
     m_zoom = std::clamp(stored<double>(m_store, "zoom", m_zoom), 0.5, 2.0);
+    m_discordEnabled = stored<bool>(m_store, "discordEnabled", false);
+    const QString id = stored<QString>(m_store, "discordApplicationId", {}).trimmed();
+    if (QRegularExpression(QStringLiteral("^[0-9]{17,20}$")).match(id).hasMatch()) {
+        m_discordApplicationId = id;
+    }
     m_language = oneOf(stored<QString>(m_store, "language", m_language),
                       {QStringLiteral("system"), QStringLiteral("en"), QStringLiteral("ru")}, QStringLiteral("system"));
 
@@ -492,6 +498,24 @@ void Settings::setZoom(double raw)
     emit zoomChanged();
 }
 
+
+void Settings::setDiscordEnabled(bool value)
+{
+    if (m_discordEnabled == value) return;
+    m_discordEnabled = value;
+    m_store.setValue(QStringLiteral("discordEnabled"), value);
+    emit discordEnabledChanged();
+}
+
+void Settings::setDiscordApplicationId(const QString &raw)
+{
+    const QString value = raw.trimmed();
+    if (!value.isEmpty() && !QRegularExpression(QStringLiteral("^[0-9]{17,20}$")).match(value).hasMatch()) return;
+    if (m_discordApplicationId == value) return;
+    m_discordApplicationId = value;
+    m_store.setValue(QStringLiteral("discordApplicationId"), value);
+    emit discordApplicationIdChanged();
+}
 void Settings::setLanguage(const QString &raw)
 {
     const QString value = oneOf(raw, {QStringLiteral("system"), QStringLiteral("en"), QStringLiteral("ru")}, QStringLiteral("system"));

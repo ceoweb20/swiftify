@@ -73,6 +73,40 @@ dropping the pairing connection; pair from the spotify desktop app on the same c
 
 ## Building from source
 
+### Discord Rich Presence
+
+**Settings → Account → Discord Rich Presence** optionally shares the current track,
+artist, public Spotify cover and progress with the running Discord **desktop** app.
+It is off by default. Activity requests use the listening type and the name
+**Swiftify**. A pause keeps the track visible with **Paused**, without
+running timestamps; resuming restores progress. Disabling RPC clears the activity.
+This is Rich Presence, not Spotify's official linked-account activity; it does not
+enable Listen Along. Some Discord versions may prefer the application's registered
+name over the requested activity name; in that case, name your registered
+application Swiftify in the Developer Portal. Discord's own activity privacy
+settings must also allow displaying activity.
+
+This build has no shared Discord application registered for Swiftify yet. Create
+an application named Swiftify at <https://discord.com/developers/applications> and
+paste its numeric **Application ID** into the field, then press Enter or leave the
+field. This is a public identifier, **not** a bot token, client secret, or Spotify
+Client ID. Applications such as Sonora ship their developer's shared Application ID,
+which is why their users don't need this step; do not reuse another app's ID.
+
+RPC uses local IPC and automatically reconnects when Discord starts again. There
+is no additional SDK or dependency. Local file paths and private cover URLs are
+never included. The RPC protocol has automated tests against a fake local Discord
+server; the transport fixtures support Unix sockets and Windows named pipes.
+Testing the real Discord status requires a valid application ID and Discord.
+
+On Linux, native sockets and common Flatpak/Canary/PTB/Vesktop/Snap layouts are
+searched under the runtime and temporary directories. Sandbox permissions still
+need to allow communication, and clients such as Vesktop need their RPC integration
+enabled. Account settings distinguish missing sockets, permission failures, handshake
+timeouts and Discord rejection codes instead of silently retrying every failure.
+For transport diagnostics, launch with `QT_LOGGING_RULES="swiftify.discord.debug=true"`;
+logs contain only transport/error codes, not activity payloads or credentials.
+
 ### Interface language
 
 In **Settings → Appearance → Language**, choose **System**, **English**, or
