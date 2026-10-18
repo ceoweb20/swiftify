@@ -32,6 +32,7 @@
   "Could not stage the update installer.": "Не удалось подготовить установщик обновления.",
   "Could not start the update installer.": "Не удалось запустить установщик обновления.",
   "Preparing the update. Swiftify will restart when it is ready…": "Подготовка обновления. Когда всё будет готово, Swiftify перезапустится…",
+  "Updating saved song…": "Сохранение трека…",
   "Language": "Язык",
   "Player bar visualizer": "Визуализация в нижнем плеере",
   "Track list visualizer": "Визуализация в списке треков",

@@ -175,6 +175,19 @@ OTA stays disabled until maintainers configure their Ed25519 verification/signin
 keys; macOS builds remain ad-hoc signed unless Developer ID/notarization is set up
 separately. See [release/update setup, trust model and limitations](docs/updates.md).
 
+### Saving the current song and Windows widgets
+
+The heart beside the current track in the bottom player and full-screen player
+uses the same Spotify saved-song state as track menus. It is hidden for local
+files, stays synchronized across both players, and ignores duplicate clicks
+while Spotify is updating the library. Saving still requires a connected Spotify
+library with the existing saved-song permissions.
+
+Windows builds with a sufficiently recent SMTC SDK also publish track duration
+and position through the media-session timeline, not just taskbar progress.
+Widgets using the Windows media-session API can read these values; other/custom
+widget integrations may need their own support. Runtime verification on Windows
+is still required.
 
 ### Build requirements
 

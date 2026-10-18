@@ -228,12 +228,23 @@ Item {
 
                     StyledText {
                         anchors.verticalCenter: parent.verticalCenter
-                        width: Math.min(implicitWidth, metadata.width - more.width - 5)
+                        width: Math.max(0, Math.min(implicitWidth, metadata.width - more.width - (saveSong.visible ? saveSong.width + 5 : 0) - 5))
                         text: root.shownSong.artists
                         elide: Text.ElideRight
                         font.pixelSize: Appearance.fontSize.larger
                         font.weight: Font.Medium
                         color: Qt.rgba(1, 1, 1, 0.62)
+                    }
+                    SaveSongButton {
+                        id: saveSong
+                        objectName: "immersiveSaveSong"
+                        song: root.shownSong
+                        anchors.verticalCenter: parent.verticalCenter
+                        scheme: root.scheme
+                        size: 28
+                        iconSize: 20
+                        iconColor: saved ? root.scheme.primary : Qt.rgba(1, 1, 1, 0.62)
+                        colBackgroundHover: Qt.rgba(1, 1, 1, 0.1)
                     }
                     IconButton {
                         id: more

@@ -253,6 +253,41 @@ private slots:
         QTest::newRow("audio") << QStringLiteral("audio");
     }
 
+    void playerSaveButtons_data()
+    {
+        QTest::addColumn<QString>("view");
+        QTest::addColumn<QString>("buttonName");
+        QTest::newRow("bar") << QStringLiteral("PlayerBar") << QStringLiteral("playerBarSaveSong");
+        QTest::newRow("fullscreen") << QStringLiteral("ImmersivePlayer") << QStringLiteral("immersiveSaveSong");
+    }
+
+    void playerSaveButtons()
+    {
+        QFETCH(QString, view);
+        QFETCH(QString, buttonName);
+        Rig rig;
+        rig.settings.setPerformanceMode(true);
+        rig.playSomething(); // Local files cannot be liked on Spotify.
+        const auto player = rig.show(view);
+        QVERIFY(player);
+        auto *button = player->findChild<QQuickItem *>(buttonName);
+        QVERIFY(button);
+        QVERIFY(!button->isVisible());
+        Song song;
+        song.uri = QStringLiteral("spotify:track:fixture");
+        song.name = QStringLiteral("Fixture");
+        QVERIFY(button->setProperty("song", QVariant::fromValue(song)));
+        Rig::settle();
+        QVERIFY(button->isVisible());
+        QVERIFY(button->isEnabled());
+        QVERIFY(!button->property("toggled").toBool());
+        QCOMPARE(button->property("tooltip").toString(), QStringLiteral("Save to Songs"));
+        QVERIFY(button->setProperty("song", QVariant::fromValue(Song {})));
+        Rig::settle();
+        QVERIFY(!button->isVisible());
+        rig.render();
+    }
+
     void immersivePanels()
     {
         QFETCH(QString, panel);

@@ -425,6 +425,14 @@ Item {
         spacing: root.tiny ? 0 : 6
         z: 3
 
+        SaveSongButton {
+            objectName: "playerBarSaveSong"
+            anchors.verticalCenter: parent.verticalCenter
+            scheme: root.scheme
+            size: root.buttonSize
+            iconSize: root.tiny ? 18 : 20
+        }
+
         IconButton {
             anchors.verticalCenter: parent.verticalCenter
             scheme: root.scheme
