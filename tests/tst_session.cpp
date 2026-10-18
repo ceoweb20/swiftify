@@ -4,6 +4,7 @@
 #include "app/Settings.h"
 #include "core/Async.h"
 #include "library/LibraryStore.h"
+#include "playback/PlaybackController.h"
 #include "spotify/SpotifyJson.h"
 #include "spotify/CredentialStore.h"
 #include "spotify/OAuthFlow.h"
@@ -272,6 +273,68 @@ private:
     };
 
 private slots:
+    void savedSongRequestsDisableBothControlsUntilCompletion()
+    {
+        Rig rig;
+        QTemporaryDir directory;
+        Settings settings(directory.filePath(QStringLiteral("test.conf")));
+        LibraryStore library(&rig.session, &settings, &rig.errors);
+        rig.session.setInitialLibraryLoader({});
+        rig.storeLibrary(rig.accounts.login(), QStringLiteral("valid-access"), 30);
+        rig.session.restoreSavedSessions();
+        QTRY_VERIFY(rig.session.hasLibraryToken());
+        rig.accounts.api.insert(QStringLiteral("/v1/me/library"), {});
+        rig.accounts.holding = true;
+        Song song;
+        song.uri = QStringLiteral("spotify:track:fixture");
+        library.toggleSaved(song);
+        QVERIFY(library.isSaved(song.uri));
+        QVERIFY(library.isSavePending(song.uri));
+        library.toggleSaved(song); // Duplicate click must not reverse a pending request.
+        QVERIFY(library.isSaved(song.uri));
+        rig.accounts.release();
+        QTRY_VERIFY(!library.isSavePending(song.uri));
+        QVERIFY(library.isSaved(song.uri));
+        library.toggleSaved(song);
+        QVERIFY(!library.isSaved(song.uri));
+        QVERIFY(library.isSavePending(song.uri));
+        rig.accounts.release();
+        QTRY_VERIFY(!library.isSavePending(song.uri));
+        QVERIFY(!library.isSaved(song.uri));
+        rig.accounts.api.remove(QStringLiteral("/v1/me/library")); // Fixture rejects the next save.
+        library.toggleSaved(song);
+        QVERIFY(library.isSaved(song.uri));
+        rig.accounts.release();
+        QTRY_VERIFY(!library.isSavePending(song.uri));
+        QVERIFY(!library.isSaved(song.uri)); // Failed writes roll back and re-enable the controls.
+    }
+
+    void currentTrackSavedStatusIsCheckedWhenPlaybackChanges()
+    {
+        Rig rig;
+        QTemporaryDir directory;
+        Settings settings(directory.filePath(QStringLiteral("test.conf")));
+        PlaybackController player(&rig.core, &rig.session, &settings, &rig.errors);
+        LibraryStore library(&rig.session, &settings, &rig.errors);
+        library.attachPlayer(&player);
+        rig.session.setInitialLibraryLoader({});
+        rig.accounts.api.insert(QStringLiteral("/v1/me/library/contains"), "[true]");
+        rig.storeLibrary(rig.accounts.login(), QStringLiteral("valid-access"), 30);
+        rig.storePlayback(rig.accounts.login(), QStringLiteral("stored-login"));
+        rig.session.restoreSavedSessions();
+        settle();
+        const auto connect = rig.core.take(QStringLiteral("connectStored"));
+        QVERIFY(connect);
+        connect->succeed(QStringLiteral("stored-login"));
+        QTRY_VERIFY(rig.session.isConnected());
+        Song song;
+        song.uri = QStringLiteral("spotify:track:fixture");
+        song.name = QStringLiteral("Fixture");
+        player.play(song, {song});
+        QTRY_VERIFY(library.isSaved(song.uri));
+        rig.core.reset();
+    }
+
     void savedLoginsKeepWhatTheyHold()
     {
         const StoredCredentials credentials {QStringLiteral("client"), QStringLiteral("refresh"), 2,
