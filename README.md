@@ -83,6 +83,19 @@ Translations use Qt `qsTr` / `qsTranslate` and an embedded UTF-8 catalog at
 `translations/ru.json`; no additional Linguist tools are required. Russian plural
 entries contain three forms (one, few, many).
 
+### macOS Keychain prompts in development builds
+
+Spotify logins remain in the OS Keychain. The app caches credentials only in
+process memory, skips identical secure-store writes and restores a session once,
+not each time its window is raised. Updated tokens are still written securely.
+
+An ad-hoc build has no stable signing identity across rebuilds. Choose **Always
+Allow** locally in macOS's prompt if you trust that build; a newly rebuilt binary
+can require permission again. Permanently avoiding rebuild-related prompts needs
+a stable signing identity (`SWIFTIFY_CODESIGN_IDENTITY`), not disabling Keychain
+security or granting all applications access. No signing key is configured by
+this feature and no token is moved into plaintext preferences.
+
 ### Build requirements
 
 - Qt 6.9 or newer: Qt Base, Qt Declarative and Qt Shader Tools, and on linux Qt WebSockets (for soloist)

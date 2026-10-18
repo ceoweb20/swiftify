@@ -159,6 +159,8 @@ QString SpotifySession::loginClientId(LoginPurpose purpose) const
 
 void SpotifySession::restoreSavedSessions()
 {
+    if (m_restoreStarted) return;
+    m_restoreStarted = true;
     detach(restore());
 }
 
@@ -166,7 +168,9 @@ QCoro::Task<> SpotifySession::restore()
 {
     const quint64 generation = m_generation;
     m_restoring = true;
-    const auto finished = qScopeGuard([this] { m_restoring = false; });
+    const auto finished = qScopeGuard([this, generation] {
+        if (generation == m_generation) m_restoring = false;
+    });
     std::optional<StoredCredentials> playback;
     std::optional<StoredCredentials> library;
     try {
@@ -496,6 +500,8 @@ QCoro::Task<> SpotifySession::logOutAsync()
     setConnected(false);
     setLibraryConnected(false, false);
     setEvaluatingStoredLogin(false);
+    m_restoreStarted = false;
+    m_restoring = false;
     emit loggedOut();
 }
 

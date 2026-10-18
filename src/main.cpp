@@ -294,7 +294,8 @@ int main(int argc, char *argv[])
     applyStreaming();
     QObject::connect(&settings, &Settings::streamingQualityChanged, &core, applyStreaming);
     QObject::connect(&settings, &Settings::songCacheMegabytesChanged, &core, applyStreaming);
-    KeychainCredentialStore credentials;
+    KeychainCredentialStore keychain;
+    CachedCredentialStore credentials(&keychain);
     SpotifySession session(&core, &credentials, &network, &errors);
     PlaybackController player(&core, &session, &settings, &errors);
     LibraryStore library(&session, &settings, &errors);
