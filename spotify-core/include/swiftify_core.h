@@ -78,19 +78,11 @@ char *swiftify_core_set_stream_quality(const SwiftifyCore *core, uint32_t kbps);
  * next time playback connects */
 char *swiftify_core_set_audio_cache(const SwiftifyCore *core, const char *path,
                                     uint64_t limit_bytes);
-/* whether the app is to appear as a spotify connect device called name, which
- * spotify's other clients and anything watching the account (a scrobbling bot)
- * see; applies the next time playback connects. returns null, or an error to
- * free. */
+/* whether the app is to show as a spotify connect device called name and
+ * report what it plays, which anything watching the account (a scrobbling bot)
+ * sees; it cannot be controlled from elsewhere. applies the next time playback
+ * connects. returns null, or an error to free. */
 char *swiftify_core_set_connect(const SwiftifyCore *core, bool enabled, const char *name);
-/* the song another spotify client last started on this device, as json (uri,
- * name, artists, album, durationMs, artworkUrl), once; null if there is none.
- * free it with swiftify_string_free. */
-char *swiftify_core_take_remote_track(const SwiftifyCore *core);
-/* once: another client stopped the song that was asked for here */
-bool swiftify_core_take_remote_stopped(const SwiftifyCore *core);
-/* registered as a connect device right now */
-bool swiftify_core_connect_active(const SwiftifyCore *core);
 char *swiftify_core_set_playback_shaping(const SwiftifyCore *core, float tempo,
                                          float pitch_semitones, bool preserves_pitch);
 char *swiftify_core_set_equalizer(const SwiftifyCore *core, const float *gains_db, size_t count);

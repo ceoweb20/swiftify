@@ -5,6 +5,8 @@ edition = "2024"
 
 [dependencies]
 env_logger = "0.11"
+# the dealer's message streams (reporter.rs)
+futures-util = "0.3"
 hound = "3.5.1"
 # a playlist read through the session (playlist.rs), as librespot reads it
 http = "=1.5.0"

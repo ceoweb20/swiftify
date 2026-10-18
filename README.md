@@ -105,6 +105,18 @@ should use their package manager.
 
 ## Building from source
 
+### Spotify Connect (scrobbling)
+
+By default swiftify shows up in Spotify as a connect device called "Swiftify" and
+tells your account what it plays, so a scrobbling bot, or any other app that reads
+your current playback, sees the song, its position and whether it is paused. the
+name and the switch are in **Settings → Playback → Spotify Connect**.
+
+it only reports: the sound is still played by swiftify's own players, so crossfade
+and the equalizer work as before, and other Spotify apps can not control swiftify
+or move playback to it. a song shows up once it starts to play. if spotify refuses
+the connection, playback carries on without it.
+
 ### Interface language
 
 In **Settings → Appearance → Language**, choose **System**, **English**, or

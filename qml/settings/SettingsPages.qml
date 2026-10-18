@@ -198,7 +198,7 @@ Item {
                     onTextEdited: if (text.trim().length > 0) Settings.connectDeviceName = text
                 }
                 NoteText {
-                    text: qsTr("Spotify, and anything watching your account such as a scrobbling bot, then sees what Swiftify plays. Crossfade is unavailable while this is on.")
+                    text: qsTr("Spotify, and anything watching your account such as a scrobbling bot, sees what Swiftify plays. Other Spotify apps cannot control Swiftify.")
                 }
             }
 
@@ -208,13 +208,12 @@ Item {
 
                 ConfigSwitch {
                     text: qsTr("Crossfade between songs")
-                    enabled: !Settings.spotifyConnect
                     checked: Settings.crossfadeEnabled
                     onToggledTo: (checked) => Settings.crossfadeEnabled = checked
                 }
                 ConfigSlider {
                     text: qsTr("Crossfade duration")
-                    enabled: Settings.crossfadeEnabled && !Settings.spotifyConnect
+                    enabled: Settings.crossfadeEnabled
                     from: 1
                     to: 12
                     stepSize: 1

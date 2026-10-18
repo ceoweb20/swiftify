@@ -181,11 +181,6 @@ public:
     /// the system took the audio device away. stop, and rebuild the output
     /// only when someone presses play again.
     void invalidateAudioOutput();
-    /// crossfade is on and the core can do it (a Connect device cannot)
-    bool crossfadeActive() const;
-    /// what another Spotify client did to this device since the last look
-    void followConnectDevice();
-    void adoptRemoteSong(const QString &json);
     QCoro::Task<> reconnectForConnectDevice();
     /// the machine is about to suspend
     void prepareForSleep();

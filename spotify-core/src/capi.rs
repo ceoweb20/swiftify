@@ -521,20 +521,6 @@ pub unsafe extern "C" fn swiftify_core_set_connect(
     }
 }
 
-/// the song another spotify client last started on this device, as json
-/// (uri, name, artists, album, durationMs, artworkUrl), once; null if none.
-///
-/// # Safety
-/// `core` is null or live.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn swiftify_core_take_remote_track(core: *const SwiftifyCore) -> *mut c_char {
-    // SAFETY: forwarded from the caller.
-    match unsafe { handle(core) }.and_then(|handle| handle.core.take_remote_track()) {
-        Some(json) => into_raw(json),
-        None => ptr::null_mut(),
-    }
-}
-
 fallible_call!(swiftify_core_set_playback_shaping(tempo: f32, pitch_semitones: f32, preserves_pitch: bool)
     => |core| core.set_playback_shaping(tempo, pitch_semitones, preserves_pitch));
 
@@ -583,8 +569,6 @@ query!(swiftify_core_audio_output_stalled -> bool, false, |core| core.audio_outp
 query!(swiftify_core_playback_position_ms -> u32, 0, |core| core.playback_position_ms());
 query!(swiftify_core_playback_duration_ms -> u32, 0, |core| core.playback_duration_ms());
 query!(swiftify_core_take_end_of_track -> bool, false, |core| core.take_end_of_track());
-query!(swiftify_core_take_remote_stopped -> bool, false, |core| core.take_remote_stopped());
-query!(swiftify_core_connect_active -> bool, false, |core| core.connect_active());
 query!(swiftify_core_volume -> f32, 0.75, |core| core.volume());
 query!(swiftify_core_output_rate -> u32, 0, |core| core.output_rate());
 

@@ -136,17 +136,11 @@ public:
     void setStreamQuality(int) override {}
     bool connectEnabled = false;
     QString connectName;
-    bool connectActive = false;
-    QString remoteTrack;
-    bool remoteStop = false;
     void setConnectDevice(bool enabled, const QString &name) override
     {
         connectEnabled = enabled;
         connectName = name;
     }
-    bool connectDeviceActive() const override { return connectActive; }
-    QString takeRemoteTrack() override { return std::exchange(remoteTrack, {}); }
-    bool takeRemoteStopped() override { return std::exchange(remoteStop, false); }
     void setAudioCache(const QString &, qint64) override {}
     void setPlaybackShaping(float, float, bool) override {}
     void setEqualizer(const QList<float> &) override {}

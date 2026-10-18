@@ -31,7 +31,7 @@ class Settings : public QObject {
     Q_PROPERTY(double visualizerSensitivity READ visualizerSensitivity WRITE setVisualizerSensitivity NOTIFY visualizerSensitivityChanged FINAL)
     Q_PROPERTY(int streamingQuality READ streamingQuality WRITE setStreamingQuality NOTIFY streamingQualityChanged FINAL)
     Q_PROPERTY(bool crossfadeEnabled READ crossfadeEnabled WRITE setCrossfadeEnabled NOTIFY crossfadeEnabledChanged FINAL)
-    /// appears in Spotify as a Connect device and reports what plays to the account (scrobblers see it); crossfade is off while it is on
+    /// shows in Spotify as a Connect device and reports what plays to the account, which a scrobbling bot reads; it cannot be controlled from other apps
     Q_PROPERTY(bool spotifyConnect READ spotifyConnect WRITE setSpotifyConnect NOTIFY spotifyConnectChanged FINAL)
     Q_PROPERTY(QString connectDeviceName READ connectDeviceName WRITE setConnectDeviceName NOTIFY connectDeviceNameChanged FINAL)
     Q_PROPERTY(int crossfadeDurationSeconds READ crossfadeDurationSeconds WRITE setCrossfadeDurationSeconds NOTIFY crossfadeDurationSecondsChanged FINAL)

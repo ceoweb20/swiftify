@@ -7,9 +7,6 @@
 #include "playback/PlaybackState.h"
 
 #include <QCoreApplication>
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <QRegularExpression>
 #include <QLoggingCategory>
 #include <QQmlEngine>
 #include <QRandomGenerator>
@@ -403,7 +400,7 @@ void PlaybackController::preloadNextTrack()
         return;
     }
     try {
-        m_core->preloadTrack(next->uri, crossfadeActive());
+        m_core->preloadTrack(next->uri, m_settings->crossfadeEnabled());
     } catch (const SpotifyError &error) {
         qCDebug(lcPlayer) << "Could not preload the next track:" << error.message();
     }
@@ -1043,8 +1040,7 @@ void PlaybackController::pollPlayback()
         return;
     }
     syncPositionAndDuration();
-    followConnectDevice();
-    if (m_playing && !m_crossfadeStarted && crossfadeActive() && m_currentSong && m_durationMs > 0) {
+    if (m_playing && !m_crossfadeStarted && m_settings->crossfadeEnabled() && m_currentSong && m_durationMs > 0) {
         std::optional<Song> next;
         bool recordHistory = true;
         if (m_repeatMode == RepeatMode::One) {
@@ -1078,67 +1074,6 @@ QCoro::Task<> PlaybackController::reconnectForConnectDevice()
     } catch (const SpotifyError &error) {
         qCDebug(lcPlayer) << "Could not reconnect for the Connect device setting:" << error.message();
     }
-}
-
-bool PlaybackController::crossfadeActive() const
-{
-    // a Connect device follows one player; the two a crossfade swaps between
-    // would leave it reporting a song that has already stopped
-    return m_settings->crossfadeEnabled() && !m_core->connectDeviceActive();
-}
-
-void PlaybackController::followConnectDevice()
-{
-    if (!m_core->connectDeviceActive() || m_playbackRequest.isRunning()) {
-        return;
-    }
-    const QString started = m_core->takeRemoteTrack();
-    if (!started.isEmpty()) {
-        adoptRemoteSong(started);
-        return;
-    }
-    if (m_core->takeRemoteStopped() && m_playing) {
-        // another Spotify client took the device over
-        setPlaying(false);
-        setStatus(QStringLiteral("Paused"));
-        syncMediaSession();
-    }
-}
-
-void PlaybackController::adoptRemoteSong(const QString &json)
-{
-    const QJsonObject object = QJsonDocument::fromJson(json.toUtf8()).object();
-    Song song;
-    song.uri = object.value(QStringLiteral("uri")).toString();
-    static const QRegularExpression track(QStringLiteral("^spotify:track:[A-Za-z0-9]{22}$"));
-    if (!track.match(song.uri).hasMatch()) {
-        return;
-    }
-    song.name = object.value(QStringLiteral("name")).toString();
-    song.artists = object.value(QStringLiteral("artists")).toString();
-    song.albumName = object.value(QStringLiteral("album")).toString();
-    song.durationMs = object.value(QStringLiteral("durationMs")).toInt();
-    const QUrl artwork(object.value(QStringLiteral("artworkUrl")).toString());
-    if (artwork.scheme() == QLatin1StringView("https")) {
-        song.artworkUrl = artwork;
-    }
-    // what plays now is what that client chose; our queue no longer applies
-    if (m_currentSong && !m_currentSong->isSameInstance(song)) {
-        m_history.append(*m_currentSong);
-    }
-    m_queue = {song};
-    m_shuffledQueue.clear();
-    m_playbackNeedsLoad = false;
-    m_restoredPlayback = false;
-    setCurrentSong(song, 0);
-    setLoading(false);
-    setLivePosition(m_core->playbackPositionMs());
-    setDuration(m_core->playbackDurationMs());
-    loadLyrics(song);
-    queueDidChange();
-    setStatus(QStringLiteral("Playing"));
-    setPlaying(true);
-    syncMediaSession();
 }
 
 void PlaybackController::syncPositionAndDuration()

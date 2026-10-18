@@ -237,10 +237,6 @@ void RustCore::setConnectDevice(bool enabled, const QString &name)
     throwIfError(swiftify_core_set_connect(m_core, enabled, name.toUtf8().constData()));
 }
 
-bool RustCore::connectDeviceActive() const { return swiftify_core_connect_active(m_core); }
-QString RustCore::takeRemoteTrack() { return takeString(swiftify_core_take_remote_track(m_core)); }
-bool RustCore::takeRemoteStopped() { return swiftify_core_take_remote_stopped(m_core); }
-
 void RustCore::setAudioCache(const QString &path, qint64 limitBytes)
 {
     m_cachePath = path;

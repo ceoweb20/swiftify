@@ -162,7 +162,6 @@ Item {
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
                     scheme: root.scheme
-                    enabled: !Settings.spotifyConnect
                     checked: Settings.crossfadeEnabled
                     onToggled: Settings.crossfadeEnabled = checked
                 }
@@ -198,7 +197,7 @@ Item {
                 to: 12
                 stepSize: 1
                 value: Settings.crossfadeDurationSeconds
-                enabled: Settings.crossfadeEnabled && !Settings.spotifyConnect
+                enabled: Settings.crossfadeEnabled
                 opacity: enabled ? 1 : 0.4
                 trackThickness: 10
                 snapMode: T.Slider.SnapAlways

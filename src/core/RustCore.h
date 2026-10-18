@@ -43,9 +43,6 @@ public:
     float volume() const override;
     void setStreamQuality(int kbps) override;
     void setConnectDevice(bool enabled, const QString &name) override;
-    bool connectDeviceActive() const override;
-    QString takeRemoteTrack() override;
-    bool takeRemoteStopped() override;
     void setAudioCache(const QString &path, qint64 limitBytes) override;
     void setPlaybackShaping(float tempo, float pitchSemitones, bool preservesPitch) override;
     void setEqualizer(const QList<float> &gainsDb) override;

@@ -2,7 +2,6 @@
   "Spotify Connect": "Spotify Connect",
   "Show Swiftify as a Spotify Connect device": "Показывать Swiftify как устройство Spotify Connect",
   "Device name": "Имя устройства",
-  "Spotify, and anything watching your account such as a scrobbling bot, then sees what Swiftify plays. Crossfade is unavailable while this is on.": "Spotify и всё, что следит за вашим аккаунтом (например, бот-скробблер), будет видеть, что играет в Swiftify. Пока это включено, кроссфейд недоступен.",
   "Updates": "Обновления",
   "Check for updates automatically": "Проверять обновления автоматически",
   "Checks published Swiftify releases on GitHub once a day. Downloads and installation always need your confirmation.": "Проверяет опубликованные релизы Swiftify на GitHub раз в сутки. Загрузка и установка всегда требуют вашего подтверждения.",
@@ -488,5 +487,6 @@
   "Spoken Word": "Речь",
   "Treble Booster": "Усиление высоких",
   "Treble Reducer": "Ослабление высоких",
-  "Vocal Booster": "Усиление вокала"
+  "Vocal Booster": "Усиление вокала",
+  "Spotify, and anything watching your account such as a scrobbling bot, sees what Swiftify plays. Other Spotify apps cannot control Swiftify.": "Spotify и всё, что следит за вашим аккаунтом (например, бот-скробблер), видит, что играет в Swiftify. Управлять Swiftify из других приложений Spotify нельзя."
 }
