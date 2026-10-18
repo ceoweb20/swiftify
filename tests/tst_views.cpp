@@ -2709,6 +2709,14 @@ private slots:
         rig.settings.setWindowControlsOnRight(true);
         Rig::settle();
 
+        if (rig.app.isMacOS()) {
+            // macOS uses native traffic lights, not the in-app controls.
+            // Moving hidden controls must not move the inspector.
+            QCOMPARE(inspector->property("y").toReal(), 8.0);
+            QVERIFY(!controls->isVisible());
+            return;
+        }
+
         // Controls on right: x is window width - controls width - 12
         QCOMPARE(controls->x(), window->width() - controls->width() - 12.0);
         // Inspector moved down by 36: top margin 44 (8 + 36)

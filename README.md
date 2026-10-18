@@ -46,6 +46,31 @@ first image shows equalizer, tempo and pitch settings. second picture shows how 
 
 ## Building from source
 
+### Discord Rich Presence
+
+**Settings → Account → Discord Rich Presence** optionally shares the current track,
+artist, public Spotify cover and progress with the running Discord **desktop** app.
+It is off by default. Activity requests use the listening type and the name
+**Spotify**. A pause keeps the track visible with **Paused**, without
+running timestamps; resuming restores progress. Disabling RPC clears the activity.
+This is Rich Presence, not Spotify's official linked-account activity; it does not
+enable Listen Along. Some Discord versions may prefer the application's registered
+name over the requested activity name; in that case, rename your application in the
+Developer Portal. Discord's own
+activity privacy settings must also allow displaying activity.
+
+This build has no shared Discord application registered for Swiftify yet. Create
+an application named Swiftify at <https://discord.com/developers/applications> and
+paste its numeric **Application ID** into the field, then press Enter or leave the
+field. This is a public identifier, **not** a bot token, client secret, or Spotify
+Client ID. Applications such as Sonora ship their developer's shared Application ID,
+which is why their users don't need this step; do not reuse another app's ID.
+
+RPC uses local IPC and automatically reconnects when Discord starts again. There
+is no additional SDK or dependency. Local file paths and private cover URLs are
+never included. The RPC protocol has automated tests against a fake local Discord
+server; testing the real Discord status requires a valid application ID and Discord.
+
 ### Build requirements
 
 - Qt 6.9 or newer: Qt Base, Qt Declarative and Qt Shader Tools

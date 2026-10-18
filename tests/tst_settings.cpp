@@ -10,6 +10,31 @@ class SettingsTest : public QObject {
     Q_OBJECT
 
 private slots:
+    void discordPreferencesPersist()
+    {
+        QTemporaryDir directory;
+        const QString path = directory.filePath(QStringLiteral("swiftify.conf"));
+        {
+            Settings settings(path);
+            QVERIFY(!settings.discordEnabled());
+            QVERIFY(settings.discordApplicationId().isEmpty());
+            QSignalSpy discord(&settings, &Settings::discordEnabledChanged);
+            QSignalSpy id(&settings, &Settings::discordApplicationIdChanged);
+            settings.setDiscordEnabled(true);
+            settings.setDiscordEnabled(true);
+            QCOMPARE(discord.count(), 1);
+            settings.setDiscordApplicationId(QStringLiteral(" 123456789012345678 "));
+            settings.setDiscordApplicationId(QStringLiteral("invalid"));
+            QCOMPARE(id.count(), 1);
+            QCOMPARE(settings.discordApplicationId(), QStringLiteral("123456789012345678"));
+        }
+        Settings reopened(path);
+        QVERIFY(reopened.discordEnabled());
+        QCOMPARE(reopened.discordApplicationId(), QStringLiteral("123456789012345678"));
+        reopened.setDiscordApplicationId(QString());
+        QVERIFY(reopened.discordApplicationId().isEmpty());
+    }
+
     void defaultsMatchTheMacApp()
     {
         QTemporaryDir directory;

@@ -491,6 +491,44 @@ Item {
             visible: root.page === 6
 
             ContentSection {
+                title: "Discord Rich Presence"
+                symbol: "share"
+
+                ConfigSwitch {
+                    text: qsTr("Share listening activity")
+                    checked: Settings.discordEnabled
+                    onToggledTo: (checked) => Settings.discordEnabled = checked
+                }
+                OutlinedTextField {
+                    id: discordId
+                    x: 8
+                    width: Math.min(460, parent.width - 16)
+                    placeholder: qsTr("Discord Application ID")
+                    text: Settings.discordApplicationId
+                    onAccepted: Settings.discordApplicationId = text
+                    Connections {
+                        target: discordId.inputItem
+                        function onActiveFocusChanged() {
+                            if (!discordId.inputItem.activeFocus) Settings.discordApplicationId = discordId.text
+                        }
+                    }
+                }
+                NoteText {
+                    text: discordId.text.length > 0 && !/^[0-9]{17,20}$/.test(discordId.text.trim())
+                        ? qsTr("Enter a valid numeric Application ID (17–20 digits).")
+                        : !Settings.discordEnabled ? qsTr("Listening activity is private. Enable to share track, artist and progress with Discord.")
+                        : Settings.discordApplicationId.length === 0 ? qsTr("Create an application in the Discord Developer Portal and paste its Application ID above. No token or secret is needed.")
+                        : Discord.connected ? qsTr("Connected to Discord") : qsTr("Waiting for the Discord desktop app…")
+                }
+                TextButton {
+                    x: 8
+                    text: qsTr("Open Discord Developer Portal")
+                    variant: TextButton.Text
+                    onClicked: Qt.openUrlExternally("https://discord.com/developers/applications")
+                }
+            }
+
+            ContentSection {
                 title: "Account"
                 symbol: "account_circle"
 

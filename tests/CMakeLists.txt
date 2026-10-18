@@ -13,6 +13,7 @@ function(swiftify_test name)
 endfunction()
 
 swiftify_test(tst_settings)
+swiftify_test(tst_discord FakeCore.h)
 swiftify_test(tst_theme)
 swiftify_test(tst_playback FakeCore.h)
 swiftify_test(tst_palette)
