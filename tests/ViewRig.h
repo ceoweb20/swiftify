@@ -17,6 +17,7 @@
 #include "theme/PlayerStyle.h"
 #include "theme/Theme.h"
 #include "system/DiscordPresence.h"
+#include "system/Updates.h"
 
 #include <QCoreApplication>
 #include <QImage>
@@ -52,6 +53,7 @@ struct ViewRig {
     AudioShaping sound {&core, &settings, &session};
     LocalLibrary localFiles {&settings, nullptr, directory.path()};
     AppController app {nullptr};
+    Updates updates {&settings};
     ArtworkCache artwork {&network};
     PlayerStyle style {&player, &theme, &artwork};
     SpectrumSource spectrum {&core, &player};

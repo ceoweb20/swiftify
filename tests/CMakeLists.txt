@@ -14,6 +14,7 @@ endfunction()
 
 swiftify_test(tst_settings)
 swiftify_test(tst_discord FakeCore.h)
+swiftify_test(tst_updates)
 swiftify_test(tst_translations)
 swiftify_test(tst_collections FakeCore.h)
 swiftify_test(tst_theme)
@@ -57,6 +58,8 @@ if(Python3_FOUND AND SWIFTIFY_ICON_CODEPOINTS)
 endif()
 # a script line opening with a bracket runs on from the one before
 if(Python3_FOUND)
+    add_test(NAME update_tools
+        COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/check_update_tools.py)
     add_test(NAME translations_catalog
         COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/check_translations.py ${PROJECT_SOURCE_DIR})
     add_test(NAME qml_statements

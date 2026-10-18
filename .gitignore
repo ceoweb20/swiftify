@@ -5,9 +5,12 @@
 # bench_frames runs in (docs/perf.md)
 build/
 build-*/
+# prebuilt packages (tools/build-linux-tarball.sh)
+dist/
 
 # the core's own cargo builds
 target/
+__pycache__/
 *.profraw
 
 # the swift glue the core's default (apple) feature writes beside it,

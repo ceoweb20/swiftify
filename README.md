@@ -28,6 +28,7 @@ first image shows equalizer, tempo and pitch settings. second picture shows how 
 > i will probably not be maintaining it, if you are interested in taking over this project you can send me an email
 
 - [Before you start](#before-you-start)
+- [Prebuilt builds](#prebuilt-builds)
 - [Building from source](#building-from-source)
   - [Build requirements](#build-requirements)
   - [macOS](#macos)
@@ -85,6 +86,23 @@ and copy it's ID into the settings. Swiftify connects over local IPC (Unix socke
 SDKs and automatic reconnection.
 It checks standard paths for native, Flatpak, Snap, Canary, PTB, and third-party clients like Vesktop.
 For more verbose logging run swiftify with `QT_LOGGING_RULES="swiftify.discord.debug=true"`
+
+## Prebuilt builds
+
+The release workflow produces Windows/Linux x86_64 and macOS Apple Silicon/Intel
+packages. After maintainer review/publication, they appear under
+[releases](https://github.com/shredos67/swiftify/releases).
+
+- **windows.** unzip it anywhere and run `bin\swiftify.exe`.
+- **linux.** unpack it anywhere and run `bin/swiftify`. it brings its own Qt, but needs
+  libpulse, alsa, openssl and libsecret, which pretty much every desktop already has.
+- **macOS.** choose your architecture, unzip and move `Swiftify.app` to a writable
+  application directory. Ad-hoc builds are not notarized; macOS may require approval.
+
+Keep the extracted portable tree together. In-app installation is only available
+in updater-enabled builds, in a user-writable installation; system installations
+should use their package manager.
+
 
 ## Building from source
 
@@ -144,6 +162,19 @@ can require permission again. Permanently avoiding rebuild-related prompts needs
 a stable signing identity (`SWIFTIFY_CODESIGN_IDENTITY`), not disabling Keychain
 security or granting all applications access. No signing key is configured by
 this feature and no token is moved into plaintext preferences.
+
+### Portable builds and updates
+
+GitHub Actions builds macOS (Apple Silicon and Intel), Windows x64 and Linux x64
+portable packages. Tagged builds create a draft release for maintainer review.
+Updater-enabled portable builds can check for releases and, after confirmation,
+verify, install and restart from **Settings → About → Updates**. Automatic checks
+are opt-in. System/package-manager installations are not overwritten.
+
+OTA stays disabled until maintainers configure their Ed25519 verification/signing
+keys; macOS builds remain ad-hoc signed unless Developer ID/notarization is set up
+separately. See [release/update setup, trust model and limitations](docs/updates.md).
+
 
 ### Build requirements
 

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.24)
 
 project(Swiftify
-    VERSION 0.13.0
+    VERSION 0.14.0
     DESCRIPTION "A native Spotify client"
     LANGUAGES C CXX)
 
@@ -42,6 +42,14 @@ option(SWIFTIFY_DESKTOP_INTEGRATION "Build the Linux desktop integration" ${SWIF
 # spotify soloist plays spotify's songs for accounts spotify no longer gives
 # librespot the keys for. it is only built for linux.
 option(SWIFTIFY_SOLOIST "Play Spotify songs through Spotify Soloist when it is installed" ${SWIFTIFY_IS_LINUX})
+option(SWIFTIFY_BUILD_UPDATER "Build the standalone signed-update installer" ON)
+set(SWIFTIFY_UPDATE_PUBLIC_KEY "" CACHE STRING "Ed25519 update verification key (64 hex digits); empty disables OTA")
+if(NOT SWIFTIFY_UPDATE_PUBLIC_KEY STREQUAL "")
+    string(LENGTH "${SWIFTIFY_UPDATE_PUBLIC_KEY}" update_key_length)
+    if(NOT update_key_length EQUAL 64 OR NOT SWIFTIFY_UPDATE_PUBLIC_KEY MATCHES "^[0-9a-fA-F]+$")
+        message(FATAL_ERROR "SWIFTIFY_UPDATE_PUBLIC_KEY must be an Ed25519 public key (64 hex digits)")
+    endif()
+endif()
 
 find_package(Qt6 6.9 REQUIRED COMPONENTS
     Core Gui Network Concurrent Qml Quick QuickControls2 ShaderTools)
@@ -277,7 +285,8 @@ target_compile_definitions(swiftify_app PUBLIC
     $<$<BOOL:${SWIFTIFY_DESKTOP_INTEGRATION}>:SWIFTIFY_DESKTOP_INTEGRATION>
     $<$<TARGET_EXISTS:Qt6::DBus>:SWIFTIFY_HAS_DBUS>)
 target_compile_definitions(swiftify_app PRIVATE
-    SWIFTIFY_BUILD_FONT_DIRECTORY="${SWIFTIFY_FONT_DIRECTORY}")
+    SWIFTIFY_BUILD_FONT_DIRECTORY="${SWIFTIFY_FONT_DIRECTORY}"
+    SWIFTIFY_UPDATE_PUBLIC_KEY="${SWIFTIFY_UPDATE_PUBLIC_KEY}")
 # main.cpp picks the core, and is built outside swiftify_app
 target_compile_definitions(swiftify_app PUBLIC $<$<BOOL:${SWIFTIFY_SOLOIST}>:SWIFTIFY_HAS_SOLOIST>)
 if(TARGET Qt6::DBus)
@@ -342,6 +351,34 @@ endif()
 
 qt_add_executable(swiftify src/main.cpp)
 target_link_libraries(swiftify PRIVATE swiftify_app swiftify_appplugin)
+if(SWIFTIFY_BUILD_UPDATER)
+    set(update_directory ${CMAKE_CURRENT_BINARY_DIR}/update-helper)
+    # Corrosion discovers Rust in its own scope; its cached target and imported
+    # tools also work when Rust_CARGO_TARGET was not explicitly supplied.
+    set(update_rust_target ${Rust_CARGO_TARGET_CACHED})
+    set(update_binary ${update_directory}/${update_rust_target}/release/swiftify-update-helper${CMAKE_EXECUTABLE_SUFFIX})
+    file(GENERATE OUTPUT ${update_directory}/configuration.txt
+        CONTENT "${PROJECT_VERSION}\n${SWIFTIFY_UPDATE_PUBLIC_KEY}\n${update_rust_target}\n")
+    add_custom_command(OUTPUT ${update_binary}
+        COMMAND ${CMAKE_COMMAND} -E env
+            "SWIFTIFY_RELEASE_VERSION=${PROJECT_VERSION}"
+            "SWIFTIFY_UPDATE_PUBLIC_KEY=${SWIFTIFY_UPDATE_PUBLIC_KEY}"
+            "RUSTC=$<TARGET_FILE:Rust::Rustc>"
+            $<TARGET_FILE:Rust::Cargo> build --release --locked
+                --manifest-path ${CMAKE_CURRENT_SOURCE_DIR}/tools/update-helper/Cargo.toml
+                --target ${update_rust_target} --target-dir ${update_directory}
+        DEPENDS tools/update-helper/Cargo.toml tools/update-helper/Cargo.lock
+            tools/update-helper/src/main.rs ${update_directory}/configuration.txt
+        VERBATIM)
+    add_custom_target(swiftify_update_helper DEPENDS ${update_binary})
+    add_dependencies(swiftify swiftify_update_helper)
+    add_custom_command(TARGET swiftify POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${update_binary} $<TARGET_FILE_DIR:swiftify>
+        COMMENT "Installing the standalone update helper")
+    if(NOT APPLE)
+        install(PROGRAMS ${update_binary} DESTINATION ${CMAKE_INSTALL_BINDIR})
+    endif()
+endif()
 if(SWIFTIFY_IS_LINUX)
     target_link_libraries(swiftify PRIVATE Qt6::Widgets)
 endif()
@@ -357,12 +394,17 @@ endif()
 # icon, and an identifier apart from the swift app's (com.addenator.Swiftify)
 if(APPLE)
     set(SWIFTIFY_ICON_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/packaging/icons)
+    option(SWIFTIFY_COMPILE_APP_ICON "Use Xcode's icon composer asset compiler (requires a recent Xcode)" ON)
     # the swift app's icon composer icon, compiled as xcode compiles it: an
     # asset catalog that macos 26 draws with its glass and its dark and tinted
     # looks, and an .icns for older systems. without xcode's actool, an .icns
     # made from the rendered pngs instead.
-    execute_process(COMMAND xcrun --find actool
-        OUTPUT_VARIABLE SWIFTIFY_ACTOOL OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+    if(SWIFTIFY_COMPILE_APP_ICON)
+        execute_process(COMMAND xcrun --find actool
+            OUTPUT_VARIABLE SWIFTIFY_ACTOOL OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+    else()
+        set(SWIFTIFY_ACTOOL "")
+    endif()
     if(SWIFTIFY_ACTOOL)
         set(SWIFTIFY_ICON_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/icon)
         file(GLOB SWIFTIFY_ICON_PARTS LIST_DIRECTORIES false CONFIGURE_DEPENDS ${SWIFTIFY_ICON_SOURCE}/swiftify.icon/*
@@ -424,6 +466,11 @@ if(APPLE)
     # requirement the same from build to build, so the keychain hands over
     # the stored logins without asking again after each one
     set(SWIFTIFY_CODESIGN_IDENTITY "-" CACHE STRING "codesign identity for the app bundle; - signs ad hoc")
+    if(SWIFTIFY_BUILD_UPDATER)
+        add_custom_command(TARGET swiftify POST_BUILD
+            COMMAND codesign --force --sign ${SWIFTIFY_CODESIGN_IDENTITY} $<TARGET_FILE_DIR:swiftify>/swiftify-update-helper
+            COMMENT "Signing the update helper before sealing the bundle")
+    endif()
     add_custom_command(TARGET swiftify POST_BUILD
         COMMAND xattr -cr $<TARGET_BUNDLE_DIR:swiftify>
         COMMAND codesign --force --sign ${SWIFTIFY_CODESIGN_IDENTITY} $<TARGET_BUNDLE_DIR:swiftify>

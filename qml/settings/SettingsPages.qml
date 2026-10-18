@@ -738,6 +738,68 @@ Item {
             visible: root.page === 7
 
             ContentSection {
+                title: qsTr("Updates")
+                symbol: "system_update"
+
+                ConfigSwitch {
+                    text: qsTr("Check for updates automatically")
+                    enabled: Updates.supported
+                    checked: Updates.automatic
+                    onToggledTo: (checked) => Updates.automatic = checked
+                }
+                NoteText {
+                    text: qsTr("Checks published Swiftify releases on GitHub once a day. Downloads and installation always need your confirmation.")
+                }
+                NoteText {
+                    objectName: "updateStatus"
+                    text: qsTranslate("Updates", Updates.status)
+                }
+                NoteText {
+                    visible: Updates.busy && Updates.progress > 0
+                    text: qsTr("Downloaded %1%").arg(Math.round(Updates.progress * 100))
+                }
+                Flow {
+                    x: 8
+                    width: parent.width - 16
+                    spacing: 8
+
+                    TextButton {
+                        objectName: "checkForUpdates"
+                        text: qsTr("Check for updates")
+                        enabled: Updates.supported && !Updates.busy
+                        onClicked: Updates.check()
+                    }
+                    TextButton {
+                        objectName: "installUpdate"
+                        text: qsTr("Download and install")
+                        visible: Updates.available
+                        enabled: !Updates.busy
+                        onClicked: updateDialog.open()
+                    }
+                }
+                StyledDialog {
+                    id: updateDialog
+                    headline: qsTr("Install Swiftify %1?").arg(Updates.latestVersion)
+                    symbol: "system_update"
+                    body: qsTr("Swiftify will download and verify the update, stop playback, replace this portable installation and restart. Your library and settings are kept. Do not move the application during installation.")
+                    buttons: [
+                        TextButton {
+                            text: qsTr("Install and restart")
+                            onClicked: {
+                                updateDialog.accept()
+                                Updates.install()
+                            }
+                        },
+                        TextButton {
+                            variant: TextButton.Text
+                            text: qsTr("Cancel")
+                            onClicked: updateDialog.close()
+                        }
+                    ]
+                }
+            }
+
+            ContentSection {
                 title: qsTr("Debugging")
                 symbol: "bug_report"
 

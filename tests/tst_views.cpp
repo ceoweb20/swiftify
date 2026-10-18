@@ -693,6 +693,23 @@ private slots:
         QCOMPARE(focusItem->property("text").toString(), QStringLiteral("Save"));
     }
 
+    void updatesCannotInstallFromAnUnmarkedBuild()
+    {
+        Rig rig;
+        const auto pages = rig.show(QStringLiteral("SettingsPages"));
+        QVERIFY(pages);
+        pages->setProperty("page", 7);
+        Rig::settle();
+        auto *check = pages->findChild<QQuickItem *>(QStringLiteral("checkForUpdates"));
+        auto *install = pages->findChild<QQuickItem *>(QStringLiteral("installUpdate"));
+        auto *status = pages->findChild<QQuickItem *>(QStringLiteral("updateStatus"));
+        QVERIFY(check); QVERIFY(install); QVERIFY(status);
+        QVERIFY(!check->isEnabled()); QVERIFY(!install->isVisible());
+        QVERIFY(!status->property("text").toString().isEmpty());
+        QVERIFY(!rig.updates.supported());
+        rig.render();
+    }
+
     void everySettingsPageDraws()
     {
         Rig rig;
