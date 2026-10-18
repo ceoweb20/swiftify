@@ -28,6 +28,7 @@ first image shows equalizer, tempo and pitch settings. second picture shows how 
 > i will probably not be maintaining it, if you are interested in taking over this project you can send me an email
 
 - [Before you start](#before-you-start)
+- [Prebuilt builds](#prebuilt-builds)
 - [Building from source](#building-from-source)
   - [Build requirements](#build-requirements)
   - [macOS](#macos)
@@ -70,6 +71,14 @@ download a new one when it says so.
 
 if spotify on your phone doesnt list "Swiftify" for step 3, a firewall (ufw) is probably
 dropping the pairing connection; pair from the spotify desktop app on the same computer.
+
+## Prebuilt builds
+
+[releases](https://github.com/shredos67/swiftify/releases) have windows and linux x86_64 builds.
+
+- **windows.** unzip it anywhere and run `bin\swiftify.exe`.
+- **linux.** unpack it anywhere and run `bin/swiftify`. it brings its own Qt, but needs
+  libpulse, alsa, openssl and libsecret, which pretty much every desktop already has.
 
 ## Building from source
 
