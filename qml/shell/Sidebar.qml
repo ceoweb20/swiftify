@@ -10,7 +10,7 @@ Item {
     id: root
 
     property playlist menuPlaylist
-    readonly property bool menuPlaylistEditable: menuPlaylist.isLocal || menuPlaylist.isCollaborative
+    readonly property bool menuPlaylistEditable: menuPlaylist.isCollaborative
         || (Library.profileId.length > 0 && menuPlaylist.ownerId === Library.profileId)
 
     function isSelected(page: int): bool {
@@ -63,17 +63,6 @@ Item {
                 symbol: "music_note"
                 selected: root.isSelected(Library.Page.Songs)
                 onClicked: Library.showSavedSongs()
-            }
-            NavigationItem {
-                width: parent.width
-                text: qsTr("Local Files")
-                iconShape: "clamShell"
-                symbol: "folder_open"
-                // and everything that opens from it: every file, and the
-                // playlists made of them
-                selected: root.isSelected(Library.Page.LocalFiles) || root.isSelected(Library.Page.LocalTracks)
-                          || (root.isSelected(Library.Page.Playlist) && Library.selectedPlaylist.isLocal)
-                onClicked: Library.showLocalFiles()
             }
 
             NavigationItem {

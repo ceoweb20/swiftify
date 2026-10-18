@@ -19,11 +19,7 @@ constexpr qint64 kConnectionPlayGraceMs = 3000;
 
 QDBusObjectPath trackPath(const Song &song)
 {
-    // a path holds only letters, digits and underscores: a file of the
-    // person's own goes by a hash of where it is
-    const QString id = song.isLocalFile() ? QStringLiteral("local_") + QString::number(qHash(song.uri), 16)
-                                          : song.spotifyId();
-    return QDBusObjectPath(QStringLiteral("/dev/addenator/swiftify/track/") + id);
+    return QDBusObjectPath(QStringLiteral("/dev/addenator/swiftify/track/") + song.spotifyId());
 }
 
 } // namespace

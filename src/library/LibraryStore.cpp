@@ -5,7 +5,6 @@
 #include "app/ErrorCenter.h"
 #include "app/Settings.h"
 #include "core/PlaybackCore.h"
-#include "library/LocalLibrary.h"
 #include "playback/PlaybackController.h"
 #include "spotify/SpotifyJson.h"
 #include "spotify/SpotifySession.h"
@@ -35,37 +34,6 @@ const QString kSavedSongsCacheKey = QStringLiteral("saved-songs");
 const QString kCatchphrase = QStringLiteral("i mean i guess bro");
 const QString kReconnectToEdit = QStringLiteral("Reconnect your library once to create and edit playlists.");
 constexpr int kSearchHistoryLimit = 20;
-
-/// a playlist made on this computer (LocalLibrary)
-bool isLocalId(const QString &id)
-{
-    return id.startsWith(QLatin1StringView("local:"));
-}
-
-/// `next`, with each occurrence `previous` already had kept as it was, in
-/// order: the rows stay where they are and the song playing stays marked
-QList<Song> keepingInstances(const QList<Song> &previous, QList<Song> next)
-{
-    QHash<QString, QList<quint64>> held;
-    for (const Song &song : previous) {
-        held[song.uri].append(song.instanceId);
-    }
-    for (Song &song : next) {
-        const auto found = held.find(song.uri);
-        if (found != held.end() && !found->isEmpty()) {
-            song.instanceId = found->takeFirst();
-        }
-    }
-    return next;
-}
-
-bool sameSongs(const QList<Song> &left, const QList<Song> &right)
-{
-    return std::equal(left.begin(), left.end(), right.begin(), right.end(), [](const Song &a, const Song &b) {
-        return a.uri == b.uri && a.name == b.name && a.artists == b.artists && a.albumName == b.albumName
-            && a.artworkUrl == b.artworkUrl && a.durationMs == b.durationMs;
-    });
-}
 
 /// the items page PlaybackCore::playlistJson completes with
 QList<Song> songsFromItems(const QString &payload)
@@ -128,7 +96,7 @@ LibraryStore::LibraryStore(SpotifySession *session, Settings *settings, ErrorCen
     QList<Song> history;
     for (const QJsonValue &value : QJsonDocument::fromJson(m_settings->value(kSearchHistoryKey).toByteArray()).array()) {
         const Song song = Song::fromJson(value.toObject());
-        if (song.isValid()) {
+        if (song.isValid() && !song.uri.startsWith(QLatin1StringView("file:"))) {
             history.append(song);
         }
     }
@@ -176,30 +144,6 @@ void LibraryStore::attachPlayer(PlaybackController *player)
     refreshSaved();
 }
 
-void LibraryStore::attachLocalFiles(LocalLibrary *localFiles)
-{
-    m_localFiles = localFiles;
-    connect(localFiles, &LocalLibrary::playlistsChanged, this, [this] {
-        refreshPinnedPlaylists();
-        refreshLocalPlaylist();
-    });
-    refreshPinnedPlaylists();
-}
-
-void LibraryStore::refreshLocalPlaylist()
-{
-    const QString id = selectedPlaylistId();
-    if (!isLocalId(id) || !m_localFiles) {
-        return;
-    }
-    // its name, cover or count may be what changed
-    emit selectedPlaylistChanged();
-    const QList<Song> next = m_localFiles->songsOf(id);
-    if (!sameSongs(next, m_songs)) {
-        setSongs(keepingInstances(m_songs, next));
-    }
-}
-
 void LibraryStore::reportError(const QString &context, const QString &message)
 {
     qCWarning(lcLibrary).noquote() << context << ':' << message;
@@ -221,10 +165,6 @@ Playlist LibraryStore::selectedPlaylist() const
     if (m_destination.page != Page::Playlist) {
         return {};
     }
-    if (isLocalId(m_destination.playlistId)) {
-        const Playlist local = m_localFiles ? m_localFiles->playlist(m_destination.playlistId) : Playlist {};
-        return local.isValid() ? local : m_destination.playlist;
-    }
     for (const Playlist &playlist : m_playlistList) {
         if (playlist.id == m_destination.playlistId) {
             return playlist;
@@ -237,7 +177,7 @@ Playlist LibraryStore::selectedPlaylist() const
 bool LibraryStore::isSelectedPlaylistEditable() const
 {
     const Playlist playlist = selectedPlaylist();
-    return playlist.isValid() && (playlist.isLocal() || playlist.canModify(m_profile.id));
+    return playlist.isValid() && playlist.canModify(m_profile.id);
 }
 
 QList<Playlist> LibraryStore::editablePlaylistList() const
@@ -281,13 +221,6 @@ void LibraryStore::refreshPinnedPlaylists()
     for (const Playlist &playlist : m_playlistList) {
         if (m_pinnedIds.contains(playlist.id)) {
             pinned.append(playlist);
-        }
-    }
-    if (m_localFiles) {
-        for (const Playlist &playlist : m_localFiles->playlists()->items()) {
-            if (m_pinnedIds.contains(playlist.id)) {
-                pinned.append(playlist);
-            }
         }
     }
     m_pinnedPlaylists->setItems(pinned);
@@ -507,18 +440,7 @@ void LibraryStore::goBack()
     case Page::Playlists: showPlaylists(); break;
     case Page::PinnedPlaylists: showPinnedPlaylists(); break;
     case Page::Collections: showCollections(); break;
-    case Page::LocalFiles: showLocalFiles(); break;
-    case Page::LocalTracks: showLocalTracks(); break;
     case Page::Playlist: {
-        if (isLocalId(destination.playlistId)) {
-            const Playlist local = m_localFiles ? m_localFiles->playlist(destination.playlistId) : Playlist {};
-            if (local.isValid()) {
-                selectPlaylist(local);
-            } else {
-                showLocalFiles();
-            }
-            break;
-        }
         const auto found = std::find_if(m_playlistList.begin(), m_playlistList.end(),
                                         [&](const Playlist &playlist) { return playlist.id == destination.playlistId; });
         if (found != m_playlistList.end()) {
@@ -589,27 +511,8 @@ void LibraryStore::showCollections()
     navigate({Page::Collections});
 }
 
-void LibraryStore::showLocalFiles()
-{
-    cancelDetailLoads();
-    navigate({Page::LocalFiles});
-}
-
-void LibraryStore::showLocalTracks()
-{
-    cancelDetailLoads();
-    navigate({Page::LocalTracks});
-}
-
 void LibraryStore::selectPlaylistById(const QString &id)
 {
-    if (isLocalId(id)) {
-        const Playlist local = m_localFiles ? m_localFiles->playlist(id) : Playlist {};
-        if (local.isValid()) {
-            selectPlaylist(local);
-        }
-        return;
-    }
     for (const Playlist &playlist : m_playlistList) {
         if (playlist.id == id) {
             selectPlaylist(playlist);
@@ -629,7 +532,7 @@ void LibraryStore::selectPlaylist(const Playlist &playlist)
     // playlist can be edited from anywhere.
     const QList<Song> *opened = m_openedPlaylists.find(playlist.id);
     // not opened since the app started: what was loaded last time, if any
-    if (!opened && !playlist.isLocal()) {
+    if (!opened) {
         if (const std::optional<QList<Song>> stored = m_songListCache.load(playlist.id)) {
             m_openedPlaylists.insert(playlist.id, *stored);
             opened = m_openedPlaylists.find(playlist.id);
@@ -637,11 +540,6 @@ void LibraryStore::selectPlaylist(const Playlist &playlist)
     }
     const QList<Song> openedSongs = opened ? *opened : QList<Song> {};
     navigate({Page::Playlist, playlist.id, {}, {}, playlist});
-    if (playlist.isLocal()) {
-        // nothing to load: the files are already known
-        setSongs(keepingInstances(openedSongs, m_localFiles ? m_localFiles->songsOf(playlist.id) : QList<Song> {}));
-        return;
-    }
     setSongs(openedSongs);
     if (!m_session->hasLibraryToken()) {
         return;
@@ -1216,15 +1114,6 @@ void LibraryStore::adjustPlaylistSongCount(const QString &id, int delta)
 
 void LibraryStore::addToPlaylist(const Song &song, const Playlist &playlist)
 {
-    if (playlist.isLocal()) {
-        // what changes shows once the library says so (refreshLocalPlaylist)
-        if (!song.isLocalFile()) {
-            m_errors->show(QStringLiteral("Only music files on this computer can go in “%1”.").arg(playlist.name));
-        } else if (m_localFiles) {
-            m_localFiles->addSongs(playlist.id, {song});
-        }
-        return;
-    }
     detach(runAdd(song, playlist));
 }
 
@@ -1257,27 +1146,14 @@ QCoro::Task<> LibraryStore::runAdd(Song song, Playlist playlist)
 void LibraryStore::removeFromSelectedPlaylist(const Song &song)
 {
     const Playlist playlist = selectedPlaylist();
-    if (playlist.isLocal()) {
-        removeFromLocalPlaylist(song, playlist);
-    } else if (playlist.isValid()) {
+    if (playlist.isValid()) {
         detach(runRemove(song, playlist));
     }
 }
 
 void LibraryStore::removeFromPlaylist(const Song &song, const Playlist &playlist)
 {
-    if (playlist.isLocal()) {
-        removeFromLocalPlaylist(song, playlist);
-        return;
-    }
     detach(runRemove(song, playlist));
-}
-
-void LibraryStore::removeFromLocalPlaylist(const Song &song, const Playlist &playlist)
-{
-    if (m_localFiles) {
-        m_localFiles->removeSong(playlist.id, song.uri);
-    }
 }
 
 QCoro::Task<> LibraryStore::runRemove(Song song, Playlist playlist)
@@ -1325,10 +1201,8 @@ QString LibraryStore::reorderFailureMessage(const QString &message, bool forbidd
 
 void LibraryStore::moveSongs(int from, int count, int to)
 {
-    // a playlist made here is the person's own, and spotify has no say in it
     const Playlist playlist = selectedPlaylist();
-    const bool local = playlist.isLocal();
-    if (!local && !m_session->hasFullLibraryAccess()) {
+    if (!m_session->hasFullLibraryAccess()) {
         m_errors->show(kReconnectToEdit);
         return;
     }
@@ -1338,11 +1212,11 @@ void LibraryStore::moveSongs(int from, int count, int to)
         m_errors->show(QStringLiteral("Open the playlist once before reordering it."));
         return;
     }
-    if (!local && !playlist.canModify(m_profile.id)) {
+    if (!playlist.canModify(m_profile.id)) {
         m_errors->show(QStringLiteral("“%1” belongs to someone else, so its order cannot be changed.").arg(playlist.name));
         return;
     }
-    if (!local && !m_session->hasLibraryRefreshToken()) {
+    if (!m_session->hasLibraryRefreshToken()) {
         m_errors->show(kReconnectToEdit);
         return;
     }
@@ -1374,12 +1248,6 @@ void LibraryStore::moveSongs(int from, int count, int to)
     m_openedPlaylists.insert(playlist.id, reordered);
     m_playlistSongs->moveRows(from, count, to);
     m_displayedPlaylistSongs->moveRows(from, count, to);
-    if (local) {
-        if (m_localFiles) {
-            m_localFiles->reorder(playlist.id, uris(reordered));
-        }
-        return;
-    }
     detach(runMove(playlist, from, count, to, previous, reordered));
 }
 
@@ -1414,32 +1282,7 @@ QCoro::Task<> LibraryStore::runMove(Playlist playlist, int from, int count, int 
 
 void LibraryStore::deletePlaylist(const Playlist &playlist)
 {
-    if (playlist.isLocal()) {
-        deleteLocalPlaylist(playlist);
-        return;
-    }
     detach(runDelete(playlist));
-}
-
-void LibraryStore::deleteLocalPlaylist(const Playlist &playlist)
-{
-    if (!m_localFiles || !m_localFiles->deletePlaylist(playlist.id)) {
-        return;
-    }
-    if (m_pinnedIds.remove(playlist.id)) {
-        persistPins();
-        refreshPinnedPlaylists();
-        ++m_pinsRevision;
-        emit pinsChanged();
-    }
-    m_openedPlaylists.remove(playlist.id);
-    m_songListCache.remove(playlist.id);
-    if (selectedPlaylistId() == playlist.id) {
-        setSongs({});
-        m_playlistFilterQuery.clear();
-        navigate({Page::LocalFiles});
-    }
-    emit playlistDeleted(playlist.id);
 }
 
 QCoro::Task<> LibraryStore::runDelete(Playlist playlist)
@@ -1484,28 +1327,6 @@ void LibraryStore::savePlaylist(bool isNew, const QString &name, const QString &
                                 const QByteArray &coverJpeg)
 {
     detach(runSave(isNew, name, description, isPublic, coverJpeg));
-}
-
-void LibraryStore::saveLocalPlaylist(bool isNew, const QString &name, const QString &description,
-                                     const QByteArray &coverJpeg, const QVariant &firstSong)
-{
-    const Song song = firstSong.value<Song>();
-    bool ok = false;
-    if (name.trimmed().isEmpty()) {
-        m_errors->show(QStringLiteral("Enter a playlist name."));
-    } else if (m_localFiles && isNew) {
-        const Playlist created = m_localFiles->createPlaylist(
-            name, description, coverJpeg, song.isLocalFile() ? QList<Song> {song} : QList<Song> {});
-        ok = created.isValid();
-        // opened, as a new spotify playlist is
-        if (ok) {
-            selectPlaylist(created);
-        }
-    } else if (m_localFiles) {
-        const Playlist target = selectedPlaylist();
-        ok = target.isLocal() && m_localFiles->updatePlaylist(target.id, name, description, coverJpeg);
-    }
-    emit playlistSaveFinished(ok);
 }
 
 QCoro::Task<> LibraryStore::runSave(bool isNew, QString name, QString description, bool isPublic, QByteArray coverJpeg)

@@ -33,8 +33,6 @@ Item {
         case Library.Page.Playlist: return playlistPage
         case Library.Page.Album: return albumPage
         case Library.Page.Artist: return artistPage
-        case Library.Page.LocalFiles: return localFilesPage
-        case Library.Page.LocalTracks: return localTracksPage
         default: return homePage
         }
     }
@@ -206,6 +204,4 @@ Item {
     Component { id: playlistPage; PlaylistView {} }
     Component { id: albumPage; AlbumView {} }
     Component { id: artistPage; ArtistView {} }
-    Component { id: localFilesPage; LocalFilesView {} }
-    Component { id: localTracksPage; LocalTracksView {} }
 }

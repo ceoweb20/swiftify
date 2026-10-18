@@ -10,7 +10,7 @@ IconButton {
     readonly property bool saved: Library.savedRevision >= 0 && Library.isSaved(song.uri)
     readonly property bool pending: Library.savedRevision >= 0 && Library.isSavePending(song.uri)
 
-    visible: song.valid && !song.isLocalFile && song.uri.startsWith("spotify:track:")
+    visible: song.valid && song.uri.startsWith("spotify:track:")
     enabled: visible && !pending
     symbol: "favorite"
     toggled: saved

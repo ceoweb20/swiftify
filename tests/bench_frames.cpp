@@ -8,6 +8,9 @@
 #include <QElapsedTimer>
 #include <QFile>
 #include <QGuiApplication>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QPainter>
 #include <QRandomGenerator>
 #include <QRegularExpression>
@@ -232,7 +235,7 @@ Item {
     }
 
     Component { id: home; HomeView {} }
-    Component { id: localFiles; LocalFilesView {} }
+    Component { id: savedSongs; SavedSongsView {} }
     Component { id: playlists; PlaylistsView {} }
 
     Loader {
@@ -285,7 +288,7 @@ Item {
             anchors.top: topBar.bottom
             anchors.bottom: parent.bottom
             clip: true
-            sourceComponent: [home, localFiles, playlists, null][root.page]
+            sourceComponent: [home, savedSongs, playlists, null][root.page]
         }
         PlayerBar {
             anchors.horizontalCenter: parent.horizontalCenter
@@ -304,10 +307,6 @@ class FrameBench : public QObject {
 
 private:
     QList<QUrl> m_covers;
-    /// where the songs played are, music files of one's own (they play from
-    /// disk, with no login), and their lyrics beside them
-    QTemporaryDir m_music;
-
     /// covers much like spotify's: 640 pixels, jpeg, each its own
     void makeCovers(const QString &directory, int count)
     {
@@ -373,13 +372,11 @@ private:
         rig.library.recommendedArtists()->setItems(artists);
         rig.library.recommendedAlbums()->setItems(albums);
 
-        QList<Song> local;
+        QList<Song> saved;
         for (int index = 0; index < 200; ++index) {
-            Song item = song(index);
-            item.uri = QStringLiteral("local:%1").arg(index);
-            local.append(item);
+            saved.append(song(index));
         }
-        rig.localFiles.songs()->setSongs(local);
+        rig.library.savedSongs()->setSongs(saved);
     }
 
     Song song(int index) const
@@ -390,7 +387,7 @@ private:
         item.artists = QStringLiteral("Some Artist, Another One");
         item.albumName = QStringLiteral("The Album %1").arg(index % 12);
         item.artworkUrl = m_covers.at(index % m_covers.size());
-        item.uri = QUrl::fromLocalFile(m_music.filePath(QStringLiteral("t%1.flac").arg(index))).toString();
+        item.uri = QStringLiteral("spotify:track:%1").arg(index, 22, 10, QLatin1Char('0'));
         item.durationMs = 180'000 + index * 1000;
         return item;
     }
@@ -401,23 +398,22 @@ private:
         for (int index = 0; index < 4; ++index) {
             queue.append(song(index));
         }
-        // synced lyrics beside the first, a line every three seconds
-        QFile lyrics(m_music.filePath(QStringLiteral("t0.lrc")));
-        if (lyrics.open(QIODevice::WriteOnly)) {
-            for (int line = 0; line < 60; ++line) {
-                const int seconds = line * 3;
-                lyrics.write(QStringLiteral("[%1:%2.00]A line of the song, number %3\n")
-                                 .arg(seconds / 60, 2, 10, QLatin1Char('0'))
-                                 .arg(seconds % 60, 2, 10, QLatin1Char('0'))
-                                 .arg(line)
-                                 .toUtf8());
-            }
-            lyrics.close();
-        }
+        rig.connectPlayback();
         rig.player.play(queue[0], queue);
         ViewRig::settle();
-        if (const auto call = rig.core.take(QStringLiteral("playFile"))) {
+        if (const auto call = rig.core.take(QStringLiteral("playTrack"))) {
             call->succeed();
+        }
+        // synced lyrics beside the first, a line every three seconds
+        if (const auto call = rig.core.take(QStringLiteral("lyrics"))) {
+            QJsonArray lines;
+            for (int line = 0; line < 60; ++line) {
+                lines.append(QJsonObject {{QStringLiteral("startTimeMs"), line * 3000},
+                                          {QStringLiteral("words"), QStringLiteral("A line of the song, number %1").arg(line)}});
+            }
+            call->succeed(QString::fromUtf8(QJsonDocument(QJsonObject {{QStringLiteral("syncType"), QStringLiteral("lineSynced")},
+                                                                       {QStringLiteral("lines"), lines}})
+                                                .toJson(QJsonDocument::Compact)));
         }
         ViewRig::settle();
         rig.core.duration = 180'000;
@@ -735,7 +731,7 @@ private slots:
         }
 
         shell->setProperty("page", 1);
-        report("local files, 200 songs", rig, driver);
+        report("saved songs, 200 songs", rig, driver);
 
         shell->setProperty("page", 2);
         report("playlists", rig, driver);

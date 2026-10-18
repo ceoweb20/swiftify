@@ -481,13 +481,6 @@ QCoro::Task<> SoloistCore::playTrack(QString spotifyUri)
         throw SpotifyError(SpotifyError::Kind::Superseded, QStringLiteral("superseded"));
     }
 
-    if (m_localActive) {
-        try {
-            m_fallback->pause();
-        } catch (const SpotifyError &) {
-        }
-        m_localActive = false;
-    }
     m_expectedUri = spotifyUri;
     m_expectedStarted = false;
     m_endOfTrack = false;
@@ -557,7 +550,7 @@ QCoro::Task<> SoloistCore::crossfadeTrack(QString spotifyUri, quint32)
     // cutting it short.
     const quint64 resets = m_resets;
     const quint64 request = ++m_requests;
-    while (!m_localActive && m_expectedStarted && m_itemUri == m_expectedUri && !endReached()
+    while (m_expectedStarted && m_itemUri == m_expectedUri && !endReached()
            && m_status != Status::Idle) {
         co_await waitForChange(200);
         throwIfReset(resets);
@@ -568,35 +561,16 @@ QCoro::Task<> SoloistCore::crossfadeTrack(QString spotifyUri, quint32)
     co_await playTrack(spotifyUri);
 }
 
-QCoro::Task<> SoloistCore::playFile(QString path)
-{
-    ++m_requests;
-    stopSoloist();
-    m_expectedUri.clear();
-    m_expectedStarted = false;
-    m_endOfTrack = false;
-    m_endAtMs = 0;
-    gate(false);
-    m_localActive = true;
-    co_await m_fallback->playFile(path);
-}
-
 QCoro::Task<> SoloistCore::restartAudioOutput()
 {
-    if (m_localActive || m_routed) {
+    if (m_routed) {
         co_await m_fallback->restartAudioOutput();
-    }
-    if (m_routed && !m_localActive) {
         playRouted();
     }
 }
 
 void SoloistCore::play()
 {
-    if (m_localActive) {
-        m_fallback->play();
-        return;
-    }
     if (!m_socketOpen) {
         throw SpotifyError(SpotifyError::Kind::Core, m_failure.isEmpty() ? QStringLiteral("Soloist isn't running.") : m_failure);
     }
@@ -607,19 +581,11 @@ void SoloistCore::play()
 
 void SoloistCore::pause()
 {
-    if (m_localActive) {
-        m_fallback->pause();
-        return;
-    }
     stopSoloist();
 }
 
 void SoloistCore::seek(quint32 positionMs)
 {
-    if (m_localActive) {
-        m_fallback->seek(positionMs);
-        return;
-    }
     send(QStringLiteral("seek"), {{QStringLiteral("position_ms"), qint64(positionMs)}});
     // shown at once; soloist's position_sync confirms it
     m_anchorPositionMs = positionMs;
@@ -643,14 +609,11 @@ void SoloistCore::setVolume(float volume)
 
 bool SoloistCore::audioOutputStalled() const
 {
-    return (m_localActive || m_routed) && m_fallback->audioOutputStalled();
+    return m_routed && m_fallback->audioOutputStalled();
 }
 
 quint32 SoloistCore::playbackPositionMs() const
 {
-    if (m_localActive) {
-        return m_fallback->playbackPositionMs();
-    }
     // an end not yet taken reads as the end, even once soloist has started
     // the song over; with the clock stopped for the last moments, the time
     // still runs on toward the end
@@ -665,14 +628,11 @@ quint32 SoloistCore::playbackPositionMs() const
 
 quint32 SoloistCore::playbackDurationMs() const
 {
-    return m_localActive ? m_fallback->playbackDurationMs() : quint32(m_durationMs);
+    return quint32(m_durationMs);
 }
 
 bool SoloistCore::takeEndOfTrack()
 {
-    if (m_localActive) {
-        return m_fallback->takeEndOfTrack();
-    }
     if (!m_endOfTrack && endReached()) {
         m_endOfTrack = true;
     }
@@ -714,7 +674,6 @@ void SoloistCore::reset()
     m_expectedStarted = false;
     m_endOfTrack = false;
     m_endAtMs = 0;
-    m_localActive = false;
     gate(false);
     m_fallback->reset();
     emit stateChanged();
@@ -768,7 +727,7 @@ void SoloistCore::setSpectrumEnabled(bool enabled)
 int SoloistCore::spectrumLevels(float *out, int capacity) const
 {
     // unrouted, soloist's audio goes straight to pipewire, past the analyser
-    return m_localActive || m_routed ? m_fallback->spectrumLevels(out, capacity) : 0;
+    return m_routed ? m_fallback->spectrumLevels(out, capacity) : 0;
 }
 
 } // namespace swiftify

@@ -92,13 +92,6 @@ Platform.MenuBar {
             checked: Library.page === Library.Page.Playlists
             onTriggered: Library.showPlaylists()
         }
-        Platform.MenuItem {
-            text: qsTr("Local Files")
-            shortcut: "Ctrl+5"
-            checkable: true
-            checked: Library.page === Library.Page.LocalFiles || Library.page === Library.Page.LocalTracks
-            onTriggered: Library.showLocalFiles()
-        }
         Platform.MenuSeparator {}
         Platform.MenuItem {
             text: qsTr("Back")

@@ -116,11 +116,6 @@ QtObject {
         }
     }
     signal createPlaylistRequested()
-    /// a new playlist of music files on this computer, starting with
-    /// `first` when that is a song (or null)
-    signal createLocalPlaylistRequested(var first)
-    /// a music file of one's own, to edit what its tags say
-    signal editLocalTrackRequested(song song)
     signal editPlaylistRequested()
     signal deletePlaylistRequested(playlist playlist)
     signal settingsRequested()

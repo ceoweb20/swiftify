@@ -10,7 +10,6 @@
 #include "core/RustCore.h"
 #include "library/LibraryStore.h"
 #include "library/PlaylistCollections.h"
-#include "library/LocalLibrary.h"
 #include "playback/PlaybackController.h"
 #include "render/SpectrumSource.h"
 #include "spotify/CredentialStore.h"
@@ -278,7 +277,7 @@ int main(int argc, char *argv[])
     RustCore rustCore;
 #ifdef SWIFTIFY_HAS_SOLOIST
     // spotify's songs through soloist when it is installed and has a key, with
-    // the rust core keeping the login, lyrics and local files
+    // the rust core keeping the login and lyrics
     std::unique_ptr<SoloistCore> soloistCore;
     if (auto soloist = SoloistCore::detect()) {
         soloistCore = std::make_unique<SoloistCore>(&rustCore, std::move(*soloist));
@@ -306,11 +305,6 @@ int main(int argc, char *argv[])
     PlaylistCollections collections(&session, &settings, &library);
     library.attachPlayer(&player);
     AudioShaping sound(&core, &settings, &session);
-    LocalLibrary localFiles(&settings);
-    library.attachLocalFiles(&localFiles);
-    // a song whose tags were edited shows as it is now wherever it is queued
-    QObject::connect(&localFiles, &LocalLibrary::scanned, &player,
-                     [&] { player.refreshSongDetails(localFiles.allSongs()); });
     AppController app(nullptr);
     Updates updates(&settings);
     QObject::connect(&updates, &Updates::restartRequested, &app, &AppController::quit);

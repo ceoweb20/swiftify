@@ -3,8 +3,7 @@
 a spotify player for desktop, built with Qt Quick on top of a Rust core that
 wraps [librespot](https://github.com/librespot-org/librespot). it follows
 Material 3 Expressive (heavy inspo from end4) and has an immersive player,
-synced lyrics, visualizers, an equalizer, and local files with local playlists
-where u can edit the tracks metadata.
+synced lyrics, visualizers and an equalizer.
 ![Alt text](/assets/home.png)
 this apps purpose is to replace spotifys heavy webview client, but its also mostly eyecandy lol
 it runs significantly lighter than the spotify client.
@@ -66,8 +65,8 @@ instead, spotify's own connect client, which isnt affected.
 with soloist, swiftify makes a sink called "Swiftify (Soloist)" for soloist to play into,
 and plays that on through its own output, so the equalizer and the visualizers still work.
 this needs pipewire, under pulseaudio alone soloist plays straight to the speakers.
-`SWIFTIFY_SOLOIST_ROUTE=off` does that on purpose. tempo and pitch only work on your own
-music files, and crossfade waits for each song to end. soloist builds expire after 90 days,
+`SWIFTIFY_SOLOIST_ROUTE=off` does that on purpose. tempo and pitch don't apply to soloist's
+audio, and crossfade waits for each song to end. soloist builds expire after 90 days,
 download a new one when it says so.
 `SWIFTIFY_PLAYBACK=librespot swiftify` goes back to librespot alone.
 
@@ -178,9 +177,8 @@ separately. See [release/update setup, trust model and limitations](docs/updates
 ### Saving the current song and Windows widgets
 
 The heart beside the current track in the bottom player and full-screen player
-uses the same Spotify saved-song state as track menus. It is hidden for local
-files, stays synchronized across both players, and ignores duplicate clicks
-while Spotify is updating the library. Saving still requires a connected Spotify
+uses the same Spotify saved-song state as track menus. It stays synchronized
+across both players, and ignores duplicate clicks while Spotify is updating the library. Saving still requires a connected Spotify
 library with the existing saved-song permissions.
 
 Windows builds with a sufficiently recent SMTC SDK also publish track duration

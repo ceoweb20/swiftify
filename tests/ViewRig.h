@@ -9,10 +9,10 @@
 #include "audio/AudioShaping.h"
 #include "library/LibraryStore.h"
 #include "library/PlaylistCollections.h"
-#include "library/LocalLibrary.h"
 #include "playback/PlaybackController.h"
 #include "render/SpectrumSource.h"
 #include "spotify/CredentialStore.h"
+#include "spotify/OAuthFlow.h"
 #include "spotify/SpotifySession.h"
 #include "theme/PlayerStyle.h"
 #include "theme/Theme.h"
@@ -51,7 +51,6 @@ struct ViewRig {
     LibraryStore library {&session, &settings, &errors};
     PlaylistCollections collections {&session, &settings, &library};
     AudioShaping sound {&core, &settings, &session};
-    LocalLibrary localFiles {&settings, nullptr, directory.path()};
     AppController app {nullptr};
     Updates updates {&settings};
     ArtworkCache artwork {&network};
@@ -74,7 +73,6 @@ struct ViewRig {
         // Install it just as main() does, even when a fixture has no remote art.
         engine.addImageProvider(QStringLiteral("art"), new ArtworkImageProvider);
         library.attachPlayer(&player);
-        library.attachLocalFiles(&localFiles);
         window->resize(kSize);
         gpu = control->initialize() && attachTexture();
         if (!gpu) {
@@ -147,6 +145,24 @@ struct ViewRig {
         return control->rhi()->isYUpInFramebuffer() ? image.flipped() : image.copy();
     }
 
+    /// brings playback back from a saved login, the way a launch does
+    void connectPlayback()
+    {
+        if (session.isConnected()) {
+            return;
+        }
+        credentials.items.insert(CredentialStore::Account::Playback,
+                                 {QString::fromLatin1(OAuthFlow::kPlaybackClientId), QStringLiteral("refresh"),
+                                  OAuthFlow::kPlaybackAuthorizationVersion, QStringLiteral("stored-login"), {}, {}});
+        session.setInitialLibraryLoader({});
+        session.restoreSavedSessions();
+        std::shared_ptr<PendingCall> connect;
+        QTRY_VERIFY(std::any_of(core.pending.cbegin(), core.pending.cend(), [](const auto &call) { return call->name == QLatin1StringView("connectStored"); }));
+        connect = core.take(QStringLiteral("connectStored"));
+        connect->succeed(QStringLiteral("stored-login"));
+        QTRY_VERIFY(session.isConnected());
+    }
+
     void playSomething()
     {
         QList<Song> queue;
@@ -155,14 +171,14 @@ struct ViewRig {
             song.name = QStringLiteral("song%1").arg(index);
             song.artists = QStringLiteral("Artist");
             song.albumName = QStringLiteral("Album");
-            // a music file of one's own: it plays from disk, with no login
-            song.uri = QUrl::fromLocalFile(QStringLiteral("/music/song%1.flac").arg(index)).toString();
+            song.uri = QStringLiteral("spotify:track:%1").arg(index, 22, 10, QLatin1Char('0'));
             song.durationMs = 200'000;
             queue.append(song);
         }
+        connectPlayback();
         player.play(queue[0], queue);
         settle();
-        const auto call = core.take(QStringLiteral("playFile"));
+        const auto call = core.take(QStringLiteral("playTrack"));
         QVERIFY(call);
         call->succeed();
         settle();

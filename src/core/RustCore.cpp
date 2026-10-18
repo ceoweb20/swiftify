@@ -90,6 +90,9 @@ void RustCore::open()
     if (m_streamKbps > 0) {
         swiftify_string_free(swiftify_core_set_stream_quality(m_core, uint32_t(m_streamKbps)));
     }
+    if (!m_connectName.isEmpty()) {
+        swiftify_string_free(swiftify_core_set_connect(m_core, m_connectEnabled, m_connectName.toUtf8().constData()));
+    }
     if (!m_cachePath.isEmpty()) {
         swiftify_string_free(swiftify_core_set_audio_cache(m_core, m_cachePath.toUtf8().constData(),
                                                            quint64(std::max<qint64>(0, m_cacheBytes))));
@@ -199,12 +202,6 @@ QCoro::Task<> RustCore::crossfadeTrack(QString spotifyUri, quint32 durationMs)
     });
 }
 
-QCoro::Task<> RustCore::playFile(QString path)
-{
-    const QByteArray file = path.toUtf8();
-    co_await request([&](quint64 id) { swiftify_core_play_file(m_core, id, file.constData()); });
-}
-
 QCoro::Task<> RustCore::restartAudioOutput()
 {
     co_await request([&](quint64 id) { swiftify_core_restart_audio_output(m_core, id); });
@@ -232,6 +229,17 @@ void RustCore::setStreamQuality(int kbps)
     m_streamKbps = kbps;
     throwIfError(swiftify_core_set_stream_quality(m_core, uint32_t(kbps)));
 }
+
+void RustCore::setConnectDevice(bool enabled, const QString &name)
+{
+    m_connectEnabled = enabled;
+    m_connectName = name;
+    throwIfError(swiftify_core_set_connect(m_core, enabled, name.toUtf8().constData()));
+}
+
+bool RustCore::connectDeviceActive() const { return swiftify_core_connect_active(m_core); }
+QString RustCore::takeRemoteTrack() { return takeString(swiftify_core_take_remote_track(m_core)); }
+bool RustCore::takeRemoteStopped() { return swiftify_core_take_remote_stopped(m_core); }
 
 void RustCore::setAudioCache(const QString &path, qint64 limitBytes)
 {

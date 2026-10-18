@@ -39,7 +39,6 @@ mod ffi {
         fn playback_position_ms(&self) -> u32;
         fn playback_duration_ms(&self) -> u32;
         fn take_end_of_track(&self) -> bool;
-        fn is_playing_local(&self) -> bool;
 
         fn set_stream_quality(&self, kbps: u32) -> Result<(), String>;
 

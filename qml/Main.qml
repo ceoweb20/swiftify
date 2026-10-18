@@ -132,16 +132,6 @@ ApplicationWindow {
             const editor = playlistEditor.item as PlaylistEditor
             editor.openForCreate()
         }
-        function onCreateLocalPlaylistRequested(first: var) {
-            playlistEditor.active = true
-            const editor = playlistEditor.item as PlaylistEditor
-            editor.openForCreateLocal(first)
-        }
-        function onEditLocalTrackRequested(song: song) {
-            trackEditor.active = true
-            const editor = trackEditor.item as LocalTrackEditor
-            editor.openFor(song)
-        }
         function onSettingsRequested() {
             // the settings show over this window: it comes back first, from
             // the tray
@@ -159,18 +149,6 @@ ApplicationWindow {
             playlistEditor.active = true
             const editor = playlistEditor.item as PlaylistEditor
             editor.openForEdit(Library.selectedPlaylist)
-        }
-    }
-
-    // tracks copied into a playlist made here, as far as they went
-    Connections {
-        target: LocalFiles
-        function onTracksAdded(playlistId: string, count: int, problem: string) {
-            const added = count > 0 ? qsTr("Tracks added: %1").arg(count) : ""
-            const said = [added, problem].filter(part => part.length > 0).join(" ")
-            if (said.length > 0) {
-                toast.show(said)
-            }
         }
     }
 
@@ -395,67 +373,6 @@ ApplicationWindow {
                 QueuePanel {
                     anchors.fill: parent
                     Reveal.shown: Player.showingQueue
-                }
-            }
-        }
-
-        // music files and folders dropped onto the window go into Local Files
-        DropArea {
-            id: musicDrop
-            anchors.fill: parent
-            enabled: Session.libraryConnected
-            onEntered: (drag) => drag.accepted = drag.hasUrls
-            onDropped: (drop) => {
-                if (!drop.hasUrls) {
-                    return
-                }
-                drop.accept(Qt.CopyAction)
-                // onto a playlist made here, they are copied into it
-                if (Library.page === Library.Page.Playlist && Library.selectedPlaylist.isLocal) {
-                    LocalFiles.addFiles(Library.selectedPlaylistId, drop.urls)
-                    toast.show(qsTr("Adding to “%1”…").arg(Library.selectedPlaylist.name))
-                } else if (LocalFiles.addSources(drop.urls) > 0) {
-                    Library.showLocalTracks()
-                    toast.show(qsTr("Looking for music…"))
-                } else {
-                    toast.show(qsTr("No new music there"))
-                }
-            }
-
-            Rectangle {
-                anchors.fill: parent
-                anchors.margins: 8
-                radius: Appearance.rounding.large
-                color: Qt.alpha(Appearance.colors.primaryContainer, 0.88)
-                border.width: 2
-                border.color: Appearance.colors.primary
-                opacity: musicDrop.containsDrag ? 1 : 0
-                visible: opacity > 0
-
-                Behavior on opacity {
-                    NumberAnimation { duration: Appearance.duration(160); easing.type: Easing.OutCubic }
-                }
-
-                Column {
-                    anchors.centerIn: parent
-                    spacing: 14
-
-                    ShapeIcon {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        size: 72
-                        iconSize: 36
-                        shape: "clamShell"
-                        symbol: "folder_open"
-                        color: Appearance.colors.primary
-                        iconColor: Appearance.colors.onPrimary
-                        hovered: musicDrop.containsDrag
-                    }
-                    TitleText {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        text: qsTr("Add to Local Files")
-                        font.pixelSize: Appearance.fontSize.headline
-                        color: Appearance.colors.onPrimaryContainer
-                    }
                 }
             }
         }
@@ -826,17 +743,6 @@ ApplicationWindow {
         sourceComponent: PlaylistEditor {
             onClosed: Qt.callLater(() => {
                 playlistEditor.active = false
-                App.trimMemory()
-            })
-        }
-    }
-
-    Loader {
-        id: trackEditor
-        active: false
-        sourceComponent: LocalTrackEditor {
-            onClosed: Qt.callLater(() => {
-                trackEditor.active = false
                 App.trimMemory()
             })
         }

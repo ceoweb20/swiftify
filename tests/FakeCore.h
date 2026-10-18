@@ -108,11 +108,6 @@ public:
         co_await await(QStringLiteral("crossfadeTrack"), uri);
         sounding = true;
     }
-    QCoro::Task<> playFile(QString path) override
-    {
-        co_await await(QStringLiteral("playFile"), path);
-        sounding = true;
-    }
     QCoro::Task<> restartAudioOutput() override
     {
         co_await await(QStringLiteral("restartAudioOutput"), {});
@@ -139,6 +134,19 @@ public:
     void setVolume(float volume) override { volumeValue = volume; }
     float volume() const override { return volumeValue; }
     void setStreamQuality(int) override {}
+    bool connectEnabled = false;
+    QString connectName;
+    bool connectActive = false;
+    QString remoteTrack;
+    bool remoteStop = false;
+    void setConnectDevice(bool enabled, const QString &name) override
+    {
+        connectEnabled = enabled;
+        connectName = name;
+    }
+    bool connectDeviceActive() const override { return connectActive; }
+    QString takeRemoteTrack() override { return std::exchange(remoteTrack, {}); }
+    bool takeRemoteStopped() override { return std::exchange(remoteStop, false); }
     void setAudioCache(const QString &, qint64) override {}
     void setPlaybackShaping(float, float, bool) override {}
     void setEqualizer(const QList<float> &) override {}

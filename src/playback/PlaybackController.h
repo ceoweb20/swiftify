@@ -155,10 +155,6 @@ public:
     static constexpr auto kLoadingTestUri = "swiftify:debug:loading";
     Q_INVOKABLE void playNext(const swiftify::Song &song);
     Q_INVOKABLE void playLast(const swiftify::Song &song);
-    /// songs of one's own whose files now say something else (an edit of
-    /// their tags): the ones queued, playing or played take it on, each
-    /// staying the occurrence it was
-    void refreshSongDetails(const QList<Song> &fresh);
     Q_INVOKABLE void playFromQueue(const swiftify::Song &song);
     Q_INVOKABLE void togglePlayback();
     Q_INVOKABLE void pause();
@@ -185,6 +181,12 @@ public:
     /// the system took the audio device away. stop, and rebuild the output
     /// only when someone presses play again.
     void invalidateAudioOutput();
+    /// crossfade is on and the core can do it (a Connect device cannot)
+    bool crossfadeActive() const;
+    /// what another Spotify client did to this device since the last look
+    void followConnectDevice();
+    void adoptRemoteSong(const QString &json);
+    QCoro::Task<> reconnectForConnectDevice();
     /// the machine is about to suspend
     void prepareForSleep();
 

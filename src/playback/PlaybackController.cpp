@@ -7,6 +7,9 @@
 #include "playback/PlaybackState.h"
 
 #include <QCoreApplication>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QRegularExpression>
 #include <QLoggingCategory>
 #include <QQmlEngine>
 #include <QRandomGenerator>
@@ -72,6 +75,25 @@ PlaybackController::PlaybackController(PlaybackCore *core, SpotifySession *sessi
     };
     m_visualizersEnabled = m_settings->anyVisualizerEnabled();
     connect(m_settings, &Settings::crossfadeEnabledChanged, this, [this] { preloadNextTrack(); });
+    const auto applyConnectDevice = [this] {
+        try {
+            m_core->setConnectDevice(m_settings->spotifyConnect(), m_settings->connectDeviceName());
+        } catch (const SpotifyError &) {
+        }
+    };
+    applyConnectDevice();
+    const auto connectDeviceChanged = [this, applyConnectDevice] {
+        applyConnectDevice();
+        // it applies when playback connects: the next play does, and an idle
+        // connection is made again now so the device shows up (or goes) at once
+        m_session->markPlaybackConnectionSuspect();
+        if (!m_playing && m_session->isConnected()) {
+            detach(reconnectForConnectDevice());
+        }
+        preloadNextTrack();
+    };
+    connect(m_settings, &Settings::spotifyConnectChanged, this, connectDeviceChanged);
+    connect(m_settings, &Settings::connectDeviceNameChanged, this, connectDeviceChanged);
     connect(m_settings, &Settings::visualizersEnabledChanged, this, updateVisualizers);
     connect(m_settings, &Settings::playerBarVisualizerChanged, this, updateVisualizers);
     connect(m_settings, &Settings::trackListVisualizerChanged, this, updateVisualizers);
@@ -363,39 +385,6 @@ void PlaybackController::rebuildShuffledQueue(const std::optional<Song> &startin
     m_shuffledQueue = remaining;
 }
 
-void PlaybackController::refreshSongDetails(const QList<Song> &fresh)
-{
-    QHash<QString, const Song *> byUri;
-    for (const Song &song : fresh) {
-        byUri.insert(song.uri, &song);
-    }
-    const auto update = [&](Song &song) {
-        const Song *found = song.isLocalFile() ? byUri.value(song.uri) : nullptr;
-        if (!found
-            || (found->name == song.name && found->artists == song.artists && found->albumName == song.albumName
-                && found->artworkUrl == song.artworkUrl && found->durationMs == song.durationMs)) {
-            return false;
-        }
-        const quint64 instance = song.instanceId;
-        song = *found;
-        song.instanceId = instance;
-        return true;
-    };
-    bool queueChanged = false;
-    for (QList<Song> *songs : {&m_queue, &m_shuffledQueue, &m_history}) {
-        for (Song &song : *songs) {
-            queueChanged = update(song) || queueChanged;
-        }
-    }
-    if (queueChanged) {
-        queueDidChange();
-    }
-    if (m_currentSong && update(*m_currentSong)) {
-        emit currentSongChanged();
-        syncMediaSession();
-    }
-}
-
 void PlaybackController::queueDidChange()
 {
     m_upNext->setSongs(upNextSongs());
@@ -406,15 +395,15 @@ void PlaybackController::queueDidChange()
 
 void PlaybackController::preloadNextTrack()
 {
-    if (!m_playing || !m_currentSong || m_currentSong->isLocalFile()) {
+    if (!m_playing || !m_currentSong) {
         return;
     }
     const std::optional<Song> next = m_repeatMode == RepeatMode::One ? m_currentSong : upcomingSong();
-    if (!next || next->isLocalFile()) {
+    if (!next) {
         return;
     }
     try {
-        m_core->preloadTrack(next->uri, m_settings->crossfadeEnabled());
+        m_core->preloadTrack(next->uri, crossfadeActive());
     } catch (const SpotifyError &error) {
         qCDebug(lcPlayer) << "Could not preload the next track:" << error.message();
     }
@@ -614,62 +603,43 @@ QCoro::Task<> PlaybackController::runStartPlayback(Song song, CancelToken token,
             m_audioOutputNeedsRestart = false;
         }
 
-        if (song.isLocalFile()) {
-            // the core gives up on a request that something newer replaced:
-            // another song, or the session reconnecting. this song is still
-            // the one wanted, unless the request was withdrawn
-            bool retry = false;
-            try {
-                co_await m_core->playFile(song.localPath());
-            } catch (const SpotifyError &error) {
-                if (error.kind() != SpotifyError::Kind::Superseded) {
-                    throw;
-                }
-                retry = true;
-            }
-            if (retry) {
-                throwIfCancelled(token);
-                co_await m_core->playFile(song.localPath());
-            }
-        } else {
-            co_await m_session->ensureFreshPlaybackConnection();
-            // another song may have been chosen while the connection was
-            // checked. starting this one now would play it under that one,
-            // or in its place
-            throwIfCancelled(token);
-            bool retry = false;
-            bool fallbackFromCrossfade = false;
-            try {
-                if (crossfadeDurationMs > 0) {
-                    try {
-                        co_await m_core->crossfadeTrack(song.uri, crossfadeDurationMs);
-                    } catch (const SpotifyError &error) {
-                        if (error.kind() == SpotifyError::Kind::Superseded) {
-                            throw;
-                        }
-                        qCDebug(lcPlayer) << "Crossfade could not start; loading normally:" << error.message();
-                        throwIfCancelled(token);
-                        fallbackFromCrossfade = true;
+        co_await m_session->ensureFreshPlaybackConnection();
+        // another song may have been chosen while the connection was
+        // checked. starting this one now would play it under that one,
+        // or in its place
+        throwIfCancelled(token);
+        bool retry = false;
+        bool fallbackFromCrossfade = false;
+        try {
+            if (crossfadeDurationMs > 0) {
+                try {
+                    co_await m_core->crossfadeTrack(song.uri, crossfadeDurationMs);
+                } catch (const SpotifyError &error) {
+                    if (error.kind() == SpotifyError::Kind::Superseded) {
+                        throw;
                     }
-                } else {
-                    co_await m_core->playTrack(song.uri);
+                    qCDebug(lcPlayer) << "Crossfade could not start; loading normally:" << error.message();
+                    throwIfCancelled(token);
+                    fallbackFromCrossfade = true;
                 }
+            } else {
+                co_await m_core->playTrack(song.uri);
+            }
+        } catch (const SpotifyError &) {
+            retry = true;
+        }
+        if (fallbackFromCrossfade && !retry) {
+            try {
+                co_await m_core->playTrack(song.uri);
             } catch (const SpotifyError &) {
                 retry = true;
             }
-            if (fallbackFromCrossfade && !retry) {
-                try {
-                    co_await m_core->playTrack(song.uri);
-                } catch (const SpotifyError &) {
-                    retry = true;
-                }
-            }
-            if (retry) {
-                throwIfCancelled(token);
-                co_await m_session->ensureFreshPlaybackConnection(true);
-                throwIfCancelled(token);
-                co_await m_core->playTrack(song.uri);
-            }
+        }
+        if (retry) {
+            throwIfCancelled(token);
+            co_await m_session->ensureFreshPlaybackConnection(true);
+            throwIfCancelled(token);
+            co_await m_core->playTrack(song.uri);
         }
         throwIfCancelled(token);
         if (!isCurrent(song)) throw Cancelled();
@@ -839,14 +809,10 @@ QCoro::Task<> PlaybackController::restartAudioOutput(CancelToken token)
         throwIfCancelled(token);
         m_audioOutputNeedsRestart = false;
 
-        if (song.isLocalFile()) {
-            co_await m_core->playFile(song.localPath());
-        } else {
-            // reconnect now instead of waiting for a dead session to time out
-            co_await m_session->ensureFreshPlaybackConnection(true);
-            throwIfCancelled(token);
-            co_await m_core->playTrack(song.uri);
-        }
+        // reconnect now instead of waiting for a dead session to time out
+        co_await m_session->ensureFreshPlaybackConnection(true);
+        throwIfCancelled(token);
+        co_await m_core->playTrack(song.uri);
         throwIfCancelled(token);
         if (!isCurrent(song)) {
             co_return;
@@ -1077,8 +1043,8 @@ void PlaybackController::pollPlayback()
         return;
     }
     syncPositionAndDuration();
-    if (m_playing && !m_crossfadeStarted && m_settings->crossfadeEnabled() && m_currentSong
-        && !m_currentSong->isLocalFile() && m_durationMs > 0) {
+    followConnectDevice();
+    if (m_playing && !m_crossfadeStarted && crossfadeActive() && m_currentSong && m_durationMs > 0) {
         std::optional<Song> next;
         bool recordHistory = true;
         if (m_repeatMode == RepeatMode::One) {
@@ -1087,7 +1053,7 @@ void PlaybackController::pollPlayback()
         } else {
             next = upcomingSong();
         }
-        if (next && !next->isLocalFile()) {
+        if (next) {
             quint32 duration = quint32(m_settings->crossfadeDurationSeconds() * 1000);
             duration = std::min(duration, m_durationMs / 2);
             if (next->durationMs > 0) {
@@ -1103,6 +1069,76 @@ void PlaybackController::pollPlayback()
         handleEndOfTrack();
     }
     stopIfAudioOutputStalled();
+}
+
+QCoro::Task<> PlaybackController::reconnectForConnectDevice()
+{
+    try {
+        co_await m_session->ensureFreshPlaybackConnection(true);
+    } catch (const SpotifyError &error) {
+        qCDebug(lcPlayer) << "Could not reconnect for the Connect device setting:" << error.message();
+    }
+}
+
+bool PlaybackController::crossfadeActive() const
+{
+    // a Connect device follows one player; the two a crossfade swaps between
+    // would leave it reporting a song that has already stopped
+    return m_settings->crossfadeEnabled() && !m_core->connectDeviceActive();
+}
+
+void PlaybackController::followConnectDevice()
+{
+    if (!m_core->connectDeviceActive() || m_playbackRequest.isRunning()) {
+        return;
+    }
+    const QString started = m_core->takeRemoteTrack();
+    if (!started.isEmpty()) {
+        adoptRemoteSong(started);
+        return;
+    }
+    if (m_core->takeRemoteStopped() && m_playing) {
+        // another Spotify client took the device over
+        setPlaying(false);
+        setStatus(QStringLiteral("Paused"));
+        syncMediaSession();
+    }
+}
+
+void PlaybackController::adoptRemoteSong(const QString &json)
+{
+    const QJsonObject object = QJsonDocument::fromJson(json.toUtf8()).object();
+    Song song;
+    song.uri = object.value(QStringLiteral("uri")).toString();
+    static const QRegularExpression track(QStringLiteral("^spotify:track:[A-Za-z0-9]{22}$"));
+    if (!track.match(song.uri).hasMatch()) {
+        return;
+    }
+    song.name = object.value(QStringLiteral("name")).toString();
+    song.artists = object.value(QStringLiteral("artists")).toString();
+    song.albumName = object.value(QStringLiteral("album")).toString();
+    song.durationMs = object.value(QStringLiteral("durationMs")).toInt();
+    const QUrl artwork(object.value(QStringLiteral("artworkUrl")).toString());
+    if (artwork.scheme() == QLatin1StringView("https")) {
+        song.artworkUrl = artwork;
+    }
+    // what plays now is what that client chose; our queue no longer applies
+    if (m_currentSong && !m_currentSong->isSameInstance(song)) {
+        m_history.append(*m_currentSong);
+    }
+    m_queue = {song};
+    m_shuffledQueue.clear();
+    m_playbackNeedsLoad = false;
+    m_restoredPlayback = false;
+    setCurrentSong(song, 0);
+    setLoading(false);
+    setLivePosition(m_core->playbackPositionMs());
+    setDuration(m_core->playbackDurationMs());
+    loadLyrics(song);
+    queueDidChange();
+    setStatus(QStringLiteral("Playing"));
+    setPlaying(true);
+    syncMediaSession();
 }
 
 void PlaybackController::syncPositionAndDuration()
@@ -1193,10 +1229,6 @@ QCoro::Task<> PlaybackController::runLoadLyrics(Song song, CancelToken token)
     std::optional<Lyrics> lyrics;
     if (song.uri == QLatin1StringView(kLoadingTestUri)) {
         // nothing to ask anyone for
-    } else if (song.isLocalFile()) {
-        // spotify has nothing for a file of the person's own; a .lrc kept
-        // beside it does
-        lyrics = Lyrics::besideFile(song.localPath());
     } else {
         try {
             lyrics = Lyrics::fromJson((co_await m_core->lyricsJson(song.uri)).toUtf8());

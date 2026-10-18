@@ -330,8 +330,8 @@ void DiscordPresence::update()
     const QString state = fitText(playing ? song.artists
         : song.artists.trimmed().isEmpty() ? tr("Paused") : tr("Paused") + QStringLiteral(" · ") + song.artists);
     if (!state.isEmpty()) activity.insert(QStringLiteral("state"), state);
-    // Never expose local file paths, filenames, or private artwork URLs.
-    if (!song.isLocalFile() && song.artworkUrl.scheme() == QLatin1StringView("https")
+    // Never expose private artwork URLs.
+    if (song.artworkUrl.scheme() == QLatin1StringView("https")
         && song.artworkUrl.host() == QLatin1StringView("i.scdn.co")) {
         QJsonObject assets {{QStringLiteral("large_image"), song.artworkUrl.toString()}};
         const QString album = fitText(song.albumName);

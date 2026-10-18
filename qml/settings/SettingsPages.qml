@@ -4,9 +4,8 @@ import Swiftify
 
 // the settings themselves (SwiftifySettingsView), one page per rail
 // destination: what the visualizers and the backdrop cost, the sleep fade and
-// audio quality, the folders of music of the person's own, how the app fits
-// the desktop, how much it moves and draws, the
-// spotify logins, and about. every change applies at once.
+// audio quality, how the app fits the desktop, how much it moves and draws,
+// the spotify logins, and about. every change applies at once.
 Item {
     id: root
 
@@ -180,17 +179,42 @@ Item {
             visible: root.page === 2
 
             ContentSection {
+                title: qsTr("Spotify Connect")
+                symbol: "cast"
+
+                ConfigSwitch {
+                    objectName: "spotifyConnectSwitch"
+                    text: qsTr("Show Swiftify as a Spotify Connect device")
+                    checked: Settings.spotifyConnect
+                    onToggledTo: (checked) => Settings.spotifyConnect = checked
+                }
+                OutlinedTextField {
+                    x: 8
+                    width: Math.min(460, parent.width - 16)
+                    placeholder: qsTr("Device name")
+                    enabled: Settings.spotifyConnect
+                    text: Settings.connectDeviceName
+                    onAccepted: Settings.connectDeviceName = text
+                    onTextEdited: if (text.trim().length > 0) Settings.connectDeviceName = text
+                }
+                NoteText {
+                    text: qsTr("Spotify, and anything watching your account such as a scrobbling bot, then sees what Swiftify plays. Crossfade is unavailable while this is on.")
+                }
+            }
+
+            ContentSection {
                 title: qsTr("Crossfade")
                 symbol: "play_circle"
 
                 ConfigSwitch {
                     text: qsTr("Crossfade between songs")
+                    enabled: !Settings.spotifyConnect
                     checked: Settings.crossfadeEnabled
                     onToggledTo: (checked) => Settings.crossfadeEnabled = checked
                 }
                 ConfigSlider {
                     text: qsTr("Crossfade duration")
-                    enabled: Settings.crossfadeEnabled
+                    enabled: Settings.crossfadeEnabled && !Settings.spotifyConnect
                     from: 1
                     to: 12
                     stepSize: 1
@@ -251,94 +275,6 @@ Item {
 
         Page {
             visible: root.page === 3
-
-            ContentSection {
-                title: qsTr("Local Files")
-                symbol: "folder_open"
-
-                MusicPicker {
-                    id: musicPicker
-                }
-
-                Repeater {
-                    model: LocalFiles.sources
-
-                    Item {
-                        id: source
-
-                        required property string modelData
-
-                        width: parent ? parent.width : 0
-                        height: 48
-
-                        MaterialSymbol {
-                            id: sourceSymbol
-                            x: 12
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: source.modelData.match(/\.[A-Za-z0-9]{2,4}$/) ? "audio_file" : "folder"
-                            iconSize: 20
-                            color: Appearance.colors.onSurfaceVariant
-                        }
-                        StyledText {
-                            anchors.left: sourceSymbol.right
-                            anchors.leftMargin: 12
-                            anchors.right: removeSource.left
-                            anchors.rightMargin: 8
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: source.modelData
-                            elide: Text.ElideMiddle
-                        }
-                        IconButton {
-                            id: removeSource
-                            anchors.right: parent.right
-                            anchors.rightMargin: 4
-                            anchors.verticalCenter: parent.verticalCenter
-                            symbol: "close"
-                            size: 32
-                            iconSize: 18
-                            tooltip: qsTr("Remove")
-                            onClicked: LocalFiles.removeSource(source.modelData)
-                        }
-                    }
-                }
-
-                Flow {
-                    x: 8
-                    width: parent.width - 16
-                    spacing: 8
-                    topPadding: LocalFiles.sources.length > 0 ? 4 : 0
-                    bottomPadding: 8
-
-                    TextButton {
-                        variant: TextButton.Tonal
-                        symbol: "create_new_folder"
-                        text: qsTr("Add Folder")
-                        onClicked: musicPicker.pickFolder()
-                    }
-                    TextButton {
-                        variant: TextButton.Text
-                        symbol: "audio_file"
-                        text: qsTr("Add Files")
-                        onClicked: musicPicker.pickFiles()
-                    }
-                    TextButton {
-                        variant: TextButton.Text
-                        symbol: "refresh"
-                        text: LocalFiles.scanning ? qsTr("Looking…") : qsTr("Look Again")
-                        enabled: LocalFiles.sources.length > 0 && !LocalFiles.scanning
-                        onClicked: LocalFiles.rescan()
-                    }
-                }
-
-                NoteText {
-                    text: qsTr("each songs title, artists, album and cover come from its own tags, and a .lrc file ")
-                          + qsTr("beside a song gives its lyrics. you can also drop files or folders onto the window")
-                }
-            }
-        }
-
-        Page {
-            visible: root.page === 4
 
             ContentSection {
                 title: qsTr("Language")
@@ -483,7 +419,7 @@ Item {
         }
 
         Page {
-            visible: root.page === 5
+            visible: root.page === 4
 
             ContentSection {
                 title: qsTr("Motion")
@@ -524,7 +460,7 @@ Item {
         // the logins: who is signed in, the library's and playback's state,
         // connecting them again, and logging out
         Page {
-            visible: root.page === 6
+            visible: root.page === 5
 
 
             ContentSection {
@@ -638,7 +574,7 @@ Item {
                     }
                 }
                 NoteText {
-                    text: qsTr("forgets both logins on this computer, local files stay of course")
+                    text: qsTr("forgets both logins on this computer")
                 }
 
                 StyledDialog {
@@ -735,7 +671,7 @@ Item {
         }
 
         Page {
-            visible: root.page === 7
+            visible: root.page === 6
 
             ContentSection {
                 title: qsTr("Updates")

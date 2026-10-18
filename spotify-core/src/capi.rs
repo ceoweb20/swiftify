@@ -429,15 +429,6 @@ pub unsafe extern "C" fn swiftify_core_preload_track(
     }
 }
 async_call!(
-    /// plays a music file from anywhere on disk; replaced by a later play
-    /// call, as above
-    swiftify_core_play_file(path) => |core| prepare {
-        let ticket = core.begin_playback_request();
-    } run {
-        core.play_file_as(path, ticket).await.map(|()| Unit)
-    }
-);
-async_call!(
     /// completes with the lyrics as json.
     swiftify_core_lyrics_json(spotify_uri) => |core| {
         core.lyrics_json(spotify_uri).await
@@ -449,83 +440,6 @@ async_call!(
         core.playlist_json(playlist_uri).await
     }
 );
-
-/// what a music file's tags say, as json (crate::local::LocalTags), or null
-/// with `*error` set. an embedded cover is written into `artwork_dir`. it
-/// needs no core and may be called from any thread.
-///
-/// # Safety
-/// `path` and `artwork_dir` are null or valid strings; `error` is null or
-/// valid for a write.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn swiftify_read_local_tags(
-    path: *const c_char,
-    artwork_dir: *const c_char,
-    error: *mut *mut c_char,
-) -> *mut c_char {
-    let fail = |message: String| {
-        if !error.is_null() {
-            // SAFETY: the caller guarantees `error` is writable.
-            unsafe { *error = into_raw(message) };
-        }
-        ptr::null_mut()
-    };
-    // SAFETY: forwarded from the caller.
-    let path = match unsafe { read_str(path) } {
-        Ok(path) => path,
-        Err(message) => return fail(message),
-    };
-    // SAFETY: forwarded from the caller.
-    let artwork_dir = (!artwork_dir.is_null())
-        .then(|| unsafe { read_str(artwork_dir) })
-        .transpose();
-    let artwork_dir = match artwork_dir {
-        Ok(directory) => directory.map(std::path::PathBuf::from),
-        Err(message) => return fail(message),
-    };
-    match crate::local::read_tags(std::path::Path::new(&path), artwork_dir.as_deref()) {
-        Ok(tags) => match serde_json::to_string(&tags) {
-            Ok(json) => into_raw(json),
-            Err(message) => fail(message.to_string()),
-        },
-        Err(message) => fail(message),
-    }
-}
-
-/// writes edits (crate::local::TagEdits, as json) into a music file's tags,
-/// with `artwork` (`artwork_len` bytes of an image, or null) as its front
-/// cover. returns null on success, or an error message to free. the file is
-/// left as it was if anything fails. needs no core and may be called from
-/// any thread.
-///
-/// # Safety
-/// `path` and `edits` are null or valid strings; `artwork` is null or valid
-/// for `artwork_len` bytes.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn swiftify_write_local_tags(
-    path: *const c_char,
-    edits: *const c_char,
-    artwork: *const u8,
-    artwork_len: usize,
-) -> *mut c_char {
-    // SAFETY: forwarded from the caller.
-    let (path, edits) = match unsafe { (read_str(path), read_str(edits)) } {
-        (Ok(path), Ok(edits)) => (path, edits),
-        (Err(message), _) | (_, Err(message)) => return into_raw(message),
-    };
-    let edits: crate::local::TagEdits = match serde_json::from_str(&edits) {
-        Ok(edits) => edits,
-        Err(message) => return into_raw(format!("the edits could not be read: {message}")),
-    };
-    let artwork = (!artwork.is_null() && artwork_len > 0)
-        // SAFETY: the caller guarantees `artwork_len` readable bytes.
-        .then(|| unsafe { std::slice::from_raw_parts(artwork, artwork_len) });
-    error_string(crate::local::write_tags(
-        std::path::Path::new(&path),
-        &edits,
-        artwork,
-    ))
-}
 
 /// # Safety
 /// `core` is null or live.
@@ -584,6 +498,43 @@ pub unsafe extern "C" fn swiftify_core_set_audio_cache(
         Err(error) => into_raw(error),
     }
 }
+/// whether the app is to appear as a spotify connect device named `name`
+/// (what spotify's other clients and anything watching the account see); it
+/// applies the next time playback connects. returns null, or an error to free.
+///
+/// # Safety
+/// `core` is null or live; `name` is a nul-terminated string.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn swiftify_core_set_connect(
+    core: *const SwiftifyCore,
+    enabled: bool,
+    name: *const c_char,
+) -> *mut c_char {
+    // SAFETY: forwarded from the caller.
+    let Some(handle) = (unsafe { handle(core) }) else {
+        return into_raw(MISSING_CORE.to_owned());
+    };
+    // SAFETY: forwarded from the caller.
+    match unsafe { read_str(name) } {
+        Ok(name) => error_string(handle.core.set_connect(enabled, name)),
+        Err(error) => into_raw(error),
+    }
+}
+
+/// the song another spotify client last started on this device, as json
+/// (uri, name, artists, album, durationMs, artworkUrl), once; null if none.
+///
+/// # Safety
+/// `core` is null or live.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn swiftify_core_take_remote_track(core: *const SwiftifyCore) -> *mut c_char {
+    // SAFETY: forwarded from the caller.
+    match unsafe { handle(core) }.and_then(|handle| handle.core.take_remote_track()) {
+        Some(json) => into_raw(json),
+        None => ptr::null_mut(),
+    }
+}
+
 fallible_call!(swiftify_core_set_playback_shaping(tempo: f32, pitch_semitones: f32, preserves_pitch: bool)
     => |core| core.set_playback_shaping(tempo, pitch_semitones, preserves_pitch));
 
@@ -632,6 +583,8 @@ query!(swiftify_core_audio_output_stalled -> bool, false, |core| core.audio_outp
 query!(swiftify_core_playback_position_ms -> u32, 0, |core| core.playback_position_ms());
 query!(swiftify_core_playback_duration_ms -> u32, 0, |core| core.playback_duration_ms());
 query!(swiftify_core_take_end_of_track -> bool, false, |core| core.take_end_of_track());
+query!(swiftify_core_take_remote_stopped -> bool, false, |core| core.take_remote_stopped());
+query!(swiftify_core_connect_active -> bool, false, |core| core.connect_active());
 query!(swiftify_core_volume -> f32, 0.75, |core| core.volume());
 query!(swiftify_core_output_rate -> u32, 0, |core| core.output_rate());
 

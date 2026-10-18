@@ -32,7 +32,6 @@ public:
     QCoro::Task<> playTrack(QString spotifyUri) override;
     void preloadTrack(const QString &spotifyUri, bool preloadStandby) override;
     QCoro::Task<> crossfadeTrack(QString spotifyUri, quint32 durationMs) override;
-    QCoro::Task<> playFile(QString path) override;
     QCoro::Task<> restartAudioOutput() override;
     QCoro::Task<QString> lyricsJson(QString spotifyUri) override;
     QCoro::Task<QString> playlistJson(QString playlistUri) override;
@@ -43,6 +42,10 @@ public:
     void setVolume(float volume) override;
     float volume() const override;
     void setStreamQuality(int kbps) override;
+    void setConnectDevice(bool enabled, const QString &name) override;
+    bool connectDeviceActive() const override;
+    QString takeRemoteTrack() override;
+    bool takeRemoteStopped() override;
     void setAudioCache(const QString &path, qint64 limitBytes) override;
     void setPlaybackShaping(float tempo, float pitchSemitones, bool preservesPitch) override;
     void setEqualizer(const QList<float> &gainsDb) override;
@@ -75,6 +78,8 @@ private:
     quint64 m_generation = 0;
     /// given again to each core opened (a reset makes a fresh one)
     int m_streamKbps = 0;
+    bool m_connectEnabled = false;
+    QString m_connectName;
     QString m_cachePath;
     qint64 m_cacheBytes = 0;
 };

@@ -10,7 +10,6 @@
 #include "audio/AudioShaping.h"
 #include "library/CollectionModels.h"
 #include "library/LibraryStore.h"
-#include "library/LocalLibrary.h"
 #include "playback/PlaybackController.h"
 #include "render/SpectrumItem.h"
 #include "render/SpectrumSource.h"
@@ -105,6 +104,17 @@ public:
     QTcpServer server;
 };
 
+/// a playlist the person may edit
+Playlist editablePlaylist(const QString &name)
+{
+    Playlist playlist;
+    playlist.id = QStringLiteral("playlist-") + name.simplified().replace(u' ', u'-');
+    playlist.name = name;
+    playlist.uri = QStringLiteral("spotify:playlist:") + playlist.id;
+    playlist.isCollaborative = true;
+    return playlist;
+}
+
 /// the browser a login page opens in, which the test plays the part of
 class Browser : public QObject {
     Q_OBJECT
@@ -158,14 +168,14 @@ private slots:
         connect(&translations, &Translations::languageChanged, &rig.engine, &QQmlEngine::retranslate);
         const auto pages = rig.show(QStringLiteral("SettingsPages"));
         QVERIFY(pages);
-        pages->setProperty("page", 4);
+        pages->setProperty("page", 3);
         auto *selection = pages->findChild<QObject *>(QStringLiteral("languageSelection"));
         QVERIFY(selection);
         QCOMPARE(selection->property("text").toString(), QStringLiteral("Interface language"));
         QVERIFY(QMetaObject::invokeMethod(selection, "activated", Q_ARG(int, 2)));
         QCOMPARE(rig.settings.language(), QStringLiteral("ru"));
         QCOMPARE(selection->property("text").toString(), QStringLiteral("Язык интерфейса"));
-        for (int page = 0; page < 8; ++page) {
+        for (int page = 0; page < 7; ++page) {
             pages->setProperty("page", page);
             Rig::settle();
             QVERIFY(!rig.render().isNull());
@@ -267,12 +277,13 @@ private slots:
         QFETCH(QString, buttonName);
         Rig rig;
         rig.settings.setPerformanceMode(true);
-        rig.playSomething(); // Local files cannot be liked on Spotify.
+        rig.playSomething();
         const auto player = rig.show(view);
         QVERIFY(player);
         auto *button = player->findChild<QQuickItem *>(buttonName);
         QVERIFY(button);
-        QVERIFY(!button->isVisible());
+        // the song playing is a Spotify track
+        QVERIFY(button->isVisible());
         Song song;
         song.uri = QStringLiteral("spotify:track:fixture");
         song.name = QStringLiteral("Fixture");
@@ -385,14 +396,16 @@ private slots:
         Rig rig;
         rig.settings.setPerformanceMode(true);
         rig.settings.setNoShapes(noShapes);
-        QFile lyrics(rig.directory.filePath(QStringLiteral("sung.lrc")));
-        QVERIFY(lyrics.open(QIODevice::WriteOnly));
-        lyrics.write("[00:00.00]placeholder\n");
-        lyrics.close();
         Song song;
-        song.uri = QUrl::fromLocalFile(rig.directory.filePath(QStringLiteral("sung.flac"))).toString();
+        song.uri = QStringLiteral("spotify:track:0123456789abcdefghijKL");
         song.durationMs = 200'000;
+        rig.connectPlayback();
         rig.player.play(song, {song});
+        Rig::settle();
+        const auto sung = rig.core.take(QStringLiteral("lyrics"));
+        QVERIFY(sung);
+        sung->succeed(QStringLiteral(
+            R"({"syncType":"lineSynced","lines":[{"startTimeMs":0,"words":"placeholder"}]})"));
         Rig::settle();
         QVERIFY(rig.player.hasLyrics());
         QVERIFY(rig.player.lyricsSynchronized());
@@ -697,35 +710,6 @@ private slots:
         QVERIFY(focusItem);
         QVERIFY(focusItem->parentItem());
         QCOMPARE(focusItem->parentItem()->property("placeholder").toString(), QStringLiteral("Name"));
-
-        // For local playlists, the public switch is hidden so Tab skips it
-        QMetaObject::invokeMethod(editor, "close");
-        Rig::settle();
-        QMetaObject::invokeMethod(editor, "openForCreateLocal", Q_ARG(QVariant, QVariant()));
-        Rig::settle();
-        QTRY_VERIFY(editor->property("opened").toBool());
-
-        focusItem = rig.window->activeFocusItem();
-        QVERIFY(focusItem);
-        QVERIFY(focusItem->parentItem());
-        QCOMPARE(focusItem->parentItem()->property("placeholder").toString(), QStringLiteral("Name"));
-        focusItem->setProperty("text", QStringLiteral("Local Gems"));
-        Rig::settle();
-
-        // Tab to description
-        QTest::keyClick(rig.window.get(), Qt::Key_Tab);
-        Rig::settle();
-        focusItem = rig.window->activeFocusItem();
-        QVERIFY(focusItem);
-        QVERIFY(focusItem->parentItem());
-        QCOMPARE(focusItem->parentItem()->property("placeholder").toString(), QStringLiteral("Description"));
-
-        // Tab from description skips hidden switch directly to Save button
-        QTest::keyClick(rig.window.get(), Qt::Key_Tab);
-        Rig::settle();
-        focusItem = rig.window->activeFocusItem();
-        QVERIFY(focusItem);
-        QCOMPARE(focusItem->property("text").toString(), QStringLiteral("Save"));
     }
 
     void updatesCannotInstallFromAnUnmarkedBuild()
@@ -733,7 +717,7 @@ private slots:
         Rig rig;
         const auto pages = rig.show(QStringLiteral("SettingsPages"));
         QVERIFY(pages);
-        pages->setProperty("page", 7);
+        pages->setProperty("page", 6);
         Rig::settle();
         auto *check = pages->findChild<QQuickItem *>(QStringLiteral("checkForUpdates"));
         auto *install = pages->findChild<QQuickItem *>(QStringLiteral("installUpdate"));
@@ -751,7 +735,7 @@ private slots:
         const auto pages = rig.show(QStringLiteral("SettingsPages"));
         QVERIFY(pages);
         // visualizer to performance, account, about
-        for (int page = 0; page < 8; ++page) {
+        for (int page = 0; page < 7; ++page) {
             pages->setProperty("page", page);
             Rig::settle();
             rig.render();
@@ -759,7 +743,7 @@ private slots:
         }
 
         // the account's page holds what the sidebar's card did
-        pages->setProperty("page", 6);
+        pages->setProperty("page", 5);
         Rig::settle();
         const std::function<QQuickItem *(QQuickItem *, const QString &)> shown = [&](QQuickItem *item,
                                                                                    const QString &text) -> QQuickItem * {
@@ -2062,7 +2046,7 @@ private slots:
         QCOMPARE(texts(saved), QStringList {QStringLiteral("Mine")});
     }
 
-    /// every way to a new playlist, a local one, a song's info or a deletion
+    /// every way to a new playlist or the settings
     /// opens its dialog in the window itself
     void theWindowOpensItsEditors()
     {
@@ -2076,8 +2060,6 @@ private slots:
         QQmlComponent asker(&rig.engine);
         asker.setData("import QtQuick\nimport Swiftify\nQtObject {\n"
                       "    function newPlaylist() { UiState.beginCreatePlaylist() }\n"
-                      "    function newLocalPlaylist() { UiState.createLocalPlaylistRequested(null) }\n"
-                      "    function editTrack(target: song) { UiState.editLocalTrackRequested(target) }\n"
                       "    function settings() { UiState.settingsRequested() }\n"
                       "}",
                       QUrl());
@@ -2095,23 +2077,8 @@ private slots:
 
         QVERIFY(QMetaObject::invokeMethod(ask.get(), "newPlaylist"));
         QTRY_VERIFY(opened("PlaylistEditor_QMLTYPE"));
-        QVERIFY(!opened("PlaylistEditor_QMLTYPE")->property("local").toBool());
         QMetaObject::invokeMethod(opened("PlaylistEditor_QMLTYPE"), "close");
         QTRY_VERIFY(!opened("PlaylistEditor_QMLTYPE"));
-
-        QVERIFY(QMetaObject::invokeMethod(ask.get(), "newLocalPlaylist"));
-        QTRY_VERIFY(opened("PlaylistEditor_QMLTYPE"));
-        QVERIFY(opened("PlaylistEditor_QMLTYPE")->property("local").toBool());
-        QMetaObject::invokeMethod(opened("PlaylistEditor_QMLTYPE"), "close");
-        QTRY_VERIFY(!opened("PlaylistEditor_QMLTYPE"));
-
-        Song song;
-        song.name = QStringLiteral("Mine");
-        song.uri = QStringLiteral("file:///music/mine.mp3");
-        QVERIFY(QMetaObject::invokeMethod(ask.get(), "editTrack", Q_ARG(swiftify::Song, song)));
-        QTRY_VERIFY(opened("LocalTrackEditor_QMLTYPE"));
-        QMetaObject::invokeMethod(opened("LocalTrackEditor_QMLTYPE"), "close");
-        QTRY_VERIFY(!opened("LocalTrackEditor_QMLTYPE"));
 
         // the settings open over the window, not in one of their own
         const qsizetype windows = QGuiApplication::topLevelWindows().size();
@@ -2137,10 +2104,11 @@ private slots:
         Song song;
         song.name = QStringLiteral("A Song Whose Name Goes On And On Well Past The Width Of Any Card It Could Be Shown In");
         song.artists = QStringLiteral("Artist");
-        song.uri = QUrl::fromLocalFile(QStringLiteral("/music/long.flac")).toString();
+        song.uri = QStringLiteral("spotify:track:0123456789abcdefghijKL");
+        rig.connectPlayback();
         rig.player.play(song, {song});
         Rig::settle();
-        rig.core.take(QStringLiteral("playFile"))->succeed();
+        rig.core.take(QStringLiteral("playTrack"))->succeed();
         Rig::settle();
         const auto page = rig.show(QStringLiteral("HomeView"));
         QVERIFY(page);
@@ -2299,8 +2267,8 @@ private slots:
         // the next song: this row's mark and meter shrink away and go
         rig.player.skipForward();
         QTRY_VERIFY(std::any_of(rig.core.pending.cbegin(), rig.core.pending.cend(),
-                                [](const auto &call) { return call->name == QLatin1StringView("playFile"); }));
-        rig.core.take(QStringLiteral("playFile"))->succeed();
+                                [](const auto &call) { return call->name == QLatin1StringView("playTrack"); }));
+        rig.core.take(QStringLiteral("playTrack"))->succeed();
         QTRY_VERIFY(!row->property("isCurrent").toBool());
         QTRY_COMPARE_WITH_TIMEOUT(loaded(), 0, 3000);
     }
@@ -2535,7 +2503,7 @@ private slots:
     void viewsHoldStillAtRest_data()
     {
         QTest::addColumn<QString>("type");
-        for (const char *type : {"HomeView", "SearchView", "PlaylistsView", "SavedSongsView", "LocalFilesView", "LocalTracksView", "Sidebar",
+        for (const char *type : {"HomeView", "SearchView", "PlaylistsView", "SavedSongsView", "Sidebar",
                                  "PlayerBar", "SettingsPages", "EmptyState", "Stickers", "ShapeIcon"}) {
             QTest::addRow("%s", type) << QString::fromLatin1(type);
         }
@@ -2719,11 +2687,14 @@ private slots:
         QVERIFY2(countCards() < 40, qPrintable(QString::number(countCards())));
     }
 
-    void aPlaylistMadeHereShowsWithTheLocalFiles()
+    void aPlaylistShowsInTheGridAndOpensWithItsEditor()
     {
         Rig rig;
-        const Playlist made = rig.localFiles.createPlaylist(QStringLiteral("Mine"), {}, {}, {});
-        QVERIFY(made.isValid());
+        Playlist made;
+        made.id = QStringLiteral("mine");
+        made.name = QStringLiteral("Mine");
+        made.uri = QStringLiteral("spotify:playlist:mine");
+        rig.library.playlists()->setItems({made});
         const std::function<QQuickItem *(QQuickItem *, const std::function<bool(QQuickItem *)> &)> find =
             [&](QQuickItem *item, const std::function<bool(QQuickItem *)> &wanted) -> QQuickItem * {
             if (wanted(item)) {
@@ -2740,10 +2711,9 @@ private slots:
             return QString::fromLatin1(item->metaObject()->className()).startsWith(QLatin1StringView(type));
         };
 
-        // Local Files is a grid: a new playlist's tile, every file's card,
-        // then the playlists
+        // the grid: a new playlist's tile, then the playlists
         {
-            const auto page = rig.show(QStringLiteral("LocalFilesView"));
+            const auto page = rig.show(QStringLiteral("PlaylistsView"));
             QVERIFY(page);
             const auto card = [&](const QString &title) {
                 return find(page.get(), [&](QQuickItem *item) {
@@ -2752,29 +2722,20 @@ private slots:
                 });
             };
             QTRY_VERIFY(card(QStringLiteral("Mine")));
-            QVERIFY(card(QStringLiteral("Local Tracks")));
             QVERIFY(find(page.get(), [&](QQuickItem *item) {
                 return item->property("text").toString() == QStringLiteral("New Playlist") && item->isVisible();
             }));
-            QCOMPARE(page->property("count").toInt(), 3);
+            QCOMPARE(page->property("count").toInt(), 2);
         }
 
-        // opened, it is a playlist with nothing to download or share
         rig.library.selectPlaylist(made);
         const auto page = rig.show(QStringLiteral("PlaylistView"));
         QVERIFY(page);
         QTRY_VERIFY(find(page.get(), [&](QQuickItem *item) {
-            return item->property("kind").toString() == QStringLiteral("LOCAL PLAYLIST");
-        }));
-        QVERIFY(!find(page.get(), [&](QQuickItem *item) {
-            return item->property("symbol").toString() == QStringLiteral("download") && item->isVisible();
-        }));
-        // and takes tracks from anywhere
-        QVERIFY(find(page.get(), [&](QQuickItem *item) {
-            return item->property("text").toString() == QStringLiteral("Add Tracks") && item->isVisible();
+            return item->property("kind").toString() == QStringLiteral("PLAYLIST");
         }));
 
-        // and its editor has no public switch
+        // its editor has a public switch
         QQmlComponent component(&rig.engine);
         component.setData("import QtQuick\nimport Swiftify\nItem {\n"
                           "    property alias editor: editor\n"
@@ -2791,14 +2752,9 @@ private slots:
                 return item->property("text").toString() == QStringLiteral("Public playlist");
             });
         };
-        QMetaObject::invokeMethod(editor, "openForCreateLocal", Q_ARG(QVariant, QVariant()));
-        QTRY_VERIFY(editor->property("opened").toBool());
-        QVERIFY(publicRow());
-        QVERIFY(!publicRow()->isVisible());
-        QMetaObject::invokeMethod(editor, "close");
-        QTRY_VERIFY(!editor->property("visible").toBool());
         QMetaObject::invokeMethod(editor, "openForCreate");
         QTRY_VERIFY(editor->property("opened").toBool());
+        QVERIFY(publicRow());
         QVERIFY(publicRow()->isVisible());
     }
 
@@ -2883,7 +2839,7 @@ private slots:
     {
         Rig rig;
         rig.settings.setPerformanceMode(true);
-        const Playlist playlist = rig.localFiles.createPlaylist(QStringLiteral("Mine"), {}, {}, {});
+        const Playlist playlist = editablePlaylist(QStringLiteral("Mine"));
         rig.library.selectPlaylist(playlist);
         QQmlComponent component(&rig.engine);
         component.setData("import QtQuick\nimport Swiftify\n"
@@ -2918,7 +2874,7 @@ private slots:
     void narrowCollectionActionsStayWithinTheirHero()
     {
         Rig rig;
-        const Playlist playlist = rig.localFiles.createPlaylist(QStringLiteral("A playlist with a long title"), {}, {}, {});
+        const Playlist playlist = editablePlaylist(QStringLiteral("A playlist with a long title"));
         rig.library.selectPlaylist(playlist);
         const auto page = rig.show(QStringLiteral("PlaylistView"));
         QVERIFY(page);
@@ -2930,14 +2886,14 @@ private slots:
             for (QQuickItem *item : page->findChildren<QQuickItem *>()) {
                 if (!QString::fromLatin1(item->metaObject()->className()).startsWith(QLatin1StringView("TextButton_QMLTYPE"))) continue;
                 const QString label = item->property("text").toString();
-                if (label != QStringLiteral("Play") && label != QStringLiteral("Shuffle") && label != QStringLiteral("Add Tracks")) continue;
+                if (label != QStringLiteral("Play") && label != QStringLiteral("Shuffle")) continue;
                 ++actions;
                 QVERIFY(!item->property("iconOnly").toBool());
                 QVERIFY(item->width() > item->height());
                 QVERIFY(item->x() >= 0);
                 QVERIFY(item->x() + item->width() <= item->parentItem()->width());
             }
-            QCOMPARE(actions, 3);
+            QCOMPARE(actions, 2);
         }
     }
 
@@ -2995,7 +2951,7 @@ private slots:
         QQmlComponent settingsComponent(&rig.engine, QUrl(QStringLiteral("qrc:/qt/qml/Swiftify/qml/settings/SettingsPages.qml")));
         std::unique_ptr<QObject> settingsObject(settingsComponent.create());
         QVERIFY2(settingsObject, qPrintable(settingsComponent.errorString()));
-        settingsObject->setProperty("page", 4);
+        settingsObject->setProperty("page", 3);
         Rig::settle();
         auto *switchItem = settingsObject->findChild<QQuickItem *>(QStringLiteral("windowControlsOnRightSwitch"));
         QVERIFY(switchItem);
@@ -3019,23 +2975,23 @@ private slots:
         song1.artists = QStringLiteral("Artist B");
         song1.albumName = QStringLiteral("Album C");
         song1.durationMs = 120000;
-        song1.uri = QStringLiteral("file:///song1.flac");
+        song1.uri = QStringLiteral("spotify:track:00000000000000000song1");
 
         Song song2;
         song2.name = QStringLiteral("Apple");
         song2.artists = QStringLiteral("Artist A");
         song2.albumName = QStringLiteral("Album B");
         song2.durationMs = 240000;
-        song2.uri = QStringLiteral("file:///song2.flac");
+        song2.uri = QStringLiteral("spotify:track:00000000000000000song2");
 
         Song song3;
         song3.name = QStringLiteral("Mango");
         song3.artists = QStringLiteral("Artist C");
         song3.albumName = QStringLiteral("Album A");
         song3.durationMs = 180000;
-        song3.uri = QStringLiteral("file:///song3.flac");
+        song3.uri = QStringLiteral("spotify:track:00000000000000000song3");
 
-        const Playlist playlist = rig.localFiles.createPlaylist(QStringLiteral("Test Playlist"), {}, {}, {song1, song2, song3});
+        const Playlist playlist = editablePlaylist(QStringLiteral("Test Playlist"));
         rig.library.selectPlaylist(playlist);
         rig.library.setPlaylistSongsForTesting({song1, song2, song3});
 
@@ -3102,7 +3058,7 @@ private slots:
     void topBarSortMenuTogglesReverseAndArrow()
     {
         Rig rig;
-        const Playlist playlist = rig.localFiles.createPlaylist(QStringLiteral("Mine"), {}, {}, {});
+        const Playlist playlist = editablePlaylist(QStringLiteral("Mine"));
         rig.library.selectPlaylist(playlist);
         QQmlComponent component(&rig.engine);
         component.setData("import QtQuick\nimport Swiftify\n"
@@ -3175,20 +3131,21 @@ private slots:
         song1.artists = QStringLiteral("Artist B");
         song1.albumName = QStringLiteral("Album C");
         song1.durationMs = 120000;
-        song1.uri = QStringLiteral("file:///music/song1.flac");
+        song1.uri = QStringLiteral("spotify:track:00000000000000000song1");
 
         Song song2;
         song2.name = QStringLiteral("Apple");
         song2.artists = QStringLiteral("Artist A");
         song2.albumName = QStringLiteral("Album B");
         song2.durationMs = 240000;
-        song2.uri = QStringLiteral("file:///music/song2.flac");
+        song2.uri = QStringLiteral("spotify:track:00000000000000000song2");
 
         Playlist playlist;
         playlist.id = QStringLiteral("test_playlist_1");
         playlist.name = QStringLiteral("Reversed Playlist");
         playlist.songCount = 2;
 
+        rig.connectPlayback();
         rig.library.selectPlaylist(playlist);
         rig.library.setPlaylistSongsForTesting({song1, song2});
 
@@ -3220,7 +3177,7 @@ private slots:
         QTest::addColumn<QString>("type");
         for (const char *type : {"SoundPanel", "SleepTimerPanel", "ImmersiveQueue", "ImmersiveLyrics", "SegmentedControl",
                                  "StyledSwitch", "RollingText", "PlayerBar", "LyricsPanel", "QueuePanel", "Sidebar",
-                                 "PageHost", "HomeView", "SearchView", "ArtistView", "AlbumView", "PlaylistView", "PlaylistsView", "SavedSongsView", "LocalFilesView", "LocalTracksView", "StartupView",
+                                 "PageHost", "HomeView", "SearchView", "ArtistView", "AlbumView", "PlaylistView", "PlaylistsView", "SavedSongsView", "StartupView",
                                  "SetupView", "CompactMeter", "MaterialShape", "ShapeIcon", "SquiggleRing", "WavyLine",
                                  "LoadingSpinner", "ShapeButton", "WavyPill", "ToolbarButton", "PlayButton"}) {
             QTest::newRow(type) << QString::fromLatin1(type);

@@ -67,26 +67,6 @@ void swiftify_core_lyrics_json(const SwiftifyCore *core, uint64_t request_id,
  * /v1/playlists/{id}/items page. */
 void swiftify_core_playlist_json(const SwiftifyCore *core, uint64_t request_id,
                                  const char *playlist_uri);
-/* plays a music file of the person's own from anywhere on disk: mp3, flac,
- * ogg vorbis, wav, aiff, or aac or apple lossless in an m4a. */
-void swiftify_core_play_file(const SwiftifyCore *core, uint64_t request_id, const char *path);
-
-/* what a music file's tags say, as json: title, artist, album, albumArtist,
- * trackNumber, discNumber, date, genre (each null when the file does not
- * say), durationMs and artworkPath (an embedded cover written into
- * artwork_dir under a name taken from its contents, or a cover image kept
- * beside the file, or null). null with *error set if it cannot be read.
- * needs no core and may be called from any thread. */
-char *swiftify_read_local_tags(const char *path, const char *artwork_dir, char **error);
-/* writes edits into a music file's tags: json with any of title, artist,
- * album, albumArtist, genre, date, trackNumber, discNumber (each set, or
- * cleared when empty; one left out is kept) and removeArtwork, with
- * `artwork` (artwork_len bytes of a jpeg or png, or null) as the front
- * cover. returns null, or an error to free; the file is left as it was if
- * anything fails. needs no core and may be called from any thread. */
-char *swiftify_write_local_tags(const char *path, const char *edits, const uint8_t *artwork,
-                                size_t artwork_len);
-
 void swiftify_core_disconnect(const SwiftifyCore *core);
 
 char *swiftify_core_play(const SwiftifyCore *core);
@@ -98,6 +78,19 @@ char *swiftify_core_set_stream_quality(const SwiftifyCore *core, uint32_t kbps);
  * next time playback connects */
 char *swiftify_core_set_audio_cache(const SwiftifyCore *core, const char *path,
                                     uint64_t limit_bytes);
+/* whether the app is to appear as a spotify connect device called name, which
+ * spotify's other clients and anything watching the account (a scrobbling bot)
+ * see; applies the next time playback connects. returns null, or an error to
+ * free. */
+char *swiftify_core_set_connect(const SwiftifyCore *core, bool enabled, const char *name);
+/* the song another spotify client last started on this device, as json (uri,
+ * name, artists, album, durationMs, artworkUrl), once; null if there is none.
+ * free it with swiftify_string_free. */
+char *swiftify_core_take_remote_track(const SwiftifyCore *core);
+/* once: another client stopped the song that was asked for here */
+bool swiftify_core_take_remote_stopped(const SwiftifyCore *core);
+/* registered as a connect device right now */
+bool swiftify_core_connect_active(const SwiftifyCore *core);
 char *swiftify_core_set_playback_shaping(const SwiftifyCore *core, float tempo,
                                          float pitch_semitones, bool preserves_pitch);
 char *swiftify_core_set_equalizer(const SwiftifyCore *core, const float *gains_db, size_t count);

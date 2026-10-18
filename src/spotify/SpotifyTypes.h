@@ -72,9 +72,6 @@ struct Song {
     Q_PROPERTY(QString albumId MEMBER albumId FINAL)
     Q_PROPERTY(QString albumUri MEMBER albumUri FINAL)
     Q_PROPERTY(bool valid READ isValid FINAL)
-    /// a music file of the person's own (LocalLibrary), not a spotify track:
-    /// nothing spotify knows can be done with it
-    Q_PROPERTY(bool isLocalFile READ isLocalFile FINAL)
 
 public:
     Song();
@@ -93,9 +90,6 @@ public:
     QList<Artist> artistItems;
 
     bool isValid() const { return !uri.isEmpty(); }
-    /// its uri is the file's own url, file:///...
-    bool isLocalFile() const { return uri.startsWith(QLatin1StringView("file:")); }
-    QString localPath() const { return isLocalFile() ? QUrl(uri).toLocalFile() : QString(); }
     /// the same occurrence, not merely the same track
     bool isSameInstance(const Song &other) const { return instanceId == other.instanceId; }
     bool operator==(const Song &other) const { return instanceId == other.instanceId; }
@@ -127,9 +121,6 @@ struct Playlist {
     Q_PROPERTY(bool isCollaborative MEMBER isCollaborative FINAL)
     Q_PROPERTY(QString uri MEMBER uri FINAL)
     Q_PROPERTY(bool valid READ isValid FINAL)
-    /// made on this computer from files of the person's own (LocalLibrary),
-    /// not a spotify playlist
-    Q_PROPERTY(bool isLocal READ isLocal FINAL)
 
 public:
     QString id;
@@ -144,7 +135,6 @@ public:
     QString uri;
 
     bool isValid() const { return !id.isEmpty(); }
-    bool isLocal() const { return id.startsWith(QLatin1StringView("local:")); }
     bool operator==(const Playlist &) const = default;
     QString ownerDisplayName() const { return ownerName.isEmpty() ? QStringLiteral("Spotify") : ownerName; }
     bool canModify(const QString &currentUserId) const

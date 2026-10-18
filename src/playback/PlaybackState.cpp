@@ -1,6 +1,5 @@
 #include "playback/PlaybackState.h"
 
-#include <QDir>
 #include <QHash>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -17,10 +16,7 @@ constexpr qsizetype maximumBytes = 4 * 1024 * 1024;
 bool restorable(const Song &song)
 {
     static const QRegularExpression spotify(QStringLiteral("^spotify:track:[A-Za-z0-9]{22}$"));
-    if (spotify.match(song.uri).hasMatch()) return true;
-    const QUrl url(song.uri);
-    return url.isLocalFile() && url.userInfo().isEmpty() && url.query().isEmpty()
-        && url.fragment().isEmpty() && QDir::isAbsolutePath(url.toLocalFile());
+    return spotify.match(song.uri).hasMatch();
 }
 
 quint32 milliseconds(const QJsonValue &value)

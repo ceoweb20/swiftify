@@ -3,7 +3,6 @@
 #include "app/Settings.h"
 #include "library/CollectionModels.h"
 #include "library/LibraryStore.h"
-#include "library/LocalLibrary.h"
 #include "library/SongListModel.h"
 #include "playback/PlaybackController.h"
 
@@ -225,23 +224,12 @@ void AppController::handleCommand(const QString &command)
         library->showPlaylists();
     } else if (command == QLatin1StringView("songs") && library) {
         library->showSavedSongs();
-    } else if (command == QLatin1StringView("local-files") && library) {
-        library->showLocalFiles();
-    } else if (command == QLatin1StringView("local-tracks") && library) {
-        library->showLocalTracks();
     } else if (command == QLatin1StringView("back") && library) {
         library->goBack();
     } else if (command == QLatin1StringView("play-recent") && library && player) {
         // what played last, from the start of the list
         if (library->recentlyPlayed()->count() > 0) {
             player->playFromModel(library->recentlyPlayed(), 0);
-        }
-    } else if (command.startsWith(QLatin1StringView("play-local ")) && LocalLibrary::instance() && player) {
-        // a music file of the person's own, by its place in the local files
-        SongListModel *songs = LocalLibrary::instance()->songs();
-        const int index = command.sliced(11).trimmed().toInt();
-        if (index >= 0 && index < songs->count()) {
-            player->playFromModel(songs, index);
         }
     } else if (command.startsWith(QLatin1StringView("setting ")) && Settings::instance()) {
         // "setting <name> on|off", for the settings that change what is drawn
@@ -267,14 +255,6 @@ void AppController::handleCommand(const QString &command)
         const int index = command.mid(9).toInt(&number);
         if (number && index >= 0 && index < library->playlists()->count()) {
             library->selectPlaylist(library->playlists()->at(index));
-        }
-    } else if (command.startsWith(QLatin1StringView("local-playlist ")) && LocalLibrary::instance() && library) {
-        // a playlist made on this computer, by its place among them, from 0
-        PlaylistListModel *playlists = LocalLibrary::instance()->playlists();
-        bool number = false;
-        const int index = command.mid(15).toInt(&number);
-        if (number && index >= 0 && index < playlists->count()) {
-            library->selectPlaylist(playlists->at(index));
         }
     } else if (command == QLatin1StringView("play-loading-test") && player) {
         player->playLoadingTest();

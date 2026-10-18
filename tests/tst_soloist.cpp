@@ -339,23 +339,6 @@ private slots:
         QVERIFY(m_soloist->commandNames().contains(QStringLiteral("play")));
     }
 
-    void localFilesPlayThroughTheRustCore()
-    {
-        QCoro::waitFor(m_core->playTrack(QStringLiteral("spotify:track:a")));
-        auto file = m_core->playFile(QStringLiteral("/music/song.flac"));
-        // the spotify song stops for it
-        QTRY_VERIFY(m_soloist->commandNames().contains(QStringLiteral("pause")));
-        const auto call = m_fallback->take(QStringLiteral("playFile"));
-        QVERIFY(call);
-        QCOMPARE(call->argument, QStringLiteral("/music/song.flac"));
-        call->succeed();
-        QCoro::waitFor(file);
-        m_fallback->duration = 1234;
-        QCOMPARE(m_core->playbackDurationMs(), 1234u);
-        m_core->pause();
-        QVERIFY(m_fallback->log.contains(QStringLiteral("pause")));
-    }
-
 private:
     std::unique_ptr<QTemporaryDir> m_dir;
     QString m_program;

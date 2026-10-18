@@ -55,7 +55,6 @@ public:
     QCoro::Task<> playTrack(QString spotifyUri) override;
     void preloadTrack(const QString &spotifyUri, bool preloadStandby) override;
     QCoro::Task<> crossfadeTrack(QString spotifyUri, quint32 durationMs) override;
-    QCoro::Task<> playFile(QString path) override;
     QCoro::Task<> restartAudioOutput() override;
     QCoro::Task<QString> lyricsJson(QString spotifyUri) override;
     QCoro::Task<QString> playlistJson(QString playlistUri) override;
@@ -147,7 +146,6 @@ private:
 
     float m_volume = 0.75f;
     /// a file of the person's own is playing, through the rust core
-    bool m_localActive = false;
     /// the song swiftify last asked soloist for, and whether it has started
     QString m_expectedUri;
     bool m_expectedStarted = false;
