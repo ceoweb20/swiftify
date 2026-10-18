@@ -572,6 +572,127 @@ private slots:
         QCOMPARE(editor->property("headline").toString(), QStringLiteral("New Playlist"));
     }
 
+    void tabKeyNavigatesPlaylistEditorFieldsAndButtons()
+    {
+        Rig rig;
+        QQmlComponent component(&rig.engine);
+        component.setData("import QtQuick\nimport Swiftify\nItem {\n"
+                          "    property alias editor: editor\n"
+                          "    PlaylistEditor { id: editor }\n"
+                          "}\n",
+                          QUrl());
+        std::unique_ptr<QObject> object(component.create());
+        QVERIFY2(object, qPrintable(component.errorString()));
+        auto *item = qobject_cast<QQuickItem *>(object.get());
+        item->setParentItem(rig.window->contentItem());
+        item->setSize(Rig::kSize);
+        auto *editor = object->property("editor").value<QObject *>();
+        QVERIFY(editor);
+        QMetaObject::invokeMethod(editor, "openForCreate");
+        Rig::settle();
+        rig.render();
+        QTRY_VERIFY(editor->property("opened").toBool());
+
+        // Focus starts on name field input
+        QQuickItem *focusItem = rig.window->activeFocusItem();
+        QVERIFY(focusItem);
+        QVERIFY(focusItem->parentItem());
+        QCOMPARE(focusItem->parentItem()->property("placeholder").toString(), QStringLiteral("Name"));
+
+        // Pressing Tab moves to description field without inserting spaces into name
+        QTest::keyClick(rig.window.get(), Qt::Key_Tab);
+        Rig::settle();
+        focusItem = rig.window->activeFocusItem();
+        QVERIFY(focusItem);
+        QVERIFY(focusItem->parentItem());
+        QCOMPARE(focusItem->parentItem()->property("placeholder").toString(), QStringLiteral("Description"));
+        QCOMPARE(focusItem->property("text").toString(), QStringLiteral(""));
+
+        // Pressing Shift+Tab moves back to name field
+        QTest::keyClick(rig.window.get(), Qt::Key_Backtab, Qt::ShiftModifier);
+        Rig::settle();
+        focusItem = rig.window->activeFocusItem();
+        QVERIFY(focusItem);
+        QVERIFY(focusItem->parentItem());
+        QCOMPARE(focusItem->parentItem()->property("placeholder").toString(), QStringLiteral("Name"));
+        QCOMPARE(focusItem->property("text").toString(), QStringLiteral(""));
+
+        // Enter name text so Save button becomes enabled
+        focusItem->setProperty("text", QStringLiteral("Roadtrip Tunes"));
+        Rig::settle();
+        QCOMPARE(focusItem->property("text").toString(), QStringLiteral("Roadtrip Tunes"));
+
+        // Tab to description field
+        QTest::keyClick(rig.window.get(), Qt::Key_Tab);
+        Rig::settle();
+        focusItem = rig.window->activeFocusItem();
+        QVERIFY(focusItem);
+        QVERIFY(focusItem->parentItem());
+        QCOMPARE(focusItem->parentItem()->property("placeholder").toString(), QStringLiteral("Description"));
+
+        // Tab from description to Public switch
+        QTest::keyClick(rig.window.get(), Qt::Key_Tab);
+        Rig::settle();
+        focusItem = rig.window->activeFocusItem();
+        QVERIFY(focusItem);
+        QVERIFY(QString::fromLatin1(focusItem->metaObject()->className()).startsWith(QLatin1StringView("StyledSwitch")));
+        const bool initialChecked = focusItem->property("checked").toBool();
+        QTest::keyClick(rig.window.get(), Qt::Key_Space);
+        Rig::settle();
+        QCOMPARE(focusItem->property("checked").toBool(), !initialChecked);
+
+        // Tab from Public switch to Save button
+        QTest::keyClick(rig.window.get(), Qt::Key_Tab);
+        Rig::settle();
+        focusItem = rig.window->activeFocusItem();
+        QVERIFY(focusItem);
+        QCOMPARE(focusItem->property("text").toString(), QStringLiteral("Save"));
+
+        // Tab from Save to Cancel button
+        QTest::keyClick(rig.window.get(), Qt::Key_Tab);
+        Rig::settle();
+        focusItem = rig.window->activeFocusItem();
+        QVERIFY(focusItem);
+        QCOMPARE(focusItem->property("text").toString(), QStringLiteral("Cancel"));
+
+        // Tab from Cancel wraps back to Name field
+        QTest::keyClick(rig.window.get(), Qt::Key_Tab);
+        Rig::settle();
+        focusItem = rig.window->activeFocusItem();
+        QVERIFY(focusItem);
+        QVERIFY(focusItem->parentItem());
+        QCOMPARE(focusItem->parentItem()->property("placeholder").toString(), QStringLiteral("Name"));
+
+        // For local playlists, the public switch is hidden so Tab skips it
+        QMetaObject::invokeMethod(editor, "close");
+        Rig::settle();
+        QMetaObject::invokeMethod(editor, "openForCreateLocal", Q_ARG(QVariant, QVariant()));
+        Rig::settle();
+        QTRY_VERIFY(editor->property("opened").toBool());
+
+        focusItem = rig.window->activeFocusItem();
+        QVERIFY(focusItem);
+        QVERIFY(focusItem->parentItem());
+        QCOMPARE(focusItem->parentItem()->property("placeholder").toString(), QStringLiteral("Name"));
+        focusItem->setProperty("text", QStringLiteral("Local Gems"));
+        Rig::settle();
+
+        // Tab to description
+        QTest::keyClick(rig.window.get(), Qt::Key_Tab);
+        Rig::settle();
+        focusItem = rig.window->activeFocusItem();
+        QVERIFY(focusItem);
+        QVERIFY(focusItem->parentItem());
+        QCOMPARE(focusItem->parentItem()->property("placeholder").toString(), QStringLiteral("Description"));
+
+        // Tab from description skips hidden switch directly to Save button
+        QTest::keyClick(rig.window.get(), Qt::Key_Tab);
+        Rig::settle();
+        focusItem = rig.window->activeFocusItem();
+        QVERIFY(focusItem);
+        QCOMPARE(focusItem->property("text").toString(), QStringLiteral("Save"));
+    }
+
     void everySettingsPageDraws()
     {
         Rig rig;

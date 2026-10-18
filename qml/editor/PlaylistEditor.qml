@@ -143,6 +143,7 @@ iconShape: "bun"
         padding: 0
         buttonRadius: 10
         colBackground: "transparent"
+        focusPolicy: Qt.NoFocus
 
         // drawn inside the tile, so nothing hangs past the carousel's clip
         Rectangle {

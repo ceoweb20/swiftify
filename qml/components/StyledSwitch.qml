@@ -18,8 +18,8 @@ T.Switch {
         anchors.fill: parent
         radius: height / 2
         color: root.checked ? root.scheme.primary : root.scheme.surfaceContainerHighest
-        border.width: root.checked ? 0 : 2
-        border.color: root.scheme.outline
+        border.width: root.visualFocus ? 2 : (root.checked ? 0 : 2)
+        border.color: root.visualFocus ? root.scheme.secondary : root.scheme.outline
 
         Behavior on color {
             ElementMoveFastColor {}
