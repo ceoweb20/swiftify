@@ -2,6 +2,7 @@
 
 #include "spotify/SpotifyError.h"
 #include "spotify/SpotifyJson.h"
+#include "spotify/PlaylistLinks.h"
 
 #include <QJsonArray>
 #include <QJsonObject>
@@ -47,11 +48,16 @@ QUrl WebApi::apiUrl(const QString &path, const QUrlQuery &query)
 QCoro::Task<QByteArray> WebApi::requestData(QUrl url, QByteArray method, QString accessToken,
                                             QByteArray body, QByteArray contentType)
 {
-    if (url.scheme() != QLatin1StringView("https") || url.host() != QLatin1StringView("api.spotify.com")) {
+    if (url.scheme() != QLatin1StringView("https") || url.host() != QLatin1StringView("api.spotify.com")
+        || !url.userInfo().isEmpty() || (url.port(-1) != -1 && url.port() != 443)) {
         throw SpotifyError(SpotifyError::Kind::InvalidUrl, QStringLiteral("Spotify returned an invalid API URL."));
     }
 
     QNetworkRequest request(url);
+    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy);
+    request.setAttribute(QNetworkRequest::CookieLoadControlAttribute, QNetworkRequest::Manual);
+    request.setAttribute(QNetworkRequest::CookieSaveControlAttribute, QNetworkRequest::Manual);
+    request.setRawHeader("User-Agent", "Swiftify");
     request.setRawHeader("Authorization", "Bearer " + accessToken.toUtf8());
     request.setTransferTimeout(30'000);
     if (!body.isEmpty() || !contentType.isEmpty()) {
@@ -78,22 +84,22 @@ QCoro::Task<QByteArray> WebApi::requestData(QUrl url, QByteArray method, QString
     switch (status) {
     case 401:
         throw SpotifyError(SpotifyError::Kind::Unauthorized,
-                           QStringLiteral("Spotify API authorization failed: %1").arg(message));
+                           QStringLiteral("Spotify API authorization failed: %1").arg(message), -1, status);
     case 403:
         // spotify's own text here is usually the bare word "forbidden", which
         // says nothing about which permission was missing.
         throw SpotifyError(SpotifyError::Kind::Forbidden,
-                           QStringLiteral("Spotify refused this change: %1").arg(message));
+                           QStringLiteral("Spotify refused this change: %1").arg(message), -1, status);
     case 429: {
         bool ok = false;
         const int retryAfter = reply->rawHeader("Retry-After").toInt(&ok);
         throw SpotifyError(SpotifyError::Kind::RateLimited,
                            ok ? QStringLiteral("Spotify rate limit exceeded. Try again in %1 seconds.").arg(retryAfter)
                               : QStringLiteral("Spotify rate limit exceeded. Try again shortly."),
-                           ok ? retryAfter : -1);
+                           ok ? retryAfter : -1, status);
     }
     default:
-        throw SpotifyError::requestFailed(message);
+        throw SpotifyError::requestFailed(message, status);
     }
 }
 
@@ -239,6 +245,22 @@ QCoro::Task<QList<Song>> WebApi::playlistSongs(QString playlistId, QString acces
     co_return result;
 }
 
+QCoro::Task<Playlist> WebApi::playlist(QString playlistId, QString accessToken)
+{
+    if (!playlistlinks::validId(playlistId)) {
+        throw SpotifyError(SpotifyError::Kind::InvalidUrl, QStringLiteral("Invalid Spotify playlist ID."));
+    }
+    const auto object = (co_await requestJson(apiUrl(QStringLiteral("/v1/playlists/%1").arg(playlistId)),
+                                            "GET", accessToken)).object();
+    Playlist result = json::playlist(object);
+    if (result.id != playlistId || result.name.trimmed().isEmpty()
+        || object.value(QStringLiteral("type")).toString() != QLatin1StringView("playlist")) {
+        throw SpotifyError::invalidData(QStringLiteral("Spotify returned invalid playlist details."));
+    }
+    result.uri = QStringLiteral("spotify:playlist:") + playlistId;
+    co_return result;
+}
+
 QCoro::Task<QList<Song>> WebApi::savedSongs(QString accessToken)
 {
     QList<Song> result;
@@ -259,12 +281,19 @@ QCoro::Task<int> WebApi::savedSongTotal(QString accessToken)
 
 QCoro::Task<QList<Song>> WebApi::recentlyPlayed(QString accessToken)
 {
-    const QUrlQuery requestQuery = QUrlQuery {{QStringLiteral("limit"), QStringLiteral("20")}};
+    const RecentPlayback history = co_await recentHistory(accessToken);
+    co_return history.songs;
+}
+
+QCoro::Task<RecentPlayback> WebApi::recentHistory(QString accessToken, int limit)
+{
+    const QUrlQuery requestQuery {{QStringLiteral("limit"), QString::number(std::clamp(limit, 1, 50))}};
     const QJsonDocument document = co_await requestJson(
         apiUrl(QStringLiteral("/v1/me/player/recently-played"), requestQuery),
         "GET", accessToken);
-    QList<Song> result;
-    appendWrappedTracks(result, document.object());
+    RecentPlayback result;
+    appendWrappedTracks(result.songs, document.object());
+    result.playlistIds = playlistlinks::recentIds(document.object());
     co_return result;
 }
 

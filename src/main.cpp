@@ -8,6 +8,7 @@
 #include "audio/AudioShaping.h"
 #include "core/RustCore.h"
 #include "library/LibraryStore.h"
+#include "library/PlaylistCollections.h"
 #include "library/LocalLibrary.h"
 #include "playback/PlaybackController.h"
 #include "render/SpectrumSource.h"
@@ -298,6 +299,7 @@ int main(int argc, char *argv[])
     SpotifySession session(&core, &credentials, &network, &errors);
     PlaybackController player(&core, &session, &settings, &errors);
     LibraryStore library(&session, &settings, &errors);
+    PlaylistCollections collections(&session, &settings, &library);
     library.attachPlayer(&player);
     AudioShaping sound(&core, &settings, &session);
     LocalLibrary localFiles(&settings);

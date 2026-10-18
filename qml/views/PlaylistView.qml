@@ -49,7 +49,10 @@ Item {
             kind: root.playlist.isLocal ? "LOCAL PLAYLIST" : "PLAYLIST"
             title: root.playlist.name
             description: root.playlist.description
-            facts: Format.joined([root.playlist.ownerDisplayName, Format.songCount(root.playlist.songCount), Format.totalDuration(Library.playlistSongs.totalDurationMs)], "  •  ")
+            facts: Format.joined([root.playlist.ownerDisplayName,
+                Library.playlistSongs.count > 0 ? Format.songCount(Library.playlistSongs.count)
+                    : root.playlist.songCount > 0 ? Format.songCount(root.playlist.songCount) : "",
+                Format.totalDuration(Library.playlistSongs.totalDurationMs)], "  •  ")
 
             actions: [
                 TextButton {

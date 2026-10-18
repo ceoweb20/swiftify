@@ -14,6 +14,7 @@ endfunction()
 
 swiftify_test(tst_settings)
 swiftify_test(tst_translations)
+swiftify_test(tst_collections FakeCore.h)
 swiftify_test(tst_theme)
 swiftify_test(tst_playback FakeCore.h)
 swiftify_test(tst_palette)

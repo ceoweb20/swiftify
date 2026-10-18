@@ -150,6 +150,27 @@ private:
     using Rig = swiftify::testing::ViewRig;
 
 private slots:
+    void collectionsViewBuildsWithoutCredentials()
+    {
+        Rig rig;
+        const auto page = rig.show(QStringLiteral("CollectionsView"));
+        QVERIFY(page);
+        QVERIFY(page->findChild<QObject *>(QStringLiteral("collectionLink")));
+        QVERIFY(!rig.collections.busy());
+        QVERIFY(rig.collections.entries().isEmpty());
+        QVERIFY(rig.collections.status().contains(QStringLiteral("Connect your Spotify library")));
+        QVERIFY(rig.core.pending.isEmpty());
+        Playlist playlist;
+        playlist.id = QStringLiteral("37i9dQZF1DXcBWIGoYBM5M");
+        playlist.name = QStringLiteral("Daily Mix fixture");
+        const QVariantMap row {{QStringLiteral("id"), playlist.id},
+            {QStringLiteral("playlist"), QVariant::fromValue(playlist)}, {QStringLiteral("origin"), QStringLiteral("recent")},
+            {QStringLiteral("available"), true}, {QStringLiteral("linked"), true}, {QStringLiteral("status"), QString()}};
+        QVERIFY(page->setProperty("model", QVariantList {row}));
+        Rig::settle();
+        QVERIFY(!rig.render().isNull());
+    }
+
     void languageSelectionRetranslatesTheSettings()
     {
         Rig rig;

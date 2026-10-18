@@ -493,6 +493,7 @@ void LibraryStore::goBack()
     case Page::Songs: showSavedSongs(); break;
     case Page::Playlists: showPlaylists(); break;
     case Page::PinnedPlaylists: showPinnedPlaylists(); break;
+    case Page::Collections: showCollections(); break;
     case Page::LocalFiles: showLocalFiles(); break;
     case Page::LocalTracks: showLocalTracks(); break;
     case Page::Playlist: {
@@ -567,6 +568,12 @@ void LibraryStore::showPinnedPlaylists()
 {
     cancelDetailLoads();
     navigate({Page::PinnedPlaylists});
+}
+
+void LibraryStore::showCollections()
+{
+    cancelDetailLoads();
+    navigate({Page::Collections});
 }
 
 void LibraryStore::showLocalFiles()

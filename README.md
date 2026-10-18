@@ -83,6 +83,32 @@ Translations use Qt `qsTr` / `qsTranslate` and an embedded UTF-8 catalog at
 `translations/ru.json`; no additional Linguist tools are required. Russian plural
 entries contain three forms (one, few, many).
 
+### Playlist collections (Web API experiment)
+
+**Collections / Подборки** combines the saved/followed playlists returned by
+`GET /v1/me/playlists`, playlist contexts from the last 50 tracks returned by
+`GET /v1/me/player/recently-played`, and playlist links you add manually. It is
+not the Spotify Home/Made For You feed and cannot enumerate every personalized mix.
+
+Accepts full `https://open.spotify.com/playlist/...` links (including localized
+`intl-...` paths) and `spotify:playlist:...` URIs. Share query parameters are
+discarded. Links are resolved only through `GET /v1/playlists/{id}`; supplied URLs
+and short-link redirects are never fetched. Local links are account-scoped and
+do not follow/unfollow or change playlists on Spotify. Up to 30 links and 20
+distinct recent playlist contexts are resolved per explicit refresh, with short
+in-memory metadata caching and rate-limit backoff. There is no background polling.
+
+Only documented Web API calls are added: no browser impersonation, JS assets,
+query hashes, private home/browse endpoints or rootlist scraping. Unsupported
+DJ/Jam/app contexts are ignored. If metadata is denied or absent, the entry is
+marked unavailable rather than resolved through an undocumented fallback.
+
+**Playback is unchanged:** opening a metadata-approved playlist delegates to
+Swiftify's existing playlist player, including its existing librespot integration.
+The public API restricts contents of playlists not owned/collaborated on by the
+user; this experiment does not claim that all playback is implemented through
+the public Web API. "Open in Spotify" remains available for unavailable entries.
+
 ### Build requirements
 
 - Qt 6.9 or newer: Qt Base, Qt Declarative and Qt Shader Tools, and on linux Qt WebSockets (for soloist)
