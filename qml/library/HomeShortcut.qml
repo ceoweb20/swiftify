@@ -16,6 +16,8 @@ T.AbstractButton {
 
     implicitHeight: 64
     hoverEnabled: true
+    // click focus would let other mouse buttons grab and press it
+    focusPolicy: Qt.TabFocus
     scale: down ? 0.95 : (hovered ? 1.02 : 1)
 
     Behavior on scale {

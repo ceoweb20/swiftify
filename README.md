@@ -89,19 +89,18 @@ For more verbose logging run swiftify with `QT_LOGGING_RULES="swiftify.discord.d
 ## Prebuilt builds
 
 The release workflow produces Windows/Linux x86_64 and macOS Apple Silicon/Intel
-packages. After maintainer review/publication, they appear under
+packages. A pushed version tag publishes them under
 [releases](https://github.com/ceoweb20/swiftify/releases).
 
 - **windows.** unzip it anywhere and run `bin\swiftify.exe`.
 - **linux.** unpack it anywhere and run `bin/swiftify`. it brings its own Qt, but needs
-  libpulse, alsa, openssl and libsecret, which pretty much every desktop already has.
+  alsa and libsecret, which pretty much every desktop already has.
 - **macOS.** choose your architecture, unzip and move `Swiftify.app` to a writable
   application directory. Ad-hoc builds are not notarized; macOS may require approval.
 
 Keep the extracted portable tree together. In-app installation is only available
 in updater-enabled builds, in a user-writable installation; system installations
 should use their package manager.
-
 
 ## Building from source
 

@@ -766,7 +766,10 @@ ApplicationWindow {
     Shortcut { sequence: "Ctrl+Alt+R"; enabled: !App.macOS && Player.hasSong; onActivated: Player.cycleRepeatMode() }
     Shortcut { sequence: "Ctrl+Alt+G"; onActivated: UiState.showCatchphrase("test") }
     Shortcut { sequence: "Ctrl+,"; enabled: !App.macOS; onActivated: UiState.settingsRequested() }
-    Shortcut { sequence: "Alt+Left"; onActivated: Library.goBack() }
+
+    // StandardKey.Back is "Alt+Left" both on Windows and Linux. Both Shortcuts thus have the
+    // same key, which results in neither acting (see "Ctrl+..." Shortcuts)
+    Shortcut { sequence: "Alt+Left"; enabled: App.macOS; onActivated: Library.goBack() }
     Shortcut { sequences: [StandardKey.Back]; enabled: !App.macOS; onActivated: Library.goBack() }
     // escape closes the page and goes back to the one before. an open menu
     // or dialog takes it first, the search field clears itself with it, and
@@ -775,6 +778,11 @@ ApplicationWindow {
         sequence: "Escape"
         enabled: Library.canGoBack && !UiState.immersiveOpen
         onActivated: Library.goBack()
+    }
+    TapHandler {
+        acceptedButtons: Qt.BackButton
+        enabled: Library.canGoBack && !UiState.immersiveOpen
+        onTapped: Library.goBack()
     }
 
     Shortcut { sequences: [StandardKey.Find]; enabled: !App.macOS; onActivated: topBar.focusSearch() }

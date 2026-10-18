@@ -57,6 +57,12 @@ jobs:
           fi
           echo "name=swiftify-$version-windows-x86_64" >> "$GITHUB_OUTPUT"
 
+      # as ctest runs it. the test runs a failing command on purpose, which a
+      # plain pwsh step would report as its own exit code
+      - name: test the build script
+        shell: pwsh
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File ./tests/check_windows_build.ps1
+
       - uses: jurplel/install-qt-action@a9c63c7c123f3069cff414e7e482d95dfa9d8125 # v4.4.1
         with:
           # Qt 6.11 and newer have no msvc2022 kit on the Windows mirror
@@ -80,6 +86,33 @@ jobs:
           $cache = Get-ChildItem "$env:RUNNER_TEMP\build\*\swiftify\CMakeCache.txt"
           if (-not (Select-String -Path $cache -Pattern '^SWIFTIFY_HAVE_SMTC:INTERNAL=1$' -Quiet)) {
             throw 'built without the windows media controls'
+          }
+
+      # every dll the exe and its libraries load has to be in the zip, or be
+      # part of windows. the c++ runtime counts as missing unless it is bundled
+      - name: check every library is there
+        shell: pwsh
+        run: |
+          $root = "$env:RUNNER_TEMP\${{ steps.version.outputs.name }}"
+          $bin = Join-Path $root 'bin'
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $dumpbin = & $vswhere -latest -find 'VC\Tools\MSVC\*\bin\Hostx64\x64\dumpbin.exe' | Select-Object -First 1
+          if (-not $dumpbin) { throw 'dumpbin not found' }
+          $missing = @()
+          foreach ($file in Get-ChildItem $root -Recurse -Include *.exe, *.dll) {
+            $dependents = & $dumpbin /nologo /dependents $file.FullName |
+              Where-Object { $_ -match '^\s+\S+\.dll\s*$' } | ForEach-Object { $_.Trim() }
+            foreach ($dll in $dependents) {
+              if ($dll -match '^(api|ext)-ms-') { continue }
+              if ((Test-Path (Join-Path $bin $dll)) -or (Test-Path (Join-Path $file.DirectoryName $dll))) { continue }
+              $system = Test-Path (Join-Path "$env:SystemRoot\System32" $dll)
+              if ($system -and $dll -notmatch '^(vcruntime|msvcp|concrt|vccorlib)') { continue }
+              $missing += "$($file.FullName.Substring($root.Length + 1)) needs $dll"
+            }
+          }
+          if ($missing) {
+            $missing | Sort-Object -Unique | Write-Host
+            throw 'libraries missing from the zip'
           }
 
       - name: package

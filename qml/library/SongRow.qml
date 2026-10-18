@@ -22,6 +22,8 @@ T.AbstractButton {
 
     implicitHeight: 58
     hoverEnabled: true
+    // click focus would let other mouse buttons grab and press it
+    focusPolicy: Qt.TabFocus
     // a few pixels wider whatever the row's width, over its neighbours. a
     // list puts its delegates and its header at 1; at rest a row stays
     // there, or the header's stickers would be drawn over it

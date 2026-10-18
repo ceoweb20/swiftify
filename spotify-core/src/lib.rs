@@ -22,6 +22,7 @@ use librespot::{
 use serde::Serialize;
 use tokio::{sync::watch, time::timeout};
 
+mod artist;
 mod dsp;
 pub mod live_input;
 mod output;
@@ -1019,6 +1020,12 @@ impl SpotifyCore {
         playlist::playlist_json(&self.session()?, &playlist_uri).await
     }
 
+    /// an artist's top songs read through the session, as json shaped like
+    /// the web api's top tracks response, which spotify took away
+    pub async fn artist_top_tracks_json(&self, artist_uri: String) -> Result<String, String> {
+        artist::artist_top_tracks_json(&self.session()?, &artist_uri).await
+    }
+
     pub fn spectrum_levels(&self) -> Vec<f32> {
         self.spectrum.levels()
     }
@@ -1400,6 +1407,18 @@ mod tests {
 
         assert_eq!(
             core.playlist_json("spotify:playlist:37i9dQZF1DXcBWIGoYBM5M".to_owned())
+                .await
+                .unwrap_err(),
+            "not connected to spotify"
+        );
+    }
+
+    #[tokio::test]
+    async fn an_artists_top_songs_are_read_through_the_session() {
+        let core = SpotifyCore::new();
+
+        assert_eq!(
+            core.artist_top_tracks_json("spotify:artist:4tZwfgrHOc3mvqYlEYSvVi".to_owned())
                 .await
                 .unwrap_err(),
             "not connected to spotify"

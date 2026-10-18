@@ -28,6 +28,8 @@ T.AbstractButton {
     implicitWidth: artworkSize
     implicitHeight: column.implicitHeight
     hoverEnabled: true
+    // click focus would let other mouse buttons grab and press it
+    focusPolicy: Qt.TabFocus
     // lifts on hover, squishes on press, and springs between them
     scale: down ? 0.95 : (hovered ? 1.03 : 1)
     opacity: down ? 0.86 : 1

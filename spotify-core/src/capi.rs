@@ -440,6 +440,12 @@ async_call!(
         core.playlist_json(playlist_uri).await
     }
 );
+async_call!(
+    /// completes with an artist's top songs as json, read through the session.
+    swiftify_core_artist_top_tracks_json(artist_uri) => |core| {
+        core.artist_top_tracks_json(artist_uri).await
+    }
+);
 
 /// # Safety
 /// `core` is null or live.

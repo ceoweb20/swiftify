@@ -101,7 +101,12 @@ T.Slider {
         }
     }
 
-    HoverHandler {
-        cursorShape: root.pressed ? Qt.ClosedHandCursor : Qt.PointingHandCursor
+    // Handler needs to be on a child, otherwise the slider takes every mouse button instead of only the left one.
+    Item {
+        anchors.fill: parent
+
+        HoverHandler {
+            cursorShape: root.pressed ? Qt.ClosedHandCursor : Qt.PointingHandCursor
+        }
     }
 }
