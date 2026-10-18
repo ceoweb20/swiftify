@@ -117,6 +117,14 @@ Translations use Qt `qsTr` / `qsTranslate` and an embedded UTF-8 catalog at
 `translations/ru.json`; no additional Linguist tools are required. Russian plural
 entries contain three forms (one, few, many).
 
+### Saving the current song
+
+The heart beside the current track in the bottom player and full-screen player
+uses the same Spotify saved-song state as track menus. It is hidden for local
+files, stays synchronized across both players, and ignores duplicate clicks
+while Spotify is updating the library. Saving still requires a connected Spotify
+library with the existing saved-song permissions.
+
 ### Build requirements
 
 - Qt 6.9 or newer: Qt Base, Qt Declarative and Qt Shader Tools, and on linux Qt WebSockets (for soloist)

@@ -1,4 +1,5 @@
 {
+  "Updating saved song…": "Сохранение трека…",
   "Language": "Язык",
   "Enter your Discord Application ID to connect.": "Введите Application ID Discord для подключения.",
   "No reachable Discord IPC socket. Start Discord and enable its RPC integration.": "IPC-сокет Discord недоступен. Запустите Discord и включите интеграцию RPC.",

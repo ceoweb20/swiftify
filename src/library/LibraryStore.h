@@ -243,6 +243,7 @@ public:
     Q_INVOKABLE bool isPinned(const QString &playlistId) const { return m_pinnedIds.contains(playlistId); }
     Q_INVOKABLE void togglePinned(const swiftify::Playlist &playlist);
     Q_INVOKABLE bool isSaved(const QString &uri) const { return m_savedUris.contains(uri); }
+    Q_INVOKABLE bool isSavePending(const QString &uri) const { return m_pendingSavedUris.contains(uri); }
     Q_INVOKABLE void toggleSaved(const swiftify::Song &song);
     Q_INVOKABLE QVariantList editablePlaylists() const;
     Q_INVOKABLE void clearSearchHistory();
@@ -325,7 +326,7 @@ private:
     QCoro::Task<> loadSavedSongTotal();
     /// a save or removal before the list has loaded
     void adjustSavedSongTotal(int delta);
-    QCoro::Task<> loadSavedStatuses(QList<Song> songs);
+    QCoro::Task<> loadSavedStatuses(QList<Song> songs, CancelToken token = {});
     QCoro::Task<> runPlaylistLoad(Playlist playlist, CancelToken token);
     QCoro::Task<> runAlbumLoad(Album album, CancelToken token);
     QCoro::Task<> runArtistLoad(Artist artist, CancelToken token);
@@ -405,6 +406,7 @@ private:
     TaskSlot m_songLoad;
     TaskSlot m_artistLoad;
     TaskSlot m_search;
+    TaskSlot m_currentSavedStatus;
 };
 
 } // namespace swiftify

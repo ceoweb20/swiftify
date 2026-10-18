@@ -1,5 +1,7 @@
 #include "library/LibraryStore.h"
 
+#include <QPointer>
+
 #include "app/ErrorCenter.h"
 #include "app/Settings.h"
 #include "core/PlaybackCore.h"
@@ -142,6 +144,7 @@ LibraryStore::~LibraryStore()
     m_songLoad.cancel();
     m_artistLoad.cancel();
     m_search.cancel();
+    m_currentSavedStatus.cancel();
     if (s_instance == this) {
         s_instance = nullptr;
     }
@@ -161,6 +164,16 @@ LibraryStore *LibraryStore::create(QQmlEngine *, QJSEngine *)
 void LibraryStore::attachPlayer(PlaybackController *player)
 {
     connect(player, &PlaybackController::playedFromSearch, this, &LibraryStore::recordSearchPlayback);
+    const QPointer<PlaybackController> guarded(player);
+    const auto refreshSaved = [this, guarded] {
+        m_currentSavedStatus.cancel();
+        if (guarded && guarded->hasSong() && guarded->currentSong().uri.startsWith(QLatin1StringView("spotify:track:"))) {
+            detach(loadSavedStatuses({guarded->currentSong()}, m_currentSavedStatus.renew()));
+        }
+    };
+    connect(player, &PlaybackController::currentSongChanged, this, refreshSaved);
+    connect(m_session, &SpotifySession::libraryConnectedChanged, this, refreshSaved);
+    refreshSaved();
 }
 
 void LibraryStore::attachLocalFiles(LocalLibrary *localFiles)
@@ -981,11 +994,14 @@ QCoro::Task<> LibraryStore::runToggleSaved(Song song, bool shouldSave, quint64 g
         reportError(QStringLiteral("Updating saved songs"), error.message());
     }
     if (generation == m_session->generation()) {
-        m_pendingSavedUris.remove(song.uri);
+        if (m_pendingSavedUris.remove(song.uri)) {
+            ++m_savedRevision;
+            emit savedChanged();
+        }
     }
 }
 
-QCoro::Task<> LibraryStore::loadSavedStatuses(QList<Song> songs)
+QCoro::Task<> LibraryStore::loadSavedStatuses(QList<Song> songs, CancelToken token)
 {
     if (m_session->libraryNeedsAuthorizationUpgrade() || !m_session->hasLibraryToken() || songs.isEmpty()) {
         co_return;
@@ -998,7 +1014,11 @@ QCoro::Task<> LibraryStore::loadSavedStatuses(QList<Song> songs)
     }
     try {
         const QHash<QString, bool> statuses = co_await m_session->withLibraryAccessToken<QHash<QString, bool>>(
-            [this, uris](QString accessToken) { return m_session->webApi().savedStatuses(uris, accessToken); });
+            [session = m_session, uris, token](QString accessToken) {
+                throwIfCancelled(token);
+                return session->webApi().savedStatuses(uris, accessToken);
+            });
+        throwIfCancelled(token);
         if (revision != m_savedStatusRevision) {
             co_return;
         }
@@ -1599,6 +1619,7 @@ QCoro::Task<> LibraryStore::refreshCover(Playlist playlist)
 
 void LibraryStore::reset()
 {
+    m_currentSavedStatus.cancel();
     m_pendingSavedUris.clear();
     ++m_savedStatusRevision;
     m_songLoad.cancel();
