@@ -95,7 +95,8 @@ build_dependency qcoro https://github.com/qcoro/qcoro.git v0.13.0 \
     -DUSE_QT_VERSION=6 -DQCORO_WITH_QTDBUS=OFF -DQCORO_WITH_QTWEBSOCKETS=OFF -DQCORO_WITH_QTQUICK=OFF \
     -DQCORO_WITH_QML=OFF -DQCORO_WITH_QTTEST=OFF -DQCORO_BUILD_EXAMPLES=OFF -DBUILD_TESTING=OFF
 
-cmake -S "$SOURCE" -B "$WORK/swiftify" "${common[@]}" -DCMAKE_INSTALL_PREFIX=/usr
+cmake -S "$SOURCE" -B "$WORK/swiftify" "${common[@]}" -DCMAKE_INSTALL_PREFIX=/usr \
+    "-DSWIFTIFY_UPDATE_PUBLIC_KEY=${SWIFTIFY_UPDATE_PUBLIC_KEY:-}"
 cmake --build "$WORK/swiftify" --parallel "$JOBS"
 rm -rf "${APPDIR:?}"
 DESTDIR="$APPDIR" cmake --install "$WORK/swiftify"
@@ -128,5 +129,6 @@ PATH="$WORK/tools:$PATH" "$WORK/tools/linuxdeploy-x86_64.AppImage" \
 [[ -f "$APPDIR/usr/plugins/tls/libqopensslbackend.so" ]] || fail "the openssl tls plugin is missing"
 rm -rf "${WORK:?}/${NAME:?}"
 cp -a "$APPDIR/usr" "$WORK/$NAME"
+python3 "$SOURCE/tools/package-portable.py" --root "$WORK/$NAME" --target linux-x86_64 --out "$OUT"
 tar -C "$WORK" -czf "$OUT/$NAME.tar.gz" "$NAME"
 echo "built $OUT/$NAME.tar.gz"

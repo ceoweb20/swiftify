@@ -74,11 +74,19 @@ dropping the pairing connection; pair from the spotify desktop app on the same c
 
 ## Prebuilt builds
 
-[releases](https://github.com/shredos67/swiftify/releases) have windows and linux x86_64 builds.
+The release workflow produces Windows/Linux x86_64 and macOS Apple Silicon/Intel
+packages. After maintainer review/publication, they appear under
+[releases](https://github.com/shredos67/swiftify/releases).
 
 - **windows.** unzip it anywhere and run `bin\swiftify.exe`.
 - **linux.** unpack it anywhere and run `bin/swiftify`. it brings its own Qt, but needs
   libpulse, alsa, openssl and libsecret, which pretty much every desktop already has.
+- **macOS.** choose your architecture, unzip and move `Swiftify.app` to a writable
+  application directory. Ad-hoc builds are not notarized; macOS may require approval.
+
+Keep the extracted portable tree together. In-app installation is only available
+in updater-enabled builds, in a user-writable installation; system installations
+should use their package manager.
 
 ## Building from source
 
@@ -125,6 +133,18 @@ Track metadata, playlist names, search queries and custom preset names are not t
 Translations use Qt `qsTr` / `qsTranslate` and an embedded UTF-8 catalog at
 `translations/ru.json`; no additional Linguist tools are required. Russian plural
 entries contain three forms (one, few, many).
+
+### Portable builds and updates
+
+GitHub Actions builds macOS (Apple Silicon and Intel), Windows x64 and Linux x64
+portable packages. Tagged builds create a draft release for maintainer review.
+Updater-enabled portable builds can check for releases and, after confirmation,
+verify, install and restart from **Settings → About → Updates**. Automatic checks
+are opt-in. System/package-manager installations are not overwritten.
+
+OTA stays disabled until maintainers configure their Ed25519 verification/signing
+keys; macOS builds remain ad-hoc signed unless Developer ID/notarization is set up
+separately. See [release/update setup, trust model and limitations](docs/updates.md).
 
 ### Build requirements
 

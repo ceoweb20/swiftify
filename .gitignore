@@ -10,6 +10,7 @@ dist/
 
 # the core's own cargo builds
 target/
+__pycache__/
 *.profraw
 
 # the swift glue the core's default (apple) feature writes beside it,

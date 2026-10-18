@@ -35,6 +35,13 @@ ApplicationWindow {
     }
     onRightPanelFitsChanged: closeCrowdedPanels()
     Connections {
+        target: Updates
+        function onUpdateFound() {
+            toast.show(qsTr("A Swiftify update is available. Open Settings → About → Updates to install it."))
+        }
+    }
+
+    Connections {
         target: Player
         function onPanelsChanged() { window.closeCrowdedPanels() }
     }

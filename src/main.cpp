@@ -15,6 +15,7 @@
 #include "spotify/CredentialStore.h"
 #include "spotify/SpotifySession.h"
 #include "system/SingleInstance.h"
+#include "system/Updates.h"
 #include "theme/PlayerStyle.h"
 #include "theme/Theme.h"
 
@@ -308,6 +309,9 @@ int main(int argc, char *argv[])
     QObject::connect(&localFiles, &LocalLibrary::scanned, &player,
                      [&] { player.refreshSongDetails(localFiles.allSongs()); });
     AppController app(nullptr);
+    Updates updates(&settings);
+    QObject::connect(&updates, &Updates::restartRequested, &app, &AppController::quit);
+    updates.scheduleAutomaticCheck();
     ArtworkCache artwork(&network);
     PlayerStyle playerStyle(&player, &theme, &artwork);
     SpectrumSource spectrum(&core, &player);

@@ -1,10 +1,10 @@
-# prebuilt windows and linux x86_64 builds. a v tag (v0.10.0) builds both and
-# puts them on a draft release to publish by hand. it also runs from the
-# actions tab, and on pull requests that change how the builds are made
+# Extends upstream PR #53: native macOS arm64/Intel, Windows/Linux x64,
+# and signed update metadata. Tag releases remain drafts for manual review.
 name: prebuilt
 
 on:
   push:
+    branches: [main]
     tags: ['v*']
   workflow_dispatch:
   pull_request:
@@ -12,18 +12,35 @@ on:
       - .github/workflows/prebuilt.yml
       - tools/build-windows.ps1
       - tools/build-linux-tarball.sh
+      - tools/build-macos-portable.sh
+      - tools/package-portable.py
+      - tools/sign-updates.py
+      - tools/update-helper/**
+      - CMakeLists.txt
+      - cmake/**
+      - src/**
+      - qml/**
+      - spotify-core/**
+      - translations/**
 
 permissions:
   contents: read
 
 env:
   QT_VERSION: 6.12.0
+  SWIFTIFY_UPDATE_PUBLIC_KEY: ${{ vars.SWIFTIFY_UPDATE_PUBLIC_KEY }}
+  CARGO_BUILD_JOBS: 4
+
+concurrency:
+  group: prebuilt-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
 
 jobs:
   windows:
     # windows-2025 and windows-latest come with visual studio 2026, which
     # build-windows.ps1 does not take
     runs-on: windows-2022
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -63,19 +80,24 @@ jobs:
 
       - name: package
         shell: pwsh
-        run: >
-          Compress-Archive -Path "$env:RUNNER_TEMP\${{ steps.version.outputs.name }}"
-          -DestinationPath "${{ steps.version.outputs.name }}.zip"
+        run: python tools/package-portable.py --root "$env:RUNNER_TEMP\${{ steps.version.outputs.name }}" --target windows-x86_64 --out dist
+
+      - name: updater tests
+        shell: bash
+        run: |
+          cargo test --locked --manifest-path tools/update-helper/Cargo.toml
+          python tests/check_update_tools.py
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: windows
-          path: ${{ steps.version.outputs.name }}.zip
+          path: dist/*.zip
           if-no-files-found: error
 
   linux:
     # the oldest supported runner, so the tarball runs on older distros too
     runs-on: ubuntu-22.04
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -115,23 +137,85 @@ jobs:
           CXX: g++-12
         run: ./tools/build-linux-tarball.sh --qt "$QT_ROOT_DIR" --out dist
 
+      - name: updater tests
+        run: |
+          cargo test --locked --manifest-path tools/update-helper/Cargo.toml
+          python3 tests/check_update_tools.py
+
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: linux
-          path: dist/*.tar.gz
+          path: dist/*.zip
+          if-no-files-found: error
+
+  macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: version
+        run: |
+          version="$(sed -n '/^project(Swiftify/,/VERSION/s/^ *VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)"
+          if [[ "$GITHUB_REF_TYPE" == tag && "$GITHUB_REF_NAME" != "v$version" ]]; then
+            echo "tag does not match CMakeLists.txt" >&2
+            exit 1
+          fi
+      - uses: jurplel/install-qt-action@a9c63c7c123f3069cff414e7e482d95dfa9d8125 # v4.4.1
+        with:
+          version: ${{ env.QT_VERSION }}
+          arch: clang_64
+          modules: qtshadertools
+          cache: true
+      - name: build and package
+        env:
+          SWIFTIFY_BUILD_ROOT: ${{ runner.temp }}/swiftify-build
+          MACOSX_DEPLOYMENT_TARGET: '13.0'
+        run: bash tools/build-macos-portable.sh
+      - name: updater tests
+        run: |
+          cargo test --locked --manifest-path tools/update-helper/Cargo.toml
+          python3 tests/check_update_tools.py
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ matrix.runner }}
+          path: dist/*.zip
           if-no-files-found: error
 
   release:
-    if: github.ref_type == 'tag'
-    needs: [windows, linux]
+    if: github.ref_type == 'tag' && github.repository == 'shredos67/swiftify'
+    needs: [windows, linux, macos]
     runs-on: ubuntu-24.04
+    environment: release
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           path: dist
           merge-multiple: true
+
+      # Dependency installation must not inherit the private signing seed.
+      - name: prepare signing tool
+        if: vars.SWIFTIFY_UPDATE_PUBLIC_KEY != ''
+        run: |
+          python3 -m venv "$RUNNER_TEMP/update-signing"
+          "$RUNNER_TEMP/update-signing/bin/python" -m pip install 'cryptography==49.0.0'
+
+      - name: sign update manifests
+        env:
+          SWIFTIFY_UPDATE_SIGNING_KEY: ${{ secrets.SWIFTIFY_UPDATE_SIGNING_KEY }}
+        run: |
+          if [[ -n "$SWIFTIFY_UPDATE_PUBLIC_KEY" || -n "$SWIFTIFY_UPDATE_SIGNING_KEY" ]]; then
+            test -n "$SWIFTIFY_UPDATE_PUBLIC_KEY" && test -n "$SWIFTIFY_UPDATE_SIGNING_KEY"
+            "$RUNNER_TEMP/update-signing/bin/python" tools/sign-updates.py dist
+          else
+            echo 'No update key configured: publishing archives without OTA manifests.'
+          fi
 
       # a draft, so the notes are written and it is published by hand
       - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
