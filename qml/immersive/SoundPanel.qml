@@ -113,6 +113,41 @@ Item {
         Card {
             Item {
                 width: parent.width
+                height: 40
+                StyledText {
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: parent.width - visualizerSwitch.width - 12
+                    text: qsTr("Full-screen player visualizer")
+                    wrapMode: Text.Wrap
+                    font.pixelSize: Appearance.fontSize.small
+                    font.weight: Font.DemiBold
+                    color: "white"
+                }
+                StyledSwitch {
+                    id: visualizerSwitch
+                    objectName: "immersiveVisualizerQuickSwitch"
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    scheme: root.scheme
+                    enabled: Settings.visualizersEnabled
+                    checked: Settings.immersiveVisualizer
+                    onToggled: Settings.immersiveVisualizer = checked
+                }
+            }
+            StyledText {
+                width: parent.width
+                visible: !Settings.visualizersEnabled
+                text: qsTr("Audio visualizers are disabled in Settings.")
+                wrapMode: Text.Wrap
+                font.pixelSize: Appearance.fontSize.smaller
+                color: root.secondaryText
+            }
+        }
+
+        Card {
+            Item {
+                width: parent.width
                 height: 32
 
                 StyledText {
@@ -240,10 +275,12 @@ Item {
                 height: 96
 
                 SpectrumView {
+                    objectName: "immersiveEqualizerSpectrum"
                     anchors.fill: parent
                     kind: SpectrumView.Equalizer
                     sensitivity: 0.85
-                    active: Player.playing
+                    visible: Settings.visualizersEnabled && Settings.immersiveVisualizer
+                    active: visible && Player.playing
                     opacity: Sound.equalizerEnabled ? 0.58 : 0.22
 
                     Behavior on opacity {

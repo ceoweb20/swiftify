@@ -7,6 +7,7 @@
 #include <QTimeZone>
 #include <qt6keychain/keychain.h>
 #include <QCoroSignal>
+#include <array>
 
 namespace swiftify {
 
@@ -113,6 +114,75 @@ QCoro::Task<std::optional<StoredCredentials>> MemoryCredentialStore::load(Accoun
 {
     const auto found = items.constFind(account);
     co_return found == items.cend() ? std::nullopt : std::optional(*found);
+}
+
+struct CachedCredentialStore::State {
+    std::array<bool, 2> known {};
+    std::array<std::optional<StoredCredentials>, 2> values;
+    std::array<quint64, 2> revision {};
+    bool closed = false;
+};
+
+CachedCredentialStore::CachedCredentialStore(CredentialStore *backend)
+    : m_backend(backend), m_state(std::make_shared<State>())
+{
+    Q_ASSERT(backend);
+}
+
+CachedCredentialStore::~CachedCredentialStore()
+{
+    m_state->closed = true;
+    for (auto &value : m_state->values) value.reset();
+}
+
+QCoro::Task<std::optional<StoredCredentials>> CachedCredentialStore::load(Account account)
+{
+    const auto state = m_state;
+    const auto index = size_t(account);
+    if (state->known.at(index)) {
+        // QCoro may move from an lvalue in return_value(). Return a copy,
+        // otherwise a read would consume the cached credential strings.
+        co_return std::optional<StoredCredentials>(state->values.at(index));
+    }
+    const auto revision = state->revision.at(index);
+    const auto value = co_await m_backend->load(account);
+    if (state->closed) co_return std::nullopt;
+    if (revision == state->revision.at(index)) {
+        state->values.at(index) = value;
+        state->known.at(index) = true;
+    }
+    co_return state->known.at(index) ? state->values.at(index) : std::nullopt;
+}
+
+QCoro::Task<> CachedCredentialStore::save(Account account, StoredCredentials credentials)
+{
+    const auto state = m_state;
+    const auto index = size_t(account);
+    if (state->known.at(index) && state->values.at(index)
+        && state->values.at(index)->toJson() == credentials.toJson()) co_return;
+    const auto revision = ++state->revision.at(index);
+    co_await m_backend->save(account, credentials);
+    if (!state->closed && revision == state->revision.at(index)) {
+        state->values.at(index) = credentials;
+        state->known.at(index) = true;
+    }
+}
+
+QCoro::Task<> CachedCredentialStore::removeAll()
+{
+    const auto state = m_state;
+    for (size_t index = 0; index < 2; ++index) {
+        ++state->revision.at(index);
+        state->values.at(index).reset();
+        state->known.at(index) = false;
+    }
+    const auto revisions = state->revision;
+    co_await m_backend->removeAll();
+    if (!state->closed) {
+        for (size_t index = 0; index < 2; ++index) {
+            if (revisions.at(index) == state->revision.at(index)) state->known.at(index) = true;
+        }
+    }
 }
 
 QCoro::Task<> MemoryCredentialStore::save(Account account, StoredCredentials credentials)

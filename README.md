@@ -83,6 +83,53 @@ Translations use Qt `qsTr` / `qsTranslate` and an embedded UTF-8 catalog at
 `translations/ru.json`; no additional Linguist tools are required. Russian plural
 entries contain three forms (one, few, many).
 
+### Playlist collections (Web API experiment)
+
+**Collections / Подборки** combines the saved/followed playlists returned by
+`GET /v1/me/playlists`, playlist contexts from the last 50 tracks returned by
+`GET /v1/me/player/recently-played`, and playlist links you add manually. It is
+not the Spotify Home/Made For You feed and cannot enumerate every personalized mix.
+
+Accepts full `https://open.spotify.com/playlist/...` links (including localized
+`intl-...` paths) and `spotify:playlist:...` URIs. Share query parameters are
+discarded. Links are resolved only through `GET /v1/playlists/{id}`; supplied URLs
+and short-link redirects are never fetched. Local links are account-scoped and
+do not follow/unfollow or change playlists on Spotify. Up to 30 links and 20
+distinct recent playlist contexts are resolved per explicit refresh, with short
+in-memory metadata caching and rate-limit backoff. There is no background polling.
+
+Only documented Web API calls are added: no browser impersonation, JS assets,
+query hashes, private home/browse endpoints or rootlist scraping. Unsupported
+DJ/Jam/app contexts are ignored. If metadata is denied or absent, the entry is
+marked unavailable rather than resolved through an undocumented fallback.
+
+**Playback is unchanged:** opening a metadata-approved playlist delegates to
+Swiftify's existing playlist player, including its existing librespot integration.
+The public API restricts contents of playlists not owned/collaborated on by the
+user; this experiment does not claim that all playback is implemented through
+the public Web API. "Open in Spotify" remains available for unavailable entries.
+
+### Full-screen visualizers
+
+**Settings → Visualizer → Full-screen player visualizer** controls the immersive
+bars/wave, artwork ring and the live spectrum behind the equalizer independently
+of the player-bar and track-list meters. The same switch is available at the top
+of the full-screen Sound panel. The global visualizer switch still takes priority.
+Decorative progress-bar shapes and the live background have their own settings.
+
+### macOS Keychain prompts in development builds
+
+Spotify logins remain in the OS Keychain. The app caches credentials only in
+process memory, skips identical secure-store writes and restores a session once,
+not each time its window is raised. Updated tokens are still written securely.
+
+An ad-hoc build has no stable signing identity across rebuilds. Choose **Always
+Allow** locally in macOS's prompt if you trust that build; a newly rebuilt binary
+can require permission again. Permanently avoiding rebuild-related prompts needs
+a stable signing identity (`SWIFTIFY_CODESIGN_IDENTITY`), not disabling Keychain
+security or granting all applications access. No signing key is configured by
+this feature and no token is moved into plaintext preferences.
+
 ### Build requirements
 
 - Qt 6.9 or newer: Qt Base, Qt Declarative and Qt Shader Tools, and on linux Qt WebSockets (for soloist)

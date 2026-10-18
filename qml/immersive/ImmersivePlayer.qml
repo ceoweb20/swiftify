@@ -405,7 +405,7 @@ FocusScope {
         kind: SpectrumView.Immersive
         wave: Settings.visualizerShape === "wave"
         sensitivity: Settings.visualizerSensitivity
-        active: Player.playing
+        active: Player.playing && root.showsSpectrum
         opacity: !root.showsSpectrum ? 0 : (root.usesPanelLayout ? 0.74 : 1)
 
         Behavior on opacity {
