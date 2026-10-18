@@ -9,6 +9,7 @@
 #include "audio/AudioShaping.h"
 #include "core/RustCore.h"
 #include "library/LibraryStore.h"
+#include "library/PlaylistCollections.h"
 #include "library/LocalLibrary.h"
 #include "playback/PlaybackController.h"
 #include "render/SpectrumSource.h"
@@ -295,11 +296,13 @@ int main(int argc, char *argv[])
     applyStreaming();
     QObject::connect(&settings, &Settings::streamingQualityChanged, &core, applyStreaming);
     QObject::connect(&settings, &Settings::songCacheMegabytesChanged, &core, applyStreaming);
-    KeychainCredentialStore credentials;
+    KeychainCredentialStore keychain;
+    CachedCredentialStore credentials(&keychain);
     SpotifySession session(&core, &credentials, &network, &errors);
     PlaybackController player(&core, &session, &settings, &errors);
     DiscordPresence discord(&player, &settings);
     LibraryStore library(&session, &settings, &errors);
+    PlaylistCollections collections(&session, &settings, &library);
     library.attachPlayer(&player);
     AudioShaping sound(&core, &settings, &session);
     LocalLibrary localFiles(&settings);

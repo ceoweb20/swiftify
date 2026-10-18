@@ -78,19 +78,20 @@ Item {
                     onToggledTo: (checked) => Settings.visualizersEnabled = checked
                 }
                 ConfigSwitch {
-                    text: "Player bar"
+                    text: qsTr("Player bar visualizer")
                     enabled: Settings.visualizersEnabled
                     checked: Settings.playerBarVisualizer
                     onToggledTo: (checked) => Settings.playerBarVisualizer = checked
                 }
                 ConfigSwitch {
-                    text: "Track list"
+                    text: qsTr("Track list visualizer")
                     enabled: Settings.visualizersEnabled
                     checked: Settings.trackListVisualizer
                     onToggledTo: (checked) => Settings.trackListVisualizer = checked
                 }
                 ConfigSwitch {
-                    text: "Now playing screen"
+                    objectName: "immersiveVisualizerSwitch"
+                    text: qsTr("Full-screen player visualizer")
                     enabled: Settings.visualizersEnabled
                     checked: Settings.immersiveVisualizer
                     onToggledTo: (checked) => Settings.immersiveVisualizer = checked

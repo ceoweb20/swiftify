@@ -220,6 +220,7 @@ private:
     bool m_evaluatingStoredLogin = true;
     /// reading the saved logins at launch is still under way
     bool m_restoring = false;
+    bool m_restoreStarted = false;
     bool m_playbackConnectionIsSuspect = false;
     std::optional<LoginPurpose> m_loginPurpose;
     QUrl m_authorizationUrl;

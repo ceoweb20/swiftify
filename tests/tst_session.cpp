@@ -24,6 +24,7 @@
 #include <QUrlQuery>
 
 #include <algorithm>
+#include <array>
 #include <utility>
 
 using namespace swiftify;
@@ -215,6 +216,48 @@ public:
     }
 };
 
+class CountingStore : public MemoryCredentialStore {
+public:
+    std::array<int, 2> reads {};
+    std::array<int, 2> writes {};
+    int removals = 0;
+    bool rejectWrite = false;
+    QCoro::Task<std::optional<StoredCredentials>> load(Account account) override
+    {
+        ++reads[size_t(account)];
+        co_return co_await MemoryCredentialStore::load(account);
+    }
+    QCoro::Task<> save(Account account, StoredCredentials credentials) override
+    {
+        ++writes[size_t(account)];
+        if (rejectWrite) throw SpotifyError(SpotifyError::Kind::Credentials, QStringLiteral("Fixture denied write"));
+        co_await MemoryCredentialStore::save(account, credentials);
+    }
+    QCoro::Task<> removeAll() override
+    {
+        ++removals;
+        co_await MemoryCredentialStore::removeAll();
+    }
+};
+
+QCoro::Task<> readCredentials(CredentialStore &store, CredentialStore::Account account,
+                              std::optional<StoredCredentials> &result, bool &done)
+{
+    result = co_await store.load(account); done = true;
+}
+
+QCoro::Task<> writeCredentials(CredentialStore &store, CredentialStore::Account account,
+                               StoredCredentials credentials, bool &success)
+{
+    try { co_await store.save(account, credentials); success = true; }
+    catch (const SpotifyError &) { success = false; }
+}
+
+QCoro::Task<> clearCredentials(CredentialStore &store, bool &done)
+{
+    co_await store.removeAll(); done = true;
+}
+
 QCoro::Task<> fetchLibraryToken(SpotifySession &session, QStringList &tokens)
 {
     try {
@@ -272,6 +315,82 @@ private:
     };
 
 private slots:
+    void secureStoreCacheSkipsRepeatedReadsAndIdenticalWrites()
+    {
+        CountingStore backend;
+        const auto account = CredentialStore::Account::Library;
+        const auto index = size_t(account);
+        StoredCredentials original {QStringLiteral("fixture-client"), QStringLiteral("fixture-refresh"), 2};
+        backend.items.insert(account, original);
+        CachedCredentialStore cache(&backend);
+        std::optional<StoredCredentials> result;
+        bool done = false;
+        detach(readCredentials(cache, account, result, done)); QTRY_VERIFY(done);
+        QVERIFY(result); QCOMPARE(backend.reads[index], 1);
+        done = false;
+        detach(readCredentials(cache, account, result, done)); QTRY_VERIFY(done);
+        QCOMPARE(backend.reads[index], 1);
+        QCOMPARE(result->refreshToken, original.refreshToken);
+        bool success = false;
+        detach(writeCredentials(cache, account, original, success)); QTRY_VERIFY(success);
+        QCOMPARE(backend.writes[index], 0);
+        auto updated = original; updated.refreshToken = QStringLiteral("fixture-rotated");
+        success = false;
+        detach(writeCredentials(cache, account, updated, success)); QTRY_VERIFY(success);
+        QCOMPARE(backend.writes[index], 1);
+        QCOMPARE(backend.items[account].refreshToken, updated.refreshToken);
+        done = false;
+        detach(readCredentials(cache, account, result, done)); QTRY_VERIFY(done);
+        QCOMPARE(result->refreshToken, updated.refreshToken);
+        QCOMPARE(backend.reads[index], 1);
+        done = false; detach(clearCredentials(cache, done)); QTRY_VERIFY(done);
+        QCOMPARE(backend.removals, 1);
+        done = false;
+        detach(readCredentials(cache, account, result, done)); QTRY_VERIFY(done);
+        QVERIFY(!result); QCOMPARE(backend.reads[index], 1);
+    }
+
+    void secureStoreCacheDoesNotPretendAFailedWriteWasSaved()
+    {
+        CountingStore backend;
+        const auto account = CredentialStore::Account::Playback;
+        StoredCredentials old {QStringLiteral("fixture-client"), QStringLiteral("fixture-old"), 2};
+        backend.items.insert(account, old);
+        CachedCredentialStore cache(&backend);
+        std::optional<StoredCredentials> result;
+        bool done = false;
+        detach(readCredentials(cache, account, result, done)); QTRY_VERIFY(done);
+        backend.rejectWrite = true;
+        auto replacement = old; replacement.refreshToken = QStringLiteral("fixture-new");
+        bool success = true;
+        detach(writeCredentials(cache, account, replacement, success));
+        QTRY_VERIFY(!success);
+        done = false;
+        detach(readCredentials(cache, account, result, done)); QTRY_VERIFY(done);
+        QCOMPARE(result->refreshToken, old.refreshToken);
+        QCOMPARE(backend.items[account].refreshToken, old.refreshToken);
+    }
+
+    void reopeningAWindowDoesNotRestoreCredentialsAgain()
+    {
+        CountingStore store;
+        ErrorCenter errors(nullptr);
+        FakeAccounts network;
+        FakeCore core;
+        SpotifySession session(&core, &store, &network, &errors);
+        session.restoreSavedSessions();
+        session.restoreSavedSessions();
+        QTRY_COMPARE(store.reads[0], 1);
+        QCOMPARE(store.reads[1], 1);
+        session.restoreSavedSessions();
+        QCOMPARE(store.reads[0], 1);
+        session.logOut();
+        QTRY_COMPARE(store.removals, 1);
+        session.restoreSavedSessions();
+        QTRY_COMPARE(store.reads[0], 2);
+        QCOMPARE(store.reads[1], 2);
+    }
+
     void savedLoginsKeepWhatTheyHold()
     {
         const StoredCredentials credentials {QStringLiteral("client"), QStringLiteral("refresh"), 2,

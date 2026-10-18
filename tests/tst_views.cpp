@@ -175,6 +175,55 @@ private slots:
         QCOMPARE(selection->property("text").toString(), QStringLiteral("Interface language"));
     }
 
+    void collectionsViewBuildsWithoutCredentials()
+    {
+        Rig rig;
+        const auto page = rig.show(QStringLiteral("CollectionsView"));
+        QVERIFY(page);
+        QVERIFY(page->findChild<QObject *>(QStringLiteral("collectionLink")));
+        QVERIFY(!rig.collections.busy());
+        QVERIFY(rig.collections.entries().isEmpty());
+        QVERIFY(rig.collections.status().contains(QStringLiteral("Connect your Spotify library")));
+        QVERIFY(rig.core.pending.isEmpty());
+        Playlist playlist;
+        playlist.id = QStringLiteral("37i9dQZF1DXcBWIGoYBM5M");
+        playlist.name = QStringLiteral("Daily Mix fixture");
+        const QVariantMap row {{QStringLiteral("id"), playlist.id},
+            {QStringLiteral("playlist"), QVariant::fromValue(playlist)}, {QStringLiteral("origin"), QStringLiteral("recent")},
+            {QStringLiteral("available"), true}, {QStringLiteral("linked"), true}, {QStringLiteral("status"), QString()}};
+        QVERIFY(page->setProperty("model", QVariantList {row}));
+        Rig::settle();
+        QVERIFY(!rig.render().isNull());
+    }
+
+    void fullScreenVisualizerCanBeDisabledIndependently()
+    {
+        Rig rig;
+        rig.playSomething();
+        rig.settings.setVisualizersEnabled(true);
+        rig.settings.setImmersiveVisualizer(true);
+        const auto immersive = rig.show(QStringLiteral("ImmersivePlayer"));
+        QVERIFY(immersive);
+        QCOMPARE(immersive->property("showsSpectrum").toBool(), true);
+        const auto sound = rig.show(QStringLiteral("SoundPanel"));
+        QVERIFY(sound);
+        auto *toggle = sound->findChild<QObject *>(QStringLiteral("immersiveVisualizerQuickSwitch"));
+        QVERIFY(toggle);
+        QCOMPARE(toggle->property("checked").toBool(), true);
+        toggle->setProperty("checked", false);
+        QVERIFY(QMetaObject::invokeMethod(toggle, "toggled"));
+        QVERIFY(!rig.settings.immersiveVisualizer());
+        QCOMPARE(immersive->property("showsSpectrum").toBool(), false);
+        auto *equalizerSpectrum = sound->findChild<QObject *>(QStringLiteral("immersiveEqualizerSpectrum"));
+        QVERIFY(equalizerSpectrum);
+        QCOMPARE(equalizerSpectrum->property("visible").toBool(), false);
+        QCOMPARE(equalizerSpectrum->property("active").toBool(), false);
+        QVERIFY(rig.settings.visualizersEnabled());
+        rig.settings.setImmersiveVisualizer(true);
+        Rig::settle();
+        QCOMPARE(toggle->property("checked").toBool(), true);
+    }
+
     void initTestCase()
     {
         // the face the app draws in, as main() loads it

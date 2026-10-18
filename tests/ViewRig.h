@@ -8,6 +8,7 @@
 #include "artwork/ArtworkCache.h"
 #include "audio/AudioShaping.h"
 #include "library/LibraryStore.h"
+#include "library/PlaylistCollections.h"
 #include "library/LocalLibrary.h"
 #include "playback/PlaybackController.h"
 #include "render/SpectrumSource.h"
@@ -47,6 +48,7 @@ struct ViewRig {
     PlaybackController player {&core, &session, &settings, &errors};
     DiscordPresence discord {&player, &settings};
     LibraryStore library {&session, &settings, &errors};
+    PlaylistCollections collections {&session, &settings, &library};
     AudioShaping sound {&core, &settings, &session};
     LocalLibrary localFiles {&settings, nullptr, directory.path()};
     AppController app {nullptr};

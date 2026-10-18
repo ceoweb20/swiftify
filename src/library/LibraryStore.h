@@ -140,7 +140,7 @@ class LibraryStore : public QObject {
 public:
     /// LocalFiles is the grid of playlists made on this computer, opening on
     /// LocalTracks, every music file of the person's own as a list
-    enum class Page { Home, Search, Songs, Playlists, PinnedPlaylists, Playlist, Album, Artist, LocalFiles, LocalTracks };
+    enum class Page { Home, Search, Songs, Playlists, PinnedPlaylists, Playlist, Album, Artist, LocalFiles, LocalTracks, Collections };
     Q_ENUM(Page)
     enum class SortOrder { Playlist, Title, Artist, Album, Duration };
     Q_ENUM(SortOrder)
@@ -225,6 +225,7 @@ public:
     Q_INVOKABLE void showSavedSongs();
     Q_INVOKABLE void showPlaylists();
     Q_INVOKABLE void showPinnedPlaylists();
+    Q_INVOKABLE void showCollections();
     /// music files of the person's own (LocalLibrary): the playlists made of
     /// them, and a way to all of them
     Q_INVOKABLE void showLocalFiles();

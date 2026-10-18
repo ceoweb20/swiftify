@@ -31,10 +31,11 @@ public:
         Superseded,
     };
 
-    SpotifyError(Kind kind, QString message, int retryAfterSeconds = -1)
+    SpotifyError(Kind kind, QString message, int retryAfterSeconds = -1, int httpStatus = 0)
         : m_kind(kind)
         , m_message(std::move(message))
         , m_retryAfterSeconds(retryAfterSeconds)
+        , m_httpStatus(httpStatus)
         , m_utf8(m_message.toUtf8())
     {
     }
@@ -42,6 +43,7 @@ public:
     Kind kind() const { return m_kind; }
     const QString &message() const { return m_message; }
     int retryAfterSeconds() const { return m_retryAfterSeconds; }
+    int httpStatus() const { return m_httpStatus; }
     bool shouldRefreshAccessToken() const { return m_kind == Kind::Unauthorized; }
     const char *what() const noexcept override { return m_utf8.constData(); }
 
@@ -49,15 +51,16 @@ public:
     {
         return {Kind::InvalidData, QStringLiteral("Could not read Spotify's response: %1").arg(detail)};
     }
-    static SpotifyError requestFailed(const QString &detail)
+    static SpotifyError requestFailed(const QString &detail, int httpStatus = 0)
     {
-        return {Kind::RequestFailed, QStringLiteral("Spotify API request failed: %1").arg(detail)};
+        return {Kind::RequestFailed, QStringLiteral("Spotify API request failed: %1").arg(detail), -1, httpStatus};
     }
 
 private:
     Kind m_kind;
     QString m_message;
     int m_retryAfterSeconds;
+    int m_httpStatus;
     QByteArray m_utf8;
 };
 

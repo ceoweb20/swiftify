@@ -6,6 +6,7 @@
 #include <QCoroTask>
 
 #include <optional>
+#include <memory>
 
 namespace swiftify {
 
@@ -60,6 +61,23 @@ public:
     QCoro::Task<std::optional<StoredCredentials>> load(Account account) override;
     QCoro::Task<> save(Account account, StoredCredentials credentials) override;
     QCoro::Task<> removeAll() override;
+};
+
+/// Cache only in process memory; durable secrets still use the wrapped secure
+/// store. Avoids repeated reads and identical writes without weakening its ACL.
+class CachedCredentialStore final : public CredentialStore {
+public:
+    explicit CachedCredentialStore(CredentialStore *backend);
+    ~CachedCredentialStore() override;
+    CachedCredentialStore(const CachedCredentialStore &) = delete;
+    CachedCredentialStore &operator=(const CachedCredentialStore &) = delete;
+    QCoro::Task<std::optional<StoredCredentials>> load(Account account) override;
+    QCoro::Task<> save(Account account, StoredCredentials credentials) override;
+    QCoro::Task<> removeAll() override;
+private:
+    struct State;
+    CredentialStore *m_backend;
+    std::shared_ptr<State> m_state;
 };
 
 /// kept in memory, for tests.

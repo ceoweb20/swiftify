@@ -758,7 +758,9 @@ ApplicationWindow {
     Binding {
         target: Player
         property: "visualizerPresentationActive"
-        value: window.visible
+        value: window.visible && (UiState.immersiveOpen
+               ? Settings.immersiveVisualizer || Settings.livingBackdrop
+               : Settings.playerBarVisualizer || Settings.trackListVisualizer)
     }
 
     // closing the window leaves the music playing; the tray brings it back.
