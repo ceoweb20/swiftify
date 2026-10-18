@@ -16,6 +16,7 @@
 #include "spotify/SpotifySession.h"
 #include "theme/PlayerStyle.h"
 #include "theme/Theme.h"
+#include "system/DiscordPresence.h"
 
 #include <QCoreApplication>
 #include <QImage>
@@ -45,6 +46,7 @@ struct ViewRig {
     FakeCore core;
     SpotifySession session {&core, &credentials, &network, &errors};
     PlaybackController player {&core, &session, &settings, &errors};
+    DiscordPresence discord {&player, &settings};
     LibraryStore library {&session, &settings, &errors};
     PlaylistCollections collections {&session, &settings, &library};
     AudioShaping sound {&core, &settings, &session};
