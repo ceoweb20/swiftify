@@ -59,12 +59,12 @@ jobs:
 
       - uses: jurplel/install-qt-action@a9c63c7c123f3069cff414e7e482d95dfa9d8125 # v4.4.1
         with:
-          version: ${{ env.QT_VERSION }}
+          # Qt 6.11 and newer have no msvc2022 kit on the Windows mirror
+          # (aqt cannot list it), and the QML needs 6.10 or newer
+          version: 6.10.3
           arch: win64_msvc2022_64
           modules: qtshadertools
           cache: true
-          # a random mirror may not have the newest release's metadata yet
-          extra: --base https://download.qt.io
 
       - name: build
         shell: pwsh
