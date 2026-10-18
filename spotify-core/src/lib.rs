@@ -29,6 +29,7 @@ mod file_playback;
 pub mod local;
 mod output;
 mod playlist;
+mod discovery;
 mod spectrum;
 
 use dsp::{EQ_BAND_COUNT, SharedDsp};
@@ -1010,6 +1011,11 @@ impl SpotifyCore {
     /// web api no longer gives the songs of
     pub async fn playlist_json(&self, playlist_uri: String) -> Result<String, String> {
         playlist::playlist_json(&self.session()?, &playlist_uri).await
+    }
+
+    pub async fn discovery_json(&self, locale: String) -> Result<String, String> {
+        timeout(Duration::from_secs(90), discovery::load(&self.session()?, &locale))
+            .await.map_err(|_| "Spotify collections took too long to load. Try again later.".to_owned())?
     }
 
     pub fn spectrum_levels(&self) -> Vec<f32> {

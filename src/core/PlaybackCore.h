@@ -40,6 +40,7 @@ public:
     /// items page. the web api only gives the songs of the person's own and
     /// collaborative playlists
     virtual QCoro::Task<QString> playlistJson(QString playlistUri) = 0;
+    virtual QCoro::Task<QString> discoveryJson(QString locale) = 0;
 
     virtual void play() = 0;
     virtual void pause() = 0;

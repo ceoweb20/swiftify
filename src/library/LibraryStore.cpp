@@ -7,12 +7,14 @@
 #include "playback/PlaybackController.h"
 #include "spotify/SpotifyJson.h"
 #include "spotify/SpotifySession.h"
+#include "spotify/Discovery.h"
 
 #include <QCollator>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QLoggingCategory>
 #include <QQmlEngine>
+#include <QLocale>
 #include <QCoroTimer>
 
 #include <algorithm>
@@ -100,6 +102,7 @@ LibraryStore::LibraryStore(SpotifySession *session, Settings *settings, ErrorCen
     , m_errors(errors)
     , m_playlists(new PlaylistListModel(this))
     , m_pinnedPlaylists(new PlaylistListModel(this))
+    , m_personalizedPlaylists(new PlaylistListModel(this))
     , m_playlistSongs(new SongListModel(this))
     , m_displayedPlaylistSongs(new SongListModel(this))
     , m_savedSongs(new SongListModel(this))
@@ -135,10 +138,12 @@ LibraryStore::LibraryStore(SpotifySession *session, Settings *settings, ErrorCen
     connect(m_savedSongs, &SongListModel::countChanged, this, &LibraryStore::savedSongTotalChanged);
     m_session->setInitialLibraryLoader([this] { return loadInitialLibrary(); });
     connect(m_session, &SpotifySession::loggedOut, this, &LibraryStore::reset);
+    connect(m_session, &SpotifySession::playbackConnected, this, &LibraryStore::refreshDiscovery);
 }
 
 LibraryStore::~LibraryStore()
 {
+    m_discoveryLoad.cancel();
     m_songLoad.cancel();
     m_artistLoad.cancel();
     m_search.cancel();
@@ -250,6 +255,13 @@ QVariantList LibraryStore::editablePlaylists() const
 void LibraryStore::setProfile(const Profile &profile)
 {
     m_profile = profile;
+    if (!m_discoveryUserId.isEmpty() && !profile.id.isEmpty() && m_discoveryUserId != profile.id) {
+        m_rootPlaylists.clear();
+        m_homeSections.clear();
+        m_personalizedPlaylists->setItems({});
+        m_discoveryStatus = QStringLiteral("Playback and library use different Spotify accounts. Reconnect them to the same account.");
+        emit discoveryChanged();
+    }
     emit profileChanged();
     emit selectedPlaylistChanged();
 }
@@ -269,6 +281,10 @@ void LibraryStore::refreshPinnedPlaylists()
         if (m_pinnedIds.contains(playlist.id)) {
             pinned.append(playlist);
         }
+    }
+    for (const Playlist &playlist : m_personalizedPlaylists->items()) {
+        const bool already = std::any_of(pinned.cbegin(), pinned.cend(), [&](const Playlist &item) { return item.id == playlist.id; });
+        if (m_pinnedIds.contains(playlist.id) && !already) pinned.append(playlist);
     }
     if (m_localFiles) {
         for (const Playlist &playlist : m_localFiles->playlists()->items()) {
@@ -435,6 +451,7 @@ void LibraryStore::goBack()
     case Page::Songs: showSavedSongs(); break;
     case Page::Playlists: showPlaylists(); break;
     case Page::PinnedPlaylists: showPinnedPlaylists(); break;
+    case Page::Personalized: showPersonalized(); break;
     case Page::LocalFiles: showLocalFiles(); break;
     case Page::LocalTracks: showLocalTracks(); break;
     case Page::Playlist: {
@@ -473,6 +490,9 @@ void LibraryStore::showHome()
 {
     cancelDetailLoads();
     navigate({Page::Home});
+    if (!m_discoveryLoadedAt.isValid() || m_discoveryLoadedAt.secsTo(QDateTime::currentDateTimeUtc()) > 900) {
+        refreshDiscovery();
+    }
     if (!m_hasLoadedHome) {
         detach(loadHome());
     }
@@ -511,6 +531,71 @@ void LibraryStore::showPinnedPlaylists()
     navigate({Page::PinnedPlaylists});
 }
 
+void LibraryStore::showPersonalized()
+{
+    cancelDetailLoads();
+    navigate({Page::Personalized});
+    if (!m_discoveryLoadedAt.isValid()) refreshDiscovery();
+}
+
+void LibraryStore::refreshDiscovery()
+{
+    if (m_loadingDiscovery) return;
+    if (!m_session->isConnected()) {
+        m_discoveryStatus = QStringLiteral("Connect Spotify playback to load your mixes and blends.");
+        emit discoveryChanged();
+        return;
+    }
+    m_loadingDiscovery = true;
+    m_discoveryStatus.clear();
+    emit discoveryChanged();
+    detach(loadDiscovery(m_discoveryLoad.renew()));
+}
+
+QCoro::Task<> LibraryStore::loadDiscovery(CancelToken token)
+{
+    const quint64 generation = m_session->generation();
+    try {
+        const QString language = QLocale::system().name();
+        const QString payload = co_await m_session->core()->discoveryJson(language);
+        throwIfCancelled(token);
+        m_session->throwIfStale(generation);
+        const auto snapshot = discovery::parse(payload);
+        if (!m_profile.id.isEmpty() && snapshot.userId != m_profile.id) {
+            throw SpotifyError::invalidData(QStringLiteral("Playback and library use different Spotify accounts. Reconnect them to the same account."));
+        }
+        m_discoveryUserId = snapshot.userId;
+        if (snapshot.personalizedAvailable) {
+            m_homeSections = snapshot.sections;
+            m_personalizedPlaylists->setItems(snapshot.personalized);
+        }
+        if (snapshot.libraryAvailable) {
+            m_rootPlaylists = snapshot.saved;
+            QSet<QString> current;
+            for (const auto &item : m_rootPlaylists) current.insert(item.id);
+            m_removedRootIds.intersect(current);
+            m_rootPlaylists.removeIf([&](const Playlist &item) { return m_removedRootIds.contains(item.id); });
+            auto merged = m_playlistList;
+            QSet<QString> seen;
+            for (const auto &item : merged) seen.insert(item.id);
+            for (const auto &item : m_rootPlaylists) if (!seen.contains(item.id)) { merged.append(item); seen.insert(item.id); }
+            setPlaylistList(merged);
+        }
+        refreshPinnedPlaylists();
+        if (snapshot.personalizedAvailable) m_discoveryLoadedAt = QDateTime::currentDateTimeUtc();
+        if (!snapshot.personalizedAvailable) m_discoveryStatus = QStringLiteral("Personalized collections are temporarily unavailable. Your saved playlists are still available.");
+        else if (snapshot.partial) m_discoveryStatus = QStringLiteral("Some Spotify collections could not be loaded. You can try refreshing.");
+    } catch (const Cancelled &) {
+        co_return;
+    } catch (const SpotifyError &error) {
+        if (isCancelled(token) || generation != m_session->generation()) co_return;
+        m_discoveryStatus = error.message();
+    }
+    m_loadingDiscovery = false;
+    m_discoveryLoad.finish(token);
+    emit discoveryChanged();
+}
+
 void LibraryStore::showLocalFiles()
 {
     cancelDetailLoads();
@@ -537,6 +622,9 @@ void LibraryStore::selectPlaylistById(const QString &id)
             selectPlaylist(playlist);
             return;
         }
+    }
+    for (const Playlist &playlist : m_personalizedPlaylists->items()) {
+        if (playlist.id == id) { selectPlaylist(playlist); return; }
     }
 }
 
@@ -997,8 +1085,11 @@ QCoro::Task<> LibraryStore::loadPlaylists()
     setLoading(m_loadingPlaylists, true);
     const quint64 generation = m_session->generation();
     try {
-        const QList<Playlist> playlists = co_await m_session->withLibraryAccessToken<QList<Playlist>>(
+        QList<Playlist> playlists = co_await m_session->withLibraryAccessToken<QList<Playlist>>(
             [this](QString accessToken) { return m_session->webApi().playlists(accessToken); });
+        QSet<QString> seen;
+        for (const auto &item : playlists) seen.insert(item.id);
+        for (const auto &item : m_rootPlaylists) if (!seen.contains(item.id) && !m_removedRootIds.contains(item.id)) { playlists.append(item); seen.insert(item.id); }
         setPlaylistList(playlists);
         m_session->setLibraryStatus(QStringLiteral("Connected"));
     } catch (const Cancelled &) {
@@ -1378,6 +1469,8 @@ QCoro::Task<> LibraryStore::runDelete(Playlist playlist)
 
     QList<Playlist> playlists = m_playlistList;
     playlists.removeIf([&](const Playlist &item) { return item.id == playlist.id; });
+    m_removedRootIds.insert(playlist.id);
+    m_rootPlaylists.removeIf([&](const Playlist &item) { return item.id == playlist.id; });
     if (m_pinnedIds.remove(playlist.id)) {
         persistPins();
         ++m_pinsRevision;
@@ -1540,6 +1633,16 @@ QCoro::Task<> LibraryStore::refreshCover(Playlist playlist)
 
 void LibraryStore::reset()
 {
+    m_discoveryLoad.cancel();
+    m_homeSections.clear();
+    m_personalizedPlaylists->setItems({});
+    m_rootPlaylists.clear();
+    m_removedRootIds.clear();
+    m_discoveryUserId.clear();
+    m_discoveryStatus.clear();
+    m_discoveryLoadedAt = {};
+    m_loadingDiscovery = false;
+    emit discoveryChanged();
     m_pendingSavedUris.clear();
     ++m_savedStatusRevision;
     m_songLoad.cancel();

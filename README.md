@@ -46,6 +46,36 @@ first image shows equalizer, tempo and pitch settings. second picture shows how 
 
 ## Building from source
 
+### Personalized Spotify playlists
+
+**Made for You / Для тебя** in the sidebar opens all personalized playlists
+returned for the signed-in playback account. Home also shows Spotify's own
+playlist shelves and the Made For You page (Daily Mixes, Blends, On Repeat,
+Discover Weekly, etc., when Spotify provides them). Shelves scroll horizontally;
+the full grid is not limited to the home page's eight-card previews.
+
+Saved playlists are also read from the session rootlist, including playlists
+inside folders, and merged by ID with the existing Web API library. Personalized
+recommendations remain separate from saved playlists and cannot be edited unless
+the account actually owns or collaborates on a saved copy. They can be pinned in
+Swiftify without following or modifying them on Spotify.
+
+This uses the existing playback login: no cookies, new scopes, or developer app
+are needed. A refresh button reloads collections; failures preserve existing
+collections and do not block playback or the ordinary library. The playback and
+library logins must belong to the same account. Section names follow the system language.
+
+The discovery API is **internal and unsupported by Spotify**, so availability
+and response formats can change. Query definitions are read only from Spotify's
+public web-player assets, cached in memory for 24 hours, and never executed. No
+external hash registry is used, and tokens remain in the Rust core.
+
+**Jam is a live collaborative session, not a playlist. Spotify AI DJ also is not
+a normal playlist and has no documented public API for its generated commentary
+and program control. Neither native Jam sessions nor AI DJ are implemented here.**
+Use the official Spotify client for those features. A playlist named DJ is not a
+replacement for Spotify AI DJ.
+
 ### Build requirements
 
 - Qt 6.9 or newer: Qt Base, Qt Declarative and Qt Shader Tools

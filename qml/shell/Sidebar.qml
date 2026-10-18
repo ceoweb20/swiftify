@@ -110,6 +110,15 @@ Item {
                 }
             }
 
+            NavigationItem {
+                width: parent.width
+                text: qsTr("Made for You")
+                iconShape: "sunny"
+                symbol: "auto_awesome"
+                selected: root.isSelected(Library.Page.Personalized)
+                onClicked: Library.showPersonalized()
+            }
+
             // the pinned group opens and shuts on a spring: past its height
             // and back opening, and a rebound shutting
             Item {

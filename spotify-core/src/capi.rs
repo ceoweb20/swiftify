@@ -449,6 +449,12 @@ async_call!(
         core.playlist_json(playlist_uri).await
     }
 );
+async_call!(
+    /// personalized home shelves and the complete saved rootlist; no tokens leave Rust.
+    swiftify_core_discovery_json(locale) => |core| {
+        core.discovery_json(locale).await
+    }
+);
 
 /// what a music file's tags say, as json (crate::local::LocalTags), or null
 /// with `*error` set. an embedded cover is written into `artwork_dir`. it

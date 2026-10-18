@@ -8,6 +8,10 @@ env_logger = "0.11"
 hound = "3.5.1"
 # a playlist read through the session (playlist.rs), as librespot reads it
 http = "=1.5.0"
+reqwest = { version = "0.12", default-features = false, features = ["native-tls"] }
+flate2 = "1"
+regex = "1"
+iana-time-zone = "0.1"
 librespot = "=0.8.0"
 rustfft = "=6.4.1"
 # local music: mp3, flac, ogg vorbis, wav and aiff, and aac or apple lossless

@@ -2772,11 +2772,15 @@ name = "spotify-core"
 version = "0.1.8"
 dependencies = [
  "env_logger",
+ "flate2",
  "hound",
  "http",
+ "iana-time-zone",
  "librespot",
  "lofty",
  "protobuf",
+ "regex",
+ "reqwest",
  "rodio",
  "rustfft",
  "serde",

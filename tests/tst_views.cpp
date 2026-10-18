@@ -149,6 +149,34 @@ private:
     using Rig = swiftify::testing::ViewRig;
 
 private slots:
+    void personalizedGridShowsEveryReturnedPlaylistWithoutACreateTile()
+    {
+        Rig rig;
+        QList<Playlist> playlists;
+        for (int index = 0; index < 24; ++index) {
+            Playlist playlist;
+            playlist.id = QStringLiteral("mix%1").arg(index);
+            playlist.uri = QStringLiteral("spotify:playlist:") + playlist.id;
+            playlist.name = QStringLiteral("Синтез %1").arg(index);
+            playlists.append(playlist);
+        }
+        rig.library.personalizedPlaylists()->setItems(playlists);
+        rig.library.showPersonalized();
+        QCOMPARE(rig.library.page(), LibraryStore::Page::Personalized);
+        const auto grid = rig.show(QStringLiteral("PlaylistsView"));
+        QVERIFY(grid);
+        grid->setProperty("personalized", true);
+        Rig::settle();
+        QVERIFY(!rig.render().isNull());
+        QCOMPARE(grid->property("model").toInt(), 24);
+        QCOMPARE(grid->property("leading").toInt(), 0);
+        rig.library.togglePinned(playlists.first());
+        QCOMPARE(rig.library.pinnedPlaylists()->count(), 1);
+        rig.library.selectPlaylistById(playlists.first().id);
+        QCOMPARE(rig.library.selectedPlaylistId(), playlists.first().id);
+        QVERIFY(!rig.library.isSelectedPlaylistEditable());
+    }
+
     void initTestCase()
     {
         // the face the app draws in, as main() loads it
@@ -2708,6 +2736,14 @@ private slots:
         // Toggle window controls to right
         rig.settings.setWindowControlsOnRight(true);
         Rig::settle();
+
+        if (rig.app.isMacOS()) {
+            // macOS uses native traffic lights, not the in-app controls.
+            // Moving hidden controls must not move the inspector.
+            QCOMPARE(inspector->property("y").toReal(), 8.0);
+            QVERIFY(!controls->isVisible());
+            return;
+        }
 
         // Controls on right: x is window width - controls width - 12
         QCOMPARE(controls->x(), window->width() - controls->width() - 12.0);

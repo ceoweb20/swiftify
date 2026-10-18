@@ -342,6 +342,63 @@ Flickable {
             }
         }
 
+        Column {
+            x: root.margin
+            width: root.width - 2 * root.margin
+            spacing: 8
+
+            Item {
+                width: parent.width
+                height: 40
+                SectionHeader {
+                    width: parent.width - refreshCollections.width - 12
+                    title: qsTr("Made for You")
+                    symbol: "auto_awesome"
+                    showsSeeAll: Library.personalizedPlaylists.count > 0
+                    onSeeAll: Library.showPersonalized()
+                }
+                IconButton {
+                    id: refreshCollections
+                    anchors.right: parent.right
+                    symbol: "refresh"
+                    tooltip: qsTr("Refresh collections")
+                    enabled: !Library.loadingDiscovery
+                    onClicked: Library.refreshDiscovery()
+                }
+            }
+            StyledText {
+                width: parent.width
+                wrapMode: Text.Wrap
+                color: Appearance.colors.onSurfaceVariant
+                visible: Library.loadingDiscovery || Library.discoveryStatus.length > 0 || Library.homeSections.length === 0
+                text: Library.loadingDiscovery ? qsTr("Loading your mixes…")
+                    : Library.discoveryStatus.length > 0 ? qsTranslate("Discovery", Library.discoveryStatus)
+                    : qsTr("Your mixes, blends and Spotify collections appear here when available for your account.")
+            }
+        }
+
+        Repeater {
+            model: Library.homeSections
+            delegate: Shelf {
+                required property var modelData
+                width: root.width
+                onScreen: root.reaches(column.y + y, height, 0)
+                nearScreen: root.reaches(column.y + y, height, root.height / 2)
+                title: modelData.title.length > 0 ? modelData.title : qsTr("Made for You")
+                symbol: "auto_awesome"
+                iconShape: "sunny"
+                model: modelData.items
+                delegate: MediaCard {
+                    required property var modelData
+                    readonly property playlist playlist: modelData
+                    artworkUrl: playlist.artworkUrl
+                    title: playlist.name
+                    subtitle: playlist.ownerDisplayName
+                    onClicked: Library.selectPlaylist(playlist)
+                }
+            }
+        }
+
         Shelf {
             width: root.width
             onScreen: root.reaches(column.y + y, height, 0)

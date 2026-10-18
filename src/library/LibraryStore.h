@@ -8,6 +8,7 @@
 #include "spotify/SpotifyTypes.h"
 
 #include <QHash>
+#include <QDateTime>
 #include <QObject>
 #include <QSet>
 #include <QtQml/qqmlregistration.h>
@@ -96,6 +97,10 @@ class LibraryStore : public QObject {
 
     Q_PROPERTY(swiftify::PlaylistListModel *playlists READ playlists CONSTANT FINAL)
     Q_PROPERTY(swiftify::PlaylistListModel *pinnedPlaylists READ pinnedPlaylists CONSTANT FINAL)
+    Q_PROPERTY(swiftify::PlaylistListModel *personalizedPlaylists READ personalizedPlaylists CONSTANT FINAL)
+    Q_PROPERTY(QVariantList homeSections READ homeSections NOTIFY discoveryChanged FINAL)
+    Q_PROPERTY(bool loadingDiscovery READ isLoadingDiscovery NOTIFY discoveryChanged FINAL)
+    Q_PROPERTY(QString discoveryStatus READ discoveryStatus NOTIFY discoveryChanged FINAL)
     Q_PROPERTY(int pinsRevision READ pinsRevision NOTIFY pinsChanged FINAL)
 
     /// the open playlist as stored, and as shown (filtered and sorted)
@@ -139,7 +144,7 @@ class LibraryStore : public QObject {
 public:
     /// LocalFiles is the grid of playlists made on this computer, opening on
     /// LocalTracks, every music file of the person's own as a list
-    enum class Page { Home, Search, Songs, Playlists, PinnedPlaylists, Playlist, Album, Artist, LocalFiles, LocalTracks };
+    enum class Page { Home, Search, Songs, Playlists, PinnedPlaylists, Playlist, Album, Artist, LocalFiles, LocalTracks, Personalized };
     Q_ENUM(Page)
     enum class SortOrder { Playlist, Title, Artist, Album, Duration };
     Q_ENUM(SortOrder)
@@ -171,6 +176,10 @@ public:
 
     PlaylistListModel *playlists() const { return m_playlists; }
     PlaylistListModel *pinnedPlaylists() const { return m_pinnedPlaylists; }
+    PlaylistListModel *personalizedPlaylists() const { return m_personalizedPlaylists; }
+    QVariantList homeSections() const { return m_homeSections; }
+    bool isLoadingDiscovery() const { return m_loadingDiscovery; }
+    QString discoveryStatus() const { return m_discoveryStatus; }
     int pinsRevision() const { return m_pinsRevision; }
     SongListModel *playlistSongs() const { return m_playlistSongs; }
     SongListModel *displayedPlaylistSongs() const { return m_displayedPlaylistSongs; }
@@ -219,6 +228,8 @@ public:
     Q_INVOKABLE void showSavedSongs();
     Q_INVOKABLE void showPlaylists();
     Q_INVOKABLE void showPinnedPlaylists();
+    Q_INVOKABLE void showPersonalized();
+    Q_INVOKABLE void refreshDiscovery();
     /// music files of the person's own (LocalLibrary): the playlists made of
     /// them, and a way to all of them
     Q_INVOKABLE void showLocalFiles();
@@ -274,6 +285,7 @@ signals:
     void loadingChanged();
     void playlistSaveFinished(bool ok);
     void playlistDeleted(const QString &id);
+    void discoveryChanged();
 
 private:
     struct Destination {
@@ -315,6 +327,7 @@ private:
 
     QCoro::Task<> loadPlaylists();
     QCoro::Task<> loadHome();
+    QCoro::Task<> loadDiscovery(CancelToken token);
     QCoro::Task<> loadSavedSongs();
     QCoro::Task<> loadSavedSongTotal();
     /// a save or removal before the list has loaded
@@ -349,6 +362,14 @@ private:
     int m_pinsRevision = 0;
     PlaylistListModel *m_playlists;
     PlaylistListModel *m_pinnedPlaylists;
+    PlaylistListModel *m_personalizedPlaylists;
+    QList<Playlist> m_rootPlaylists;
+    QSet<QString> m_removedRootIds;
+    QVariantList m_homeSections;
+    QString m_discoveryUserId;
+    QString m_discoveryStatus;
+    QDateTime m_discoveryLoadedAt;
+    bool m_loadingDiscovery = false;
 
     QList<Song> m_songs;
     SongListModel *m_playlistSongs;
@@ -398,6 +419,7 @@ private:
     TaskSlot m_songLoad;
     TaskSlot m_artistLoad;
     TaskSlot m_search;
+    TaskSlot m_discoveryLoad;
 };
 
 } // namespace swiftify
