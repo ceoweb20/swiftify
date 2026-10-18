@@ -390,6 +390,8 @@ private slots:
         session.restoreSavedSessions();
         QTRY_COMPARE(store.reads[0], 2);
         QCOMPARE(store.reads[1], 2);
+    }
+
     void savedSongRequestsDisableBothControlsUntilCompletion()
     {
         Rig rig;

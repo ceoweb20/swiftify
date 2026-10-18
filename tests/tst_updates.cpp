@@ -21,20 +21,27 @@ private slots:
 
     void downloadsNeverGoToOtherRepositoriesOrPlaintext()
     {
-        QVERIFY(Updates::trustedDownload(QUrl(QStringLiteral("https://api.github.com/repos/shredos67/swiftify/releases/latest"))));
-        QVERIFY(Updates::trustedDownload(QUrl(QStringLiteral("https://github.com/shredos67/swiftify/releases/download/v1.0.0/test.zip"))));
+        QVERIFY(Updates::trustedDownload(QUrl(QStringLiteral("https://api.github.com/repos/") + Updates::repository() + QStringLiteral("/releases/latest"))));
+        QVERIFY(Updates::trustedDownload(QUrl(QStringLiteral("https://github.com/") + Updates::repository() + QStringLiteral("/releases/download/v1.0.0/test.zip"))));
         QVERIFY(Updates::trustedDownload(QUrl(QStringLiteral("https://release-assets.githubusercontent.com/test?token=opaque"))));
-        for (const auto &url : {"http://github.com/shredos67/swiftify/releases/download/test", "https://github.com/other/swiftify/releases/download/test",
-                               "https://github.com.evil.test/shredos67/swiftify/releases/download/test", "https://user@github.com/shredos67/swiftify/releases/download/test",
-                               "https://github.com:444/shredos67/swiftify/releases/download/test", "https://api.github.com/repos/other/swiftify/releases/latest",
-                               "file:///tmp/package.zip"})
-            QVERIFY(!Updates::trustedDownload(QUrl(QString::fromLatin1(url))));
+        const QString repository = Updates::repository();
+        const QString foreign = QStringLiteral("someone-else/") + repository.section(QLatin1Char('/'), 1);
+        const QStringList rejected {
+            QStringLiteral("http://github.com/%1/releases/download/test").arg(repository),
+            QStringLiteral("https://github.com/%1/releases/download/test").arg(foreign),
+            QStringLiteral("https://github.com.evil.test/%1/releases/download/test").arg(repository),
+            QStringLiteral("https://user@github.com/%1/releases/download/test").arg(repository),
+            QStringLiteral("https://github.com:444/%1/releases/download/test").arg(repository),
+            QStringLiteral("https://api.github.com/repos/%1/releases/latest").arg(foreign),
+            QStringLiteral("file:///tmp/package.zip")};
+        for (const QString &url : rejected)
+            QVERIFY2(!Updates::trustedDownload(QUrl(url)), qPrintable(url));
     }
 
     void assetsMustMatchTheExactRepositoryTagAndName()
     {
         const QString name = QStringLiteral("swiftify-update-macos-aarch64.json");
-        const QString url = QStringLiteral("https://github.com/shredos67/swiftify/releases/download/v1.2.3/") + name;
+        const QString url = QStringLiteral("https://github.com/") + Updates::repository() + QStringLiteral("/releases/download/v1.2.3/") + name;
         const QJsonObject asset {{QStringLiteral("name"), name}, {QStringLiteral("browser_download_url"), url}};
         QJsonObject release {{QStringLiteral("assets"), QJsonArray {asset}}};
         QCOMPARE(Updates::releaseAsset(release, name, QStringLiteral("1.2.3")), QUrl(url));

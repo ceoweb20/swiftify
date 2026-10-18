@@ -91,7 +91,7 @@ For more verbose logging run swiftify with `QT_LOGGING_RULES="swiftify.discord.d
 
 The release workflow produces Windows/Linux x86_64 and macOS Apple Silicon/Intel
 packages. After maintainer review/publication, they appear under
-[releases](https://github.com/shredos67/swiftify/releases).
+[releases](https://github.com/ceoweb20/swiftify/releases).
 
 - **windows.** unzip it anywhere and run `bin\swiftify.exe`.
 - **linux.** unpack it anywhere and run `bin/swiftify`. it brings its own Qt, but needs
@@ -166,7 +166,7 @@ this feature and no token is moved into plaintext preferences.
 ### Portable builds and updates
 
 GitHub Actions builds macOS (Apple Silicon and Intel), Windows x64 and Linux x64
-portable packages. Tagged builds create a draft release for maintainer review.
+portable packages. A pushed `v<version>` tag publishes a signed release.
 Updater-enabled portable builds can check for releases and, after confirmation,
 verify, install and restart from **Settings → About → Updates**. Automatic checks
 are opt-in. System/package-manager installations are not overwritten.

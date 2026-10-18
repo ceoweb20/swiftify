@@ -50,6 +50,7 @@ public:
     void scheduleAutomaticCheck();
 
     // Pure policy helpers, also used by focused tests.
+    static QString repository();
     static QString platform();
     static bool newerStable(const QString &candidate, const QString &current);
     static bool trustedDownload(const QUrl &url);

@@ -244,7 +244,7 @@ function Invoke-WindowsBuild {
 
         Write-Host 'Building Swiftify...'
         $appBuild = Join-Path $buildDirectory 'swiftify'
-        Invoke-Native $cmake (@('-S', $sourceRoot, '-B', $appBuild) + $commonOptions + @("-DRust_TOOLCHAIN=$rustToolchain", "-DRust_CARGO_TARGET=$rustTarget", "-DSWIFTIFY_UPDATE_PUBLIC_KEY=$env:SWIFTIFY_UPDATE_PUBLIC_KEY", "-DCMAKE_INSTALL_PREFIX=$($InstallPrefix.Replace('\', '/'))")) | Out-Host
+        Invoke-Native $cmake (@('-S', $sourceRoot, '-B', $appBuild) + $commonOptions + @("-DRust_TOOLCHAIN=$rustToolchain", "-DRust_CARGO_TARGET=$rustTarget", "-DSWIFTIFY_UPDATE_PUBLIC_KEY=$env:SWIFTIFY_UPDATE_PUBLIC_KEY", "-DCMAKE_INSTALL_PREFIX=$($InstallPrefix.Replace('\', '/'))") + $(if ($env:SWIFTIFY_UPDATE_REPOSITORY) { @("-DSWIFTIFY_UPDATE_REPOSITORY=$env:SWIFTIFY_UPDATE_REPOSITORY") } else { @() })) | Out-Host
         Invoke-Native $cmake @('--build', $appBuild, '--parallel', "$Jobs") | Out-Host
         Invoke-Native $cmake @('--install', $appBuild) | Out-Host
         $installBin = Join-Path $InstallPrefix 'bin'

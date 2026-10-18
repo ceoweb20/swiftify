@@ -96,7 +96,8 @@ build_dependency qcoro https://github.com/qcoro/qcoro.git v0.13.0 \
     -DQCORO_WITH_QML=OFF -DQCORO_WITH_QTTEST=OFF -DQCORO_BUILD_EXAMPLES=OFF -DBUILD_TESTING=OFF
 
 cmake -S "$SOURCE" -B "$WORK/swiftify" "${common[@]}" -DCMAKE_INSTALL_PREFIX=/usr \
-    "-DSWIFTIFY_UPDATE_PUBLIC_KEY=${SWIFTIFY_UPDATE_PUBLIC_KEY:-}"
+    "-DSWIFTIFY_UPDATE_PUBLIC_KEY=${SWIFTIFY_UPDATE_PUBLIC_KEY:-}" \
+    ${SWIFTIFY_UPDATE_REPOSITORY:+"-DSWIFTIFY_UPDATE_REPOSITORY=$SWIFTIFY_UPDATE_REPOSITORY"}
 cmake --build "$WORK/swiftify" --parallel "$JOBS"
 rm -rf "${APPDIR:?}"
 DESTDIR="$APPDIR" cmake --install "$WORK/swiftify"

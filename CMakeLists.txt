@@ -43,6 +43,10 @@ option(SWIFTIFY_DESKTOP_INTEGRATION "Build the Linux desktop integration" ${SWIF
 # librespot the keys for. it is only built for linux.
 option(SWIFTIFY_SOLOIST "Play Spotify songs through Spotify Soloist when it is installed" ${SWIFTIFY_IS_LINUX})
 option(SWIFTIFY_BUILD_UPDATER "Build the standalone signed-update installer" ON)
+set(SWIFTIFY_UPDATE_REPOSITORY "ceoweb20/swiftify" CACHE STRING "GitHub owner/name whose published releases are offered by in-app updates")
+if(NOT SWIFTIFY_UPDATE_REPOSITORY MATCHES "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+    message(FATAL_ERROR "SWIFTIFY_UPDATE_REPOSITORY must look like owner/name")
+endif()
 set(SWIFTIFY_UPDATE_PUBLIC_KEY "" CACHE STRING "Ed25519 update verification key (64 hex digits); empty disables OTA")
 if(NOT SWIFTIFY_UPDATE_PUBLIC_KEY STREQUAL "")
     string(LENGTH "${SWIFTIFY_UPDATE_PUBLIC_KEY}" update_key_length)
@@ -286,7 +290,8 @@ target_compile_definitions(swiftify_app PUBLIC
     $<$<TARGET_EXISTS:Qt6::DBus>:SWIFTIFY_HAS_DBUS>)
 target_compile_definitions(swiftify_app PRIVATE
     SWIFTIFY_BUILD_FONT_DIRECTORY="${SWIFTIFY_FONT_DIRECTORY}"
-    SWIFTIFY_UPDATE_PUBLIC_KEY="${SWIFTIFY_UPDATE_PUBLIC_KEY}")
+    SWIFTIFY_UPDATE_PUBLIC_KEY="${SWIFTIFY_UPDATE_PUBLIC_KEY}"
+    SWIFTIFY_UPDATE_REPOSITORY="${SWIFTIFY_UPDATE_REPOSITORY}")
 # main.cpp picks the core, and is built outside swiftify_app
 target_compile_definitions(swiftify_app PUBLIC $<$<BOOL:${SWIFTIFY_SOLOIST}>:SWIFTIFY_HAS_SOLOIST>)
 if(TARGET Qt6::DBus)

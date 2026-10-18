@@ -1,8 +1,7 @@
 # Portable releases and in-app updates
 
-The `prebuilt` workflow extends the Windows/Linux work from upstream PR #53;
-there is one release workflow, not two competing publishers. It builds on main,
-relevant pull requests, manual dispatch and stable version tags:
+The `prebuilt` workflow builds on main, relevant pull requests, manual dispatch
+and stable version tags:
 
 | Package target | Runner | Installation layout |
 | --- | --- | --- |
@@ -12,46 +11,48 @@ relevant pull requests, manual dispatch and stable version tags:
 | `linux-x86_64` | ubuntu-22.04 | `Swiftify/bin/swiftify` |
 
 Builds bundle Qt and the standalone Rust update helper. They produce ZIP files
-as Actions artifacts; only version tags in **shredos67/swiftify** create a draft
-GitHub release. The tag must exactly match `v<version>` from `CMakeLists.txt`.
-Review/test the packages, then publish the draft manually. Unpublished drafts,
+as Actions artifacts. A pushed `v<version>` tag builds all four targets, signs the
+update manifests and publishes a GitHub release in the repository that ran the
+workflow. The tag must exactly match `v<version>` from `CMakeLists.txt`. Drafts,
 prereleases and Actions artifacts are never offered as OTA updates.
 
-## Maintainer setup (required to enable OTA)
+Each build updates from the repository that built it (`SWIFTIFY_UPDATE_REPOSITORY`,
+set from `github.repository` in CI, default `ceoweb20/swiftify`).
 
-1. Create an independent Ed25519 signing key, not an Apple development identity.
-   Keep its private seed outside the repository, with a secure offline backup.
-   For example, in a trusted Python environment with `cryptography` installed:
+## Signing key (already configured for this repository)
 
-   ```python
-   import os
-   from pathlib import Path
-   from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-   from cryptography.hazmat.primitives import serialization as s
+OTA relies on an Ed25519 key that is independent of any Apple identity:
 
-   key = Ed25519PrivateKey.generate()
-   private = key.private_bytes(s.Encoding.Raw, s.PrivateFormat.Raw, s.NoEncryption()).hex()
-   path = Path.home() / "swiftify-update-signing-key.private"
-   with open(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w") as f:
-       f.write(private)
-   print("Public verification key:", key.public_key().public_bytes(s.Encoding.Raw, s.PublicFormat.Raw).hex())
-   ```
+- the public verification key is the repository **variable** `SWIFTIFY_UPDATE_PUBLIC_KEY`
+  and is compiled into the app and its installer helper;
+- the private seed is the `release` environment **secret** `SWIFTIFY_UPDATE_SIGNING_KEY`,
+  limited to `v*` tags. A copy lives only in `~/.swiftify-update-signing-key` (mode 0600)
+  on the maintainer's computer. Keep a backup; never commit it or paste it in logs.
 
-2. Set the **repository variable** `SWIFTIFY_UPDATE_PUBLIC_KEY` to the 64 hex
-   digits of the public key. Builds embed it in both the app and the helper.
-3. Create the GitHub environment `release`. Restrict it to protected version tags
-   and require a maintainer's approval. Store the 64-hex-digit private seed there
-   as the **environment secret** `SWIFTIFY_UPDATE_SIGNING_KEY`. Never put it in a
-   pull-request build environment. Protect release tags and review workflow changes.
-4. Push a matching version tag. All four platform builds must succeed before
-   signing. The release job checks that the private key matches the embedded
-   public key and signs one exact-byte manifest per platform. Review the draft,
-   verify packages on real machines, then publish.
+To create a new key pair, run in a trusted Python environment with `cryptography`:
 
-With **neither** key configured, builds still work and publish unsigned archives,
-but no OTA manifests are published and the app disables in-app installation.
-An incomplete/mismatched key configuration fails the release job. We do not
-generate a shared private key in CI or embed a test key in production binaries.
+```python
+import os
+from pathlib import Path
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives import serialization as s
+
+key = Ed25519PrivateKey.generate()
+private = key.private_bytes(s.Encoding.Raw, s.PrivateFormat.Raw, s.NoEncryption()).hex()
+path = Path.home() / "swiftify-update-signing-key.private"
+with open(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w") as f:
+    f.write(private)
+print("Public verification key:", key.public_key().public_bytes(s.Encoding.Raw, s.PublicFormat.Raw).hex())
+```
+
+then update the variable and the secret. Installed copies keep trusting the old
+key, so changing it means a manual reinstall (see below).
+
+To release: bump `project(Swiftify VERSION x.y.z)`, push `main`, then
+`git tag vx.y.z && git push origin vx.y.z`. All four platform builds must succeed
+before the release job signs the manifests and publishes. If neither key is set,
+archives are published without OTA manifests and the app disables installation.
+A mismatched or incomplete key pair fails the release job.
 
 Build locally with `-DSWIFTIFY_UPDATE_PUBLIC_KEY=<public-key>`; the helper is built
 by default, or can be omitted with `-DSWIFTIFY_BUILD_UPDATER=OFF`. Existing users

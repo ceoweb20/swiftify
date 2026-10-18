@@ -20,8 +20,14 @@
 namespace swiftify {
 namespace {
 Updates *s_instance = nullptr;
-const QString releasePrefix = QStringLiteral("https://github.com/shredos67/swiftify/releases/download/");
-const QUrl releaseApi(QStringLiteral("https://api.github.com/repos/shredos67/swiftify/releases/latest"));
+QString releasePrefix() { return QStringLiteral("https://github.com/%1/releases/download/").arg(Updates::repository()); }
+QUrl releaseApi() { return QUrl(QStringLiteral("https://api.github.com/repos/%1/releases/latest").arg(Updates::repository())); }
+}
+
+QString Updates::repository()
+{
+    // owner/name of the GitHub repository whose published releases are offered
+    return QStringLiteral(SWIFTIFY_UPDATE_REPOSITORY);
 }
 
 QString Updates::platform()
@@ -53,8 +59,8 @@ bool Updates::trustedDownload(const QUrl &url)
 {
     if (url.scheme() != QLatin1StringView("https") || !url.userInfo().isEmpty()
         || (url.port(-1) != -1 && url.port() != 443)) return false;
-    if (url == releaseApi) return true;
-    if (url.host() == QLatin1StringView("github.com")) return url.toString().startsWith(releasePrefix);
+    if (url == releaseApi()) return true;
+    if (url.host() == QLatin1StringView("github.com")) return url.toString().startsWith(releasePrefix());
     // GitHub release assets redirect to these CDNs. Never forward credentials
     // or cookies, never follow arbitrary or plaintext redirects.
     return url.host() == QLatin1StringView("release-assets.githubusercontent.com")
@@ -63,7 +69,7 @@ bool Updates::trustedDownload(const QUrl &url)
 
 QUrl Updates::releaseAsset(const QJsonObject &release, const QString &name, const QString &version)
 {
-    const QString expected = releasePrefix + QStringLiteral("v") + version + QLatin1Char('/') + name;
+    const QString expected = releasePrefix() + QStringLiteral("v") + version + QLatin1Char('/') + name;
     QUrl result;
     for (const auto &value : release.value(QStringLiteral("assets")).toArray()) {
         const auto asset = value.toObject();
@@ -241,7 +247,7 @@ void Updates::check()
     m_work = m_directory->path();
     m_busy = true; m_available = false; m_version.clear(); m_manifest = {}; m_progress = 0;
     m_status = tr("Checking for updates…"); emit changed();
-    fetch(releaseApi, QStringLiteral("release.json"), 1024 * 1024, [this] {
+    fetch(releaseApi(), QStringLiteral("release.json"), 1024 * 1024, [this] {
         m_release = QJsonDocument::fromJson(read(QStringLiteral("release.json"))).object();
         const QString tag = m_release.value(QStringLiteral("tag_name")).toString();
         const QString version = tag.startsWith(QLatin1Char('v')) ? tag.mid(1) : QString();

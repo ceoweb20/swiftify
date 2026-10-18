@@ -1,5 +1,5 @@
-# Extends upstream PR #53: native macOS arm64/Intel, Windows/Linux x64,
-# and signed update metadata. Tag releases remain drafts for manual review.
+# Native macOS arm64/Intel, Windows x64 and Linux x64 builds, plus signed update
+# metadata for the in-app updater. Pushing a v<version> tag publishes a release.
 name: prebuilt
 
 on:
@@ -29,6 +29,8 @@ permissions:
 env:
   QT_VERSION: 6.9.3
   SWIFTIFY_UPDATE_PUBLIC_KEY: ${{ vars.SWIFTIFY_UPDATE_PUBLIC_KEY }}
+  # builds update from the repository that built them
+  SWIFTIFY_UPDATE_REPOSITORY: ${{ github.repository }}
   CARGO_BUILD_JOBS: 4
 
 concurrency:
@@ -186,7 +188,7 @@ jobs:
           if-no-files-found: error
 
   release:
-    if: github.ref_type == 'tag' && github.repository == 'shredos67/swiftify'
+    if: github.ref_type == 'tag'
     needs: [windows, linux, macos]
     runs-on: ubuntu-24.04
     environment: release
@@ -217,8 +219,9 @@ jobs:
             echo 'No update key configured: publishing archives without OTA manifests.'
           fi
 
-      # a draft, so the notes are written and it is published by hand
+      # published at once: the in-app updater only sees published, non-draft releases
       - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
-          draft: true
+          draft: false
+          generate_release_notes: true
           files: dist/*
