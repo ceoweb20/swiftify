@@ -63,6 +63,8 @@ jobs:
           arch: win64_msvc2022_64
           modules: qtshadertools
           cache: true
+          # a random mirror may not have the newest release's metadata yet
+          extra: --base https://download.qt.io
 
       - name: build
         shell: pwsh
