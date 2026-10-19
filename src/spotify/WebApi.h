@@ -39,6 +39,8 @@ public:
     QCoro::Task<QList<Song>> recentlyPlayed(QString accessToken);
     QCoro::Task<SearchResults> search(QString query, QString accessToken);
     QCoro::Task<Song> song(QString trackId, QString accessToken);
+    /// Full artist profile (including images), unlike the credits inside a track.
+    QCoro::Task<Artist> artist(QString artistId, QString accessToken);
     QCoro::Task<QList<Song>> albumSongs(Album album, QString accessToken);
     QCoro::Task<QList<Album>> artistAlbums(Artist artist, QString accessToken);
 

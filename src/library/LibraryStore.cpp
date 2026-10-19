@@ -637,7 +637,7 @@ void LibraryStore::selectArtist(const Artist &artist)
 {
     cancelDetailLoads();
     const ArtistDetail *opened = m_openedArtists.find(artist.id);
-    navigate({Page::Artist, {}, {}, artist});
+    navigate({Page::Artist, {}, {}, opened && opened->artist.isValid() ? opened->artist : artist});
     m_artistAlbums->setItems(opened ? opened->albums : QList<Album> {});
     m_artistTopSongs->setSongs(opened ? opened->topSongs : QList<Song> {});
     m_errors->clear();
@@ -645,13 +645,29 @@ void LibraryStore::selectArtist(const Artist &artist)
         return;
     }
     setLoading(m_loadingArtist, opened == nullptr);
-    detach(runArtistLoad(artist, m_artistLoad.renew()));
+    detach(runArtistLoad(m_destination.artist, m_artistLoad.renew()));
 }
 
 QCoro::Task<> LibraryStore::runArtistLoad(Artist artist, CancelToken token)
 {
     const Destination target {Page::Artist, {}, {}, artist};
     try {
+        // Track credits only include the artist's name/id, not their images.
+        // Load the full profile independently of top songs and albums.
+        try {
+            const Artist profile = co_await m_session->withLibraryAccessToken<Artist>(
+                [this, artist](QString accessToken) { return m_session->webApi().artist(artist.id, accessToken); });
+            throwIfCancelled(token);
+            if (!(m_destination == target)) co_return;
+            artist = profile;
+            m_destination.artist = artist;
+            m_openedArtists.insert(artist.id, {m_artistTopSongs->songs(), m_artistAlbums->items(), artist});
+            emit destinationChanged();
+        } catch (const SpotifyError &error) {
+            // A missing/denied photo must not prevent the rest of the page loading.
+            throwIfCancelled(token);
+            qCInfo(lcLibrary).noquote() << "loading artist profile for" << artist.name << ':' << error.message();
+        }
         // top tracks are the reason you open an artist. albums still load if
         // they fail. the web api no longer has them, the session does
         QList<Song> topSongs;
@@ -671,7 +687,7 @@ QCoro::Task<> LibraryStore::runArtistLoad(Artist artist, CancelToken token)
         }
         if (topSongsLoaded) {
             m_artistTopSongs->setSongs(topSongs);
-            m_openedArtists.insert(artist.id, {topSongs, m_artistAlbums->items()});
+            m_openedArtists.insert(artist.id, {topSongs, m_artistAlbums->items(), artist});
             co_await loadSavedStatuses(topSongs);
             throwIfCancelled(token);
         }
@@ -683,7 +699,7 @@ QCoro::Task<> LibraryStore::runArtistLoad(Artist artist, CancelToken token)
             co_return;
         }
         m_artistAlbums->setItems(albums);
-        m_openedArtists.insert(artist.id, {m_artistTopSongs->songs(), albums});
+        m_openedArtists.insert(artist.id, {m_artistTopSongs->songs(), albums, artist});
         setLoading(m_loadingArtist, false);
     } catch (const Cancelled &) {
     } catch (const SpotifyError &error) {

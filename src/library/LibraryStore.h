@@ -281,6 +281,7 @@ private:
     struct ArtistDetail {
         QList<Song> topSongs;
         QList<Album> albums;
+        Artist artist;
     };
 
     void navigate(const Destination &destination);

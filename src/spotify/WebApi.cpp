@@ -351,6 +351,18 @@ QCoro::Task<QList<Song>> WebApi::albumSongs(Album album, QString accessToken)
     co_return result;
 }
 
+QCoro::Task<Artist> WebApi::artist(QString artistId, QString accessToken)
+{
+    const QString id = QString::fromLatin1(QUrl::toPercentEncoding(artistId));
+    const auto object = (co_await requestJson(apiUrl(QStringLiteral("/v1/artists/%1").arg(id)),
+                                            "GET", accessToken)).object();
+    const auto result = json::artist(object);
+    if (!result || result->id != artistId || result->name.trimmed().isEmpty()) {
+        throw SpotifyError::invalidData(QStringLiteral("Spotify returned invalid artist details."));
+    }
+    co_return *result;
+}
+
 QCoro::Task<QList<Album>> WebApi::artistAlbums(Artist artist, QString accessToken)
 {
     QList<Album> result;

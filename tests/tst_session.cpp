@@ -725,6 +725,12 @@ private slots:
             return result;
         };
         rig.accounts.api.insert(QStringLiteral("/v1/me"), R"({"id":"me","display_name":"Me"})");
+        rig.accounts.api.insert(QStringLiteral("/v1/artists/sade"),
+                                "{\"id\":\"sade\",\"uri\":\"spotify:artist:sade\",\"name\":\"Sade\",\"images\":["
+                                "{\"url\":\"https://images.test/sade-small.jpg\",\"width\":160},"
+                                "{\"url\":\"https://images.test/sade.jpg\",\"width\":640}]}");
+        rig.accounts.api.insert(QStringLiteral("/v1/artists/gone"),
+                                "{\"id\":\"gone\",\"uri\":\"spotify:artist:gone\",\"name\":\"Gone\",\"images\":[]}");
         rig.accounts.api.insert(QStringLiteral("/v1/artists/sade/albums"),
                                 R"({"items":[{"id":"diamond","name":"Diamond Life","uri":"spotify:album:diamond"}]})");
         rig.accounts.api.insert(QStringLiteral("/v1/artists/gone/albums"),
@@ -742,8 +748,10 @@ private slots:
         Artist sade;
         sade.id = QStringLiteral("sade");
         sade.name = QStringLiteral("Sade");
+        QVERIFY(sade.artworkUrl.isEmpty()); // Credits in a track have no portrait.
         library.selectArtist(sade);
-        settle();
+        const QUrl portrait(QStringLiteral("https://images.test/sade.jpg"));
+        QTRY_COMPARE(library.currentArtist().artworkUrl, portrait);
         const auto read = rig.core.take(QStringLiteral("topTracks"));
         QVERIFY(read);
         QCOMPARE(read->argument, QStringLiteral("spotify:artist:sade"));
@@ -766,6 +774,44 @@ private slots:
         QTRY_COMPARE(library.artistAlbums()->items().size(), 1);
         QCOMPARE(library.artistAlbums()->items().first().name, QStringLiteral("Left Behind"));
         QVERIFY(names().isEmpty());
+        QCOMPARE(rig.errors.message(), QString());
+        QVERIFY(library.currentArtist().artworkUrl.isEmpty()); // A genuinely absent photo stays absent.
+
+        // Reopening from the same sparse track credits keeps the fetched portrait.
+        library.selectArtist(sade);
+        QCOMPARE(library.currentArtist().artworkUrl, portrait);
+        settle();
+        const auto again = rig.core.take(QStringLiteral("topTracks"));
+        QVERIFY(again);
+        again->succeed(QStringLiteral("{\"tracks\":[]}"));
+        QTRY_VERIFY(!library.isLoadingArtist());
+        QCOMPARE(library.currentArtist().artworkUrl, portrait);
+
+        // A late profile from the previous page must not replace the current artist.
+        rig.accounts.holding = true;
+        library.selectArtist(sade);
+        library.selectArtist(gone);
+        rig.accounts.holding = false;
+        rig.accounts.release();
+        settle();
+        QCOMPARE(library.currentArtist().id, gone.id);
+        QVERIFY(library.currentArtist().artworkUrl.isEmpty());
+        const auto latest = rig.core.take(QStringLiteral("topTracks"));
+        QVERIFY(latest);
+        QCOMPARE(latest->argument, QStringLiteral("spotify:artist:gone"));
+        latest->succeed(QStringLiteral("{\"tracks\":[]}"));
+        QTRY_VERIFY(!library.isLoadingArtist());
+
+        // A refused refresh neither erases a cached portrait nor blocks albums.
+        rig.accounts.api.remove(QStringLiteral("/v1/artists/sade"));
+        library.selectArtist(sade);
+        settle();
+        const auto deniedProfile = rig.core.take(QStringLiteral("topTracks"));
+        QVERIFY(deniedProfile);
+        deniedProfile->succeed(QStringLiteral("{\"tracks\":[]}"));
+        QTRY_VERIFY(!library.isLoadingArtist());
+        QCOMPARE(library.currentArtist().artworkUrl, portrait);
+        QCOMPARE(library.artistAlbums()->items().size(), 1);
         QCOMPARE(rig.errors.message(), QString());
     }
 
