@@ -130,7 +130,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Vault test configuration failed' }
           cmake --build $build --parallel 4 --target tst_vault
           if ($LASTEXITCODE -ne 0) { throw 'Vault test build failed' }
-          & "$build\tests\tst_vault.exe"
+          ctest --test-dir $build --output-on-failure -R '^tst_vault$'
           if ($LASTEXITCODE -ne 0) { throw 'Vault tests failed' }
 
       - name: package
