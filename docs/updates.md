@@ -55,7 +55,7 @@ platform builds pass, the release job signs the manifests and publishes `vx.y.z`
 archives are published without OTA manifests and the app disables installation.
 A mismatched or incomplete key pair fails the release job.
 
-Build locally with `-DSWIFTIFY_UPDATE_PUBLIC_KEY=<public-key>`; the helper is built
+The public key is also the default of `SWIFTIFY_UPDATE_PUBLIC_KEY` in `CMakeLists.txt`; to use another, pass `-DSWIFTIFY_UPDATE_PUBLIC_KEY=<public-key>`; the helper is built
 by default, or can be omitted with `-DSWIFTIFY_BUILD_UPDATER=OFF`. Existing users
 must install one updater-enabled portable release manually first. This cannot
 retrofit an updater into older binaries.
@@ -66,18 +66,23 @@ new key. Keep the original key backed up; verification is never silently bypasse
 
 ## User flow
 
-Open **Settings → About → Updates**. Automatic checks are opt-in and limited to
-once per day at launch; they contact GitHub, not a separate telemetry server.
-Manual checks are also available. A notification reports a verified newer
-stable release. **Download and install** opens an explicit confirmation explaining
-that playback will stop and the application will restart.
+Open **Settings → About → Updates**. Two switches are on by default: *Check for
+updates automatically* (once a day, at launch and while the app stays open) and
+*Install updates automatically*. A found update is downloaded, verified, and
+installed by itself 20 seconds after nothing has been playing, then Swiftify
+restarts. It never installs over a song. With the second switch off, the app
+tells you and **Download and install** asks for confirmation.
 
-The app downloads metadata over HTTPS from the fixed upstream repository, then
-uses the local helper to verify its Ed25519 signature before trusting package
-details. Downloads are bounded, redirects are restricted to GitHub's asset CDNs,
-and no Spotify credentials, cookies or authorization headers are used. SHA-256,
-exact file size, platform and strictly newer stable semantic version are checked
-again by the installer before any replacement.
+Builds made on a developer machine (not a portable package) cannot update
+themselves; they have no portable marker, so the updater stays off and never
+touches a development tree.
+
+The app downloads metadata over HTTPS from this repository's releases, then uses
+the local helper to verify its Ed25519 signature before trusting package details.
+Downloads are bounded, redirects are restricted to GitHub's asset CDNs, and no
+Spotify credentials, cookies or authorization headers are used. SHA-256, exact
+file size, platform and strictly newer stable semantic version are checked again
+by the installer before any replacement.
 
 The installer extracts into a private sibling directory on the same filesystem.
 It rejects traversal, unsafe/escaping symlinks, duplicate paths and Windows
@@ -91,19 +96,25 @@ On replacement/launch-command failure it attempts to restore/relaunch the old
 installation. A successful process launch is **not** proof of successful app
 startup: the previous version is intentionally retained in a sibling
 `.swiftify-update-*` directory for manual recovery. Logs and `result.json` with
-the backup path are kept in the app cache's `swiftify-update-*` directory. Delete
-old backup/cache directories manually only after verifying a successful update.
-There is no automatic crash-recovery rollback, package-manager integration or
-background/silent installation.
+the backup path are kept in the app cache's `swiftify-update-*` directory.
 
 ## Platform limitations
 
-- **macOS:** CI signs ad hoc by default, not with Developer ID, and does not
-  notarize. Ed25519 update signatures authenticate releases but are not a
-  substitute for Apple's signing/notarization. Gatekeeper warnings and renewed
-  Keychain prompts can remain. The updater does not remove quarantine attributes
-  or change security policy. A stable Developer ID/notarization setup is a
-  separate maintainer task; no user's Apple identity is used by this workflow.
+- **macOS:** releases are signed with a certificate of this project's own
+  (`MACOS_SIGNING_P12`, `MACOS_SIGNING_PASSWORD`, `MACOS_SIGNING_IDENTITY` in the
+  repository settings; a backup is in `~/.swiftify-macos-signing/` on the maintainer's
+  computer), not with an Apple identity. Every build and every update then has the
+  same designated requirement (`identifier ... and certificate root = H"..."`), so
+  the Keychain, which remembers an app by that requirement, stops asking again after
+  you choose **Always Allow** once. An ad hoc signature is a hash of the build, so each
+  build used to look like a new app. A DMG would not change this. The first launch
+  of the first signed build asks once more, as the requirement changed.
+  The certificate is self-signed: it is not notarized and Gatekeeper still warns on a
+  browser download (right-click → Open once). A package that the updater installs is
+  not downloaded by a browser, so it carries no quarantine and opens without a warning.
+  To get the same stable identity for builds made on your own Mac, import
+  `signing.p12` into your login keychain and pass
+  `-DSWIFTIFY_CODESIGN_IDENTITY=<its SHA-1>` to cmake.
 - **Windows:** use a portable per-user installation, e.g. under LocalAppData.
   Authenticode signing is not configured; SmartScreen warnings can remain.
   The app exits before the helper replaces DLLs/executables. Locked files or a

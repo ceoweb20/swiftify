@@ -37,7 +37,9 @@ ApplicationWindow {
     Connections {
         target: Updates
         function onUpdateFound() {
-            toast.show(qsTr("A Swiftify update is available. Open Settings → About → Updates to install it."))
+            toast.show(Updates.installAutomatically
+                       ? qsTr("Swiftify %1 is available and installs by itself when nothing is playing.").arg(Updates.latestVersion)
+                       : qsTr("A Swiftify update is available. Open Settings → About → Updates to install it."))
         }
     }
 

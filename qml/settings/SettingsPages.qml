@@ -682,8 +682,15 @@ Item {
                     checked: Updates.automatic
                     onToggledTo: (checked) => Updates.automatic = checked
                 }
+                ConfigSwitch {
+                    objectName: "installUpdatesAutomatically"
+                    text: qsTr("Install updates automatically")
+                    enabled: Updates.supported && Updates.automatic
+                    checked: Updates.installAutomatically
+                    onToggledTo: (checked) => Updates.installAutomatically = checked
+                }
                 NoteText {
-                    text: qsTr("Checks published Swiftify releases on GitHub once a day. Downloads and installation always need your confirmation.")
+                    text: qsTr("Looks for new Swiftify releases on GitHub once a day. A verified update installs by itself, and Swiftify restarts, once nothing has played for a little while. Turn the second switch off to confirm each update yourself.")
                 }
                 NoteText {
                     objectName: "updateStatus"

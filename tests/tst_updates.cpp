@@ -56,16 +56,23 @@ private slots:
         QTemporaryDir directory;
         Settings settings(directory.filePath(QStringLiteral("test.conf")));
         Updates updates(&settings);
-        QVERIFY(!updates.automatic());
+        // both are on until turned off, but nothing happens without a portable package
+        QVERIFY(updates.automatic());
+        QVERIFY(updates.installAutomatically());
         QVERIFY(!updates.supported()); // Test executable has no official portable marker.
         QSignalSpy restart(&updates, &Updates::restartRequested);
         updates.check(); updates.install();
         QVERIFY(!updates.busy()); QVERIFY(!updates.available()); QCOMPARE(restart.count(), 0);
-        updates.setAutomatic(true);
-        QVERIFY(updates.automatic());
-        QVERIFY(settings.value(QStringLiteral("updates/automatic")).toBool());
         updates.setAutomatic(false);
         QVERIFY(!updates.automatic());
+        QVERIFY(!settings.value(QStringLiteral("updates/automatic"), true).toBool());
+        updates.setAutomatic(true);
+        QVERIFY(updates.automatic());
+        updates.setInstallAutomatically(false);
+        QVERIFY(!updates.installAutomatically());
+        QVERIFY(!settings.value(QStringLiteral("updates/install"), true).toBool());
+        updates.setInstallAutomatically(true);
+        QVERIFY(updates.installAutomatically());
     }
 };
 

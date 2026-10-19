@@ -27,15 +27,27 @@ dependency qtkeychain https://github.com/frankosterfeld/qtkeychain.git 0.17.0 \
 dependency qcoro https://github.com/qcoro/qcoro.git v0.13.0 \
     -DUSE_QT_VERSION=6 -DQCORO_WITH_QTDBUS=OFF -DQCORO_WITH_QTWEBSOCKETS=OFF -DQCORO_WITH_QTQUICK=OFF \
     -DQCORO_WITH_QML=OFF -DQCORO_WITH_QTTEST=OFF -DQCORO_BUILD_EXAMPLES=OFF
+# a signing identity that stays the same from build to build (a certificate of
+# the project's own is enough) gives the app the same designated requirement each
+# time, which is what the keychain checks before it asks again. an ad hoc
+# signature is the build's own hash, so every build and every update is a stranger.
+IDENTITY="${SWIFTIFY_CODESIGN_IDENTITY:--}"
 cmake -S "$SOURCE" -B "$WORK/app" "${common[@]}" \
-    "-DSWIFTIFY_UPDATE_PUBLIC_KEY=${SWIFTIFY_UPDATE_PUBLIC_KEY:-}" -DSWIFTIFY_COMPILE_APP_ICON=OFF \
+    ${SWIFTIFY_UPDATE_PUBLIC_KEY:+"-DSWIFTIFY_UPDATE_PUBLIC_KEY=$SWIFTIFY_UPDATE_PUBLIC_KEY"} -DSWIFTIFY_COMPILE_APP_ICON=OFF \
+    "-DSWIFTIFY_CODESIGN_IDENTITY=$IDENTITY" \
     ${SWIFTIFY_UPDATE_REPOSITORY:+"-DSWIFTIFY_UPDATE_REPOSITORY=$SWIFTIFY_UPDATE_REPOSITORY"}
 cmake --build "$WORK/app" --parallel "$JOBS"
 APP="$WORK/app/swiftify.app"
 "$QT/bin/macdeployqt" "$APP" -qmldir="$SOURCE/qml" -always-overwrite -appstore-compliant
 python3 "$SOURCE/tools/package-portable.py" --root "$APP" --target "$TARGET" --mark-only
-# This project does not have a Developer ID certificate/notarization secret.
-# Keep Gatekeeper intact; do not strip quarantine on the user's machine.
-codesign --force --deep --sign - "$APP"
+# No Developer ID certificate or notarization: Gatekeeper is left as it is, and
+# quarantine is not stripped from anything.
+codesign --force --deep --sign "$IDENTITY" "$APP"
 codesign --verify --deep --strict "$APP"
+requirement="$(codesign -d -r- "$APP" 2>&1 | grep designated || true)"
+echo "$requirement"
+if [[ "$IDENTITY" != "-" && "$requirement" != *"certificate root"* ]]; then
+    echo "the app was not signed with the stable identity" >&2
+    exit 1
+fi
 python3 "$SOURCE/tools/package-portable.py" --root "$APP" --target "$TARGET" --out "$SOURCE/dist"

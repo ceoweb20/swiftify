@@ -4,14 +4,12 @@
   "Device name": "Имя устройства",
   "Updates": "Обновления",
   "Check for updates automatically": "Проверять обновления автоматически",
-  "Checks published Swiftify releases on GitHub once a day. Downloads and installation always need your confirmation.": "Проверяет опубликованные релизы Swiftify на GitHub раз в сутки. Загрузка и установка всегда требуют вашего подтверждения.",
   "Downloaded %1%": "Загружено %1%",
   "Check for updates": "Проверить обновления",
   "Download and install": "Скачать и установить",
   "Install Swiftify %1?": "Установить Swiftify %1?",
   "Swiftify will download and verify the update, stop playback, replace this portable installation and restart. Your library and settings are kept. Do not move the application during installation.": "Swiftify скачает и проверит обновление, остановит воспроизведение, заменит эту переносимую установку и перезапустится. Медиатека и настройки сохранятся. Не перемещайте приложение во время установки.",
   "Install and restart": "Установить и перезапустить",
-  "A Swiftify update is available. Open Settings → About → Updates to install it.": "Доступно обновление Swiftify. Для установки откройте Настройки → О приложении → Обновления.",
   "Check for a new Swiftify release.": "Проверьте наличие новой версии Swiftify.",
   "In-app installation requires an official portable build with an update verification key. Use your package manager for system installations.": "Обновление внутри приложения доступно в официальной переносимой сборке с ключом проверки обновлений. Системные установки обновляйте через пакетный менеджер.",
   "The installer could not prepare the update. Your installation was not changed.": "Установщик не смог подготовить обновление. Установленное приложение не изменено.",
@@ -488,5 +486,9 @@
   "Treble Booster": "Усиление высоких",
   "Treble Reducer": "Ослабление высоких",
   "Vocal Booster": "Усиление вокала",
-  "Spotify, and anything watching your account such as a scrobbling bot, sees what Swiftify plays. Other Spotify apps cannot control Swiftify.": "Spotify и всё, что следит за вашим аккаунтом (например, бот-скробблер), видит, что играет в Swiftify. Управлять Swiftify из других приложений Spotify нельзя."
+  "Spotify, and anything watching your account such as a scrobbling bot, sees what Swiftify plays. Other Spotify apps cannot control Swiftify.": "Spotify и всё, что следит за вашим аккаунтом (например, бот-скробблер), видит, что играет в Swiftify. Управлять Swiftify из других приложений Spotify нельзя.",
+  "Install updates automatically": "Устанавливать обновления автоматически",
+  "Looks for new Swiftify releases on GitHub once a day. A verified update installs by itself, and Swiftify restarts, once nothing has played for a little while. Turn the second switch off to confirm each update yourself.": "Раз в сутки проверяет новые релизы Swiftify на GitHub. Проверенное обновление устанавливается само, и Swiftify перезапускается, когда какое-то время ничего не играет. Выключите второй переключатель, чтобы подтверждать каждое обновление самому.",
+  "Swiftify %1 is available and installs by itself when nothing is playing.": "Доступна версия Swiftify %1, она установится сама, когда ничего не играет.",
+  "A Swiftify update is available. Open Settings → About → Updates to install it.": "Доступно обновление Swiftify. Для установки откройте Настройки → О приложении → Обновления."
 }

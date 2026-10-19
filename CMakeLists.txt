@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.24)
 
 project(Swiftify
-    VERSION 0.16.0
+    VERSION 0.16.1
     DESCRIPTION "A native Spotify client"
     LANGUAGES C CXX)
 
@@ -47,7 +47,9 @@ set(SWIFTIFY_UPDATE_REPOSITORY "ceoweb20/swiftify" CACHE STRING "GitHub owner/na
 if(NOT SWIFTIFY_UPDATE_REPOSITORY MATCHES "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
     message(FATAL_ERROR "SWIFTIFY_UPDATE_REPOSITORY must look like owner/name")
 endif()
-set(SWIFTIFY_UPDATE_PUBLIC_KEY "" CACHE STRING "Ed25519 update verification key (64 hex digits); empty disables OTA")
+# the public half of the key this repository signs its releases with. a build may
+# name another with -DSWIFTIFY_UPDATE_PUBLIC_KEY=, or an empty one to turn updates off
+set(SWIFTIFY_UPDATE_PUBLIC_KEY "90725820cdaeca8d87b6980100b0b925e2087c5fce723c2995ecc9a9a319093c" CACHE STRING "Ed25519 update verification key (64 hex digits); empty disables OTA")
 if(NOT SWIFTIFY_UPDATE_PUBLIC_KEY STREQUAL "")
     string(LENGTH "${SWIFTIFY_UPDATE_PUBLIC_KEY}" update_key_length)
     if(NOT update_key_length EQUAL 64 OR NOT SWIFTIFY_UPDATE_PUBLIC_KEY MATCHES "^[0-9a-fA-F]+$")

@@ -27,6 +27,8 @@ class Updates : public QObject {
     Q_PROPERTY(bool busy READ busy NOTIFY changed FINAL)
     Q_PROPERTY(bool available READ available NOTIFY changed FINAL)
     Q_PROPERTY(bool automatic READ automatic WRITE setAutomatic NOTIFY changed FINAL)
+    /// a verified update is installed by itself once nothing is playing
+    Q_PROPERTY(bool installAutomatically READ installAutomatically WRITE setInstallAutomatically NOTIFY changed FINAL)
     Q_PROPERTY(QString status READ status NOTIFY changed FINAL)
     Q_PROPERTY(QString latestVersion READ latestVersion NOTIFY changed FINAL)
     Q_PROPERTY(double progress READ progress NOTIFY changed FINAL)
@@ -41,6 +43,8 @@ public:
     bool available() const { return m_available; }
     bool automatic() const;
     void setAutomatic(bool enabled);
+    bool installAutomatically() const;
+    void setInstallAutomatically(bool enabled);
     QString status() const { return m_status; }
     QString latestVersion() const { return m_version; }
     double progress() const { return m_progress; }
@@ -75,6 +79,7 @@ private:
     QNetworkAccessManager m_network;
     QProcess m_helper;
     QTimer m_installPoll;
+    QTimer m_dueCheck;
     QJsonObject m_release;
     QJsonObject m_manifest;
     std::unique_ptr<QTemporaryDir> m_directory;

@@ -35,7 +35,8 @@ env:
 
 concurrency:
   group: prebuilt-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref_type != 'tag' }}
+  # a run on main may be the one that publishes a release: never cancel it for a newer push
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   windows:
@@ -207,6 +208,33 @@ jobs:
           arch: clang_64
           modules: qtshadertools
           cache: true
+      # one signing identity for every build (a certificate of this project's own,
+      # not an Apple one), so the keychain recognises the app after each update.
+      # without the secret the app is signed ad hoc, as a pull request's is
+      - name: import the signing identity
+        env:
+          MACOS_SIGNING_P12: ${{ secrets.MACOS_SIGNING_P12 }}
+          MACOS_SIGNING_PASSWORD: ${{ secrets.MACOS_SIGNING_PASSWORD }}
+          MACOS_SIGNING_IDENTITY: ${{ vars.MACOS_SIGNING_IDENTITY }}
+        run: |
+          if [[ -z "$MACOS_SIGNING_P12" || -z "$MACOS_SIGNING_IDENTITY" ]]; then
+            echo 'No signing identity: the app is signed ad hoc.'
+            exit 0
+          fi
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          password="$(uuidgen)"
+          echo "$MACOS_SIGNING_P12" | base64 --decode > "$RUNNER_TEMP/signing.p12"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          security import "$RUNNER_TEMP/signing.p12" -k "$keychain" -P "$MACOS_SIGNING_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain" >/dev/null
+          # the runner is thrown away afterwards, so its keychain list may be rewritten
+          existing="$(security list-keychains -d user | tr -d '"' | xargs)"
+          security list-keychains -d user -s "$keychain" $existing
+          rm -f "$RUNNER_TEMP/signing.p12"
+          echo "SWIFTIFY_CODESIGN_IDENTITY=$MACOS_SIGNING_IDENTITY" >> "$GITHUB_ENV"
+
       - name: build and package
         env:
           SWIFTIFY_BUILD_ROOT: ${{ runner.temp }}/swiftify-build

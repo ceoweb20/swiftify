@@ -51,6 +51,7 @@
 #include <QQmlApplicationEngine>
 #include <QQuickStyle>
 #include <QSocketNotifier>
+#include <QTimer>
 #include <QtQml/qqmlextensionplugin.h>
 
 #ifdef Q_OS_UNIX
@@ -308,6 +309,26 @@ int main(int argc, char *argv[])
     AppController app(nullptr);
     Updates updates(&settings);
     QObject::connect(&updates, &Updates::restartRequested, &app, &AppController::quit);
+    // a verified update installs by itself, a moment after nothing has been
+    // playing: never over a song
+    QTimer installLater;
+    installLater.setSingleShot(true);
+    installLater.setInterval(20'000);
+    const auto canInstallNow = [&] {
+        return updates.available() && updates.installAutomatically() && !updates.busy() && !player.isPlaying();
+    };
+    const auto installWhenIdle = [&] {
+        if (canInstallNow()) {
+            if (!installLater.isActive()) installLater.start();
+        } else {
+            installLater.stop();
+        }
+    };
+    QObject::connect(&installLater, &QTimer::timeout, &app, [&] {
+        if (canInstallNow()) updates.install();
+    });
+    QObject::connect(&updates, &Updates::updateFound, &app, installWhenIdle);
+    QObject::connect(&player, &PlaybackController::playingChanged, &app, installWhenIdle);
     updates.scheduleAutomaticCheck();
     ArtworkCache artwork(&network);
     PlayerStyle playerStyle(&player, &theme, &artwork);

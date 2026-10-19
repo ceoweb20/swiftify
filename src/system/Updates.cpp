@@ -160,7 +160,19 @@ Updates *Updates::create(QQmlEngine *, QJSEngine *)
 
 bool Updates::automatic() const
 {
-    return m_settings && m_settings->value(QStringLiteral("updates/automatic")).toBool();
+    return m_settings && m_settings->value(QStringLiteral("updates/automatic"), true).toBool();
+}
+
+bool Updates::installAutomatically() const
+{
+    return m_settings && m_settings->value(QStringLiteral("updates/install"), true).toBool();
+}
+
+void Updates::setInstallAutomatically(bool enabled)
+{
+    if (!m_settings || installAutomatically() == enabled) return;
+    m_settings->setValue(QStringLiteral("updates/install"), enabled);
+    emit changed();
 }
 
 void Updates::setAutomatic(bool enabled)
@@ -173,11 +185,18 @@ void Updates::setAutomatic(bool enabled)
 
 void Updates::scheduleAutomaticCheck()
 {
-    QTimer::singleShot(10000, this, [this] {
-        if (!automatic() || !supported() || m_busy) return;
+    const auto checkIfDue = [this] {
+        if (!automatic() || !supported() || m_busy || m_available) return;
         const auto last = m_settings->value(QStringLiteral("updates/lastCheck")).toDateTime();
         if (!last.isValid() || last.secsTo(QDateTime::currentDateTimeUtc()) >= 86400) check();
-    });
+    };
+    QTimer::singleShot(10000, this, checkIfDue);
+    // an app left open for days looks again too, once a day is up
+    if (!m_dueCheck.isActive()) {
+        m_dueCheck.setInterval(3600 * 1000);
+        connect(&m_dueCheck, &QTimer::timeout, this, checkIfDue);
+        m_dueCheck.start();
+    }
 }
 
 void Updates::fail(const QString &message)

@@ -160,30 +160,32 @@ of the player-bar and track-list meters. The same switch is available at the top
 of the full-screen Sound panel. The global visualizer switch still takes priority.
 Decorative progress-bar shapes and the live background have their own settings.
 
-### macOS Keychain prompts in development builds
+### macOS Keychain prompts
 
-Spotify logins remain in the OS Keychain. The app caches credentials only in
-process memory, skips identical secure-store writes and restores a session once,
-not each time its window is raised. Updated tokens are still written securely.
+Spotify logins stay in the OS Keychain. The app caches them only in process memory,
+skips identical secure-store writes and restores a session once, not each time its
+window is raised.
 
-An ad-hoc build has no stable signing identity across rebuilds. Choose **Always
-Allow** locally in macOS's prompt if you trust that build; a newly rebuilt binary
-can require permission again. Permanently avoiding rebuild-related prompts needs
-a stable signing identity (`SWIFTIFY_CODESIGN_IDENTITY`), not disabling Keychain
-security or granting all applications access. No signing key is configured by
-this feature and no token is moved into plaintext preferences.
+macOS asks again whenever the app's signature changes. The release packages are
+signed with one certificate of this repository's own, so after you choose **Always
+Allow** once they, and every update the app installs, keep their access. A build you
+make yourself is signed ad hoc and looks like a new app each time; give it the same
+identity with `-DSWIFTIFY_CODESIGN_IDENTITY` (see [docs/updates.md](docs/updates.md)).
+No token is moved into plaintext preferences and no keychain access is widened.
 
 ### Portable builds and updates
 
 GitHub Actions builds macOS (Apple Silicon and Intel), Windows x64 and Linux x64
-portable packages. A pushed `v<version>` tag publishes a signed release.
-Updater-enabled portable builds can check for releases and, after confirmation,
-verify, install and restart from **Settings → About → Updates**. Automatic checks
-are opt-in. System/package-manager installations are not overwritten.
+portable packages. When all four builds pass on `main` and `CMakeLists.txt` names a
+version that has no release yet, that release is published with the packages and
+signed update manifests. Pushing a `v<version>` tag does the same. The portable packages look for new releases once a day and install a verified one
+by themselves, restarting once nothing is playing (**Settings → About → Updates**;
+both switches can be turned off). System/package-manager installations are not
+overwritten.
 
-OTA stays disabled until maintainers configure their Ed25519 verification/signing
-keys; macOS builds remain ad-hoc signed unless Developer ID/notarization is set up
-separately. See [release/update setup, trust model and limitations](docs/updates.md).
+Releases are signed with this repository's own Ed25519 key, and the macOS packages with
+a certificate of its own (not notarized, so a browser download needs right-click → Open
+once). See [release/update setup, trust model and limitations](docs/updates.md).
 
 ### Saving the current song and Windows widgets
 
