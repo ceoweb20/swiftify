@@ -20,7 +20,8 @@ def sign(directory):
     public = key.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw).hex()
     if public != os.environ["SWIFTIFY_UPDATE_PUBLIC_KEY"].lower():
         raise ValueError("The signing key does not match the compiled public key")
-    tag = os.environ["GITHUB_REF_NAME"]
+    # a release made from main names its tag in RELEASE_TAG; a pushed tag is its own
+    tag = os.environ.get("RELEASE_TAG") or os.environ["GITHUB_REF_NAME"]
     if not re.fullmatch(r"v\d+\.\d+\.\d+", tag):
         raise ValueError("Only stable version tags can publish updates")
     expected = {"macos-aarch64", "macos-x86_64", "linux-x86_64", "windows-x86_64"}

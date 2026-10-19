@@ -222,30 +222,55 @@ jobs:
           path: dist/*.zip
           if-no-files-found: error
 
+  # a release is made for every version in CMakeLists.txt that has none yet, once
+  # all four builds pass on main (or when its v<version> tag is pushed)
   release:
-    if: github.ref_type == 'tag'
+    if: github.ref_type == 'tag' || (github.ref == 'refs/heads/main' && github.event_name == 'push')
     needs: [windows, linux, macos]
     runs-on: ubuntu-24.04
     environment: release
     permissions:
       contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: decide the release
+        id: release
+        run: |
+          version="$(sed -n '/^project(Swiftify/,/VERSION/s/^ *VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)"
+          tag="v$version"
+          if [[ "$GITHUB_REF_TYPE" == tag && "$GITHUB_REF_NAME" != "$tag" ]]; then
+            echo "the tag $GITHUB_REF_NAME does not match the version $version in CMakeLists.txt" >&2
+            exit 1
+          fi
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "$tag is already released; raise the version in CMakeLists.txt for a new release."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: steps.release.outputs.publish == 'true'
         with:
           path: dist
           merge-multiple: true
 
       # Dependency installation must not inherit the private signing seed.
       - name: prepare signing tool
-        if: vars.SWIFTIFY_UPDATE_PUBLIC_KEY != ''
+        if: steps.release.outputs.publish == 'true' && vars.SWIFTIFY_UPDATE_PUBLIC_KEY != ''
         run: |
           python3 -m venv "$RUNNER_TEMP/update-signing"
           "$RUNNER_TEMP/update-signing/bin/python" -m pip install 'cryptography==49.0.0'
 
       - name: sign update manifests
+        if: steps.release.outputs.publish == 'true'
         env:
           SWIFTIFY_UPDATE_SIGNING_KEY: ${{ secrets.SWIFTIFY_UPDATE_SIGNING_KEY }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
           if [[ -n "$SWIFTIFY_UPDATE_PUBLIC_KEY" || -n "$SWIFTIFY_UPDATE_SIGNING_KEY" ]]; then
             test -n "$SWIFTIFY_UPDATE_PUBLIC_KEY" && test -n "$SWIFTIFY_UPDATE_SIGNING_KEY"
@@ -255,8 +280,11 @@ jobs:
           fi
 
       # published at once: the in-app updater only sees published, non-draft releases
-      - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
-        with:
-          draft: false
-          generate_release_notes: true
-          files: dist/*
+      - name: publish
+        if: steps.release.outputs.publish == 'true'
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: >
+          gh release create "$RELEASE_TAG" dist/*
+          --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA"
+          --title "Swiftify ${RELEASE_TAG#v}" --generate-notes --latest

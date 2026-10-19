@@ -48,9 +48,10 @@ print("Public verification key:", key.public_key().public_bytes(s.Encoding.Raw, 
 then update the variable and the secret. Installed copies keep trusting the old
 key, so changing it means a manual reinstall (see below).
 
-To release: bump `project(Swiftify VERSION x.y.z)`, push `main`, then
-`git tag vx.y.z && git push origin vx.y.z`. All four platform builds must succeed
-before the release job signs the manifests and publishes. If neither key is set,
+To release: bump `project(Swiftify VERSION x.y.z)` and push `main`. Once all four
+platform builds pass, the release job signs the manifests and publishes `vx.y.z`
+(creating the tag), unless that version already has a release. Pushing a
+`vx.y.z` tag by hand does the same. If neither key is set,
 archives are published without OTA manifests and the app disables installation.
 A mismatched or incomplete key pair fails the release job.
 
