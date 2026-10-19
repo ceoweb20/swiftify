@@ -5,21 +5,9 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QTimeZone>
-#include <qt6keychain/keychain.h>
-#include <QCoroSignal>
 #include <array>
 
 namespace swiftify {
-
-namespace {
-
-SpotifyError storeError(const QString &operation, const QString &detail)
-{
-    return {SpotifyError::Kind::Credentials,
-            QStringLiteral("Could not %1 the saved Spotify login: %2").arg(operation, detail)};
-}
-
-} // namespace
 
 QByteArray StoredCredentials::toJson() const
 {
@@ -60,54 +48,6 @@ std::optional<StoredCredentials> StoredCredentials::fromJson(const QByteArray &j
 QString CredentialStore::accountName(Account account)
 {
     return account == Account::Playback ? QStringLiteral("spotify-oauth") : QStringLiteral("spotify-library-oauth");
-}
-
-QCoro::Task<std::optional<StoredCredentials>> KeychainCredentialStore::load(Account account)
-{
-    QKeychain::ReadPasswordJob job(service());
-    job.setAutoDelete(false);
-    job.setKey(accountName(account));
-    job.start();
-    co_await qCoro(&job, &QKeychain::Job::finished);
-
-    if (job.error() == QKeychain::EntryNotFound) {
-        co_return std::nullopt;
-    }
-    if (job.error() != QKeychain::NoError) {
-        throw storeError(QStringLiteral("load"), job.errorString());
-    }
-    const auto credentials = StoredCredentials::fromJson(job.binaryData());
-    if (!credentials) {
-        throw storeError(QStringLiteral("load"), QStringLiteral("it is damaged."));
-    }
-    co_return credentials;
-}
-
-QCoro::Task<> KeychainCredentialStore::save(Account account, StoredCredentials credentials)
-{
-    QKeychain::WritePasswordJob job(service());
-    job.setAutoDelete(false);
-    job.setKey(accountName(account));
-    job.setBinaryData(credentials.toJson());
-    job.start();
-    co_await qCoro(&job, &QKeychain::Job::finished);
-    if (job.error() != QKeychain::NoError) {
-        throw storeError(QStringLiteral("save"), job.errorString());
-    }
-}
-
-QCoro::Task<> KeychainCredentialStore::removeAll()
-{
-    for (const Account account : {Account::Playback, Account::Library}) {
-        QKeychain::DeletePasswordJob job(service());
-        job.setAutoDelete(false);
-        job.setKey(accountName(account));
-        job.start();
-        co_await qCoro(&job, &QKeychain::Job::finished);
-        if (job.error() != QKeychain::NoError && job.error() != QKeychain::EntryNotFound) {
-            throw storeError(QStringLiteral("delete"), job.errorString());
-        }
-    }
 }
 
 QCoro::Task<std::optional<StoredCredentials>> MemoryCredentialStore::load(Account account)

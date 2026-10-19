@@ -193,6 +193,73 @@ unsafe fn handle<'a>(handle: *const SwiftifyCore) -> Option<&'a SwiftifyCore> {
 
 const MISSING_CORE: &str = "the spotify core is not available";
 
+/// Opaque password-derived vault key. It is wiped when freed.
+pub struct SwiftifyVault(crate::vault::Vault);
+
+/// # Safety
+/// Strings are valid nul-terminated UTF-8; plaintext/error are writable pointers.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn swiftify_vault_open(
+    password: *const c_char, encoded: *const c_char,
+    plaintext: *mut *mut c_char, error: *mut *mut c_char,
+) -> *mut SwiftifyVault {
+    if plaintext.is_null() || error.is_null() { return ptr::null_mut(); }
+    unsafe { *plaintext = ptr::null_mut(); *error = ptr::null_mut(); }
+    let result = (|| {
+        let password = zeroize::Zeroizing::new(unsafe { read_str(password) }?);
+        let encoded = unsafe { read_str(encoded) }?;
+        let (vault, bytes) = crate::vault::Vault::open(&password, &encoded)?;
+        let text = String::from_utf8(bytes.to_vec()).map_err(|_| "Invalid vault contents")?;
+        Ok::<_, String>((vault, text))
+    })();
+    match result {
+        Ok((vault, text)) => {
+            unsafe { *plaintext = into_raw(text); }
+            Box::into_raw(Box::new(SwiftifyVault(vault)))
+        }
+        Err(message) => {
+            unsafe { *error = into_raw(message); }
+            ptr::null_mut()
+        }
+    }
+}
+
+/// # Safety
+/// vault is live; plaintext is a valid string and error is writable.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn swiftify_vault_seal(
+    vault: *const SwiftifyVault, plaintext: *const c_char, error: *mut *mut c_char,
+) -> *mut c_char {
+    if error.is_null() { return ptr::null_mut(); }
+    unsafe { *error = ptr::null_mut(); }
+    let result = (|| {
+        let vault = unsafe { vault.as_ref() }.ok_or("Vault is locked")?;
+        let text = zeroize::Zeroizing::new(unsafe { read_str(plaintext) }?);
+        vault.0.seal(text.as_bytes())
+    })();
+    match result {
+        Ok(text) => into_raw(text),
+        Err(message) => { unsafe { *error = into_raw(message); } ptr::null_mut() }
+    }
+}
+
+/// # Safety
+/// vault is null or is a key returned by swiftify_vault_open, freed exactly once.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn swiftify_vault_free(vault: *mut SwiftifyVault) {
+    if !vault.is_null() { drop(unsafe { Box::from_raw(vault) }); }
+}
+
+/// # Safety
+/// value is null or an owned string returned by this library, freed exactly once.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn swiftify_secret_free(value: *mut c_char) {
+    if !value.is_null() {
+        let bytes = unsafe { CString::from_raw(value) }.into_bytes_with_nul();
+        drop(zeroize::Zeroizing::new(bytes));
+    }
+}
+
 /// a new core, or null if its completion socket could not be created.
 #[unsafe(no_mangle)]
 pub extern "C" fn swiftify_core_new() -> *mut SwiftifyCore {

@@ -29,6 +29,7 @@ mod output;
 mod reporter;
 mod playlist;
 mod spectrum;
+mod vault;
 
 use dsp::{EQ_BAND_COUNT, SharedDsp};
 use reporter::Reporter;

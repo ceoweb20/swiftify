@@ -103,15 +103,13 @@ the backup path are kept in the app cache's `swiftify-update-*` directory.
 - **macOS:** releases are signed with a certificate of this project's own
   (`MACOS_SIGNING_P12`, `MACOS_SIGNING_PASSWORD`, `MACOS_SIGNING_IDENTITY` in the
   repository settings; a backup is in `~/.swiftify-macos-signing/` on the maintainer's
-  computer), not with an Apple identity. Every build and every update then has the
-  same designated requirement (`identifier ... and certificate root = H"..."`), so
-  the Keychain, which remembers an app by that requirement, stops asking again after
-  you choose **Always Allow** once. An ad hoc signature is a hash of the build, so each
-  build used to look like a new app. A DMG would not change this. The first launch
-  of the first signed build asks once more, as the requirement changed.
-  The certificate is self-signed: it is not notarized and Gatekeeper still warns on a
-  browser download (right-click → Open once). A package that the updater installs is
-  not downloaded by a browser, so it carries no quarantine and opens without a warning.
+   computer), not with an Apple identity. The certificate keeps the designated
+   requirement stable, but is not Apple Developer ID/notarization and does not
+   guarantee the absence of OS trust prompts. A DMG does not change that.
+   **From 0.17.0, Spotify credentials do not use Keychain at all**: see the
+   [password-protected credential vault](credential-vault.md). Updates preserve
+   that file and ask for the vault password on the next launch.
+   The certificate is self-signed: Gatekeeper warnings may remain on downloads.
   To get the same stable identity for builds made on your own Mac, import
   `signing.p12` into your login keychain and pass
   `-DSWIFTIFY_CODESIGN_IDENTITY=<its SHA-1>` to cmake.
@@ -122,7 +120,7 @@ the backup path are kept in the app cache's `swiftify-update-*` directory.
 - **Linux:** unzip under a user-owned directory. System installations (`/usr`,
   distribution packages, Flatpak/Snap/AppImage managers) must use their package
   manager and have no portable marker. The x86_64 bundle still requires the
-  baseline system audio/secret-service libraries described in README. No ARM
+   baseline system audio libraries described in README. No ARM
   Linux or ARM Windows packages are currently produced.
 
 ## Focused checks

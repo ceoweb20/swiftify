@@ -116,6 +116,23 @@ jobs:
             throw 'libraries missing from the zip'
           }
 
+      - name: test the encrypted credential store on Windows
+        shell: pwsh
+        run: |
+          . ./tools/build-windows.ps1
+          Initialize-Msvc | Out-Host
+          $cache = Get-ChildItem "$env:RUNNER_TEMP\build\*\swiftify\CMakeCache.txt" | Select-Object -First 1
+          if (-not $cache) { throw 'Application build directory not found' }
+          $build = $cache.DirectoryName
+          $deps = Join-Path (Split-Path -Parent $build) 'deps\bin'
+          $env:PATH = "$deps;$env:QT_ROOT_DIR\bin;$env:PATH"
+          cmake -S . -B $build -DBUILD_TESTING=ON
+          if ($LASTEXITCODE -ne 0) { throw 'Vault test configuration failed' }
+          cmake --build $build --parallel 4 --target tst_vault
+          if ($LASTEXITCODE -ne 0) { throw 'Vault test build failed' }
+          & "$build\tests\tst_vault.exe"
+          if ($LASTEXITCODE -ne 0) { throw 'Vault tests failed' }
+
       - name: package
         shell: pwsh
         run: python tools/package-portable.py --root "$env:RUNNER_TEMP\${{ steps.version.outputs.name }}" --target windows-x86_64 --out dist
@@ -124,6 +141,7 @@ jobs:
         shell: bash
         run: |
           cargo test --locked --manifest-path tools/update-helper/Cargo.toml
+          cargo test --locked --manifest-path spotify-core/Cargo.toml --no-default-features --features capi vault::tests
           python tests/check_update_tools.py
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -154,7 +172,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             g++-12 ninja-build pkg-config \
-            libpulse-dev libasound2-dev libssl-dev libsecret-1-dev \
+            libpulse-dev libasound2-dev libssl-dev \
             libgl1-mesa-dev libegl1-mesa-dev libxkbcommon-dev libxkbcommon-x11-0 \
             libfontconfig1-dev libfreetype-dev libdbus-1-dev \
             libwayland-dev libwayland-egl1 libvulkan1 \
@@ -178,6 +196,7 @@ jobs:
       - name: updater tests
         run: |
           cargo test --locked --manifest-path tools/update-helper/Cargo.toml
+          cargo test --locked --manifest-path spotify-core/Cargo.toml --no-default-features --features capi vault::tests
           python3 tests/check_update_tools.py
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -208,8 +227,8 @@ jobs:
           arch: clang_64
           modules: qtshadertools
           cache: true
-      # one signing identity for every build (a certificate of this project's own,
-      # not an Apple one), so the keychain recognises the app after each update.
+      # Keep the release identity consistent. Runtime credentials use the
+      # encrypted vault, not a keychain, regardless of this signing certificate.
       # without the secret the app is signed ad hoc, as a pull request's is
       - name: import the signing identity
         env:
@@ -243,6 +262,7 @@ jobs:
       - name: updater tests
         run: |
           cargo test --locked --manifest-path tools/update-helper/Cargo.toml
+          cargo test --locked --manifest-path spotify-core/Cargo.toml --no-default-features --features capi vault::tests
           python3 tests/check_update_tools.py
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

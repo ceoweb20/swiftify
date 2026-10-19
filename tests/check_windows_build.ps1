@@ -116,14 +116,14 @@ try {
     $parameters = @{ QtPath = $qtPath; MingwPath = $mingwPath; BuildRoot = $buildRoot; InstallPrefix = $installPrefix; Jobs = 2 }
     Invoke-WindowsBuild @parameters
     Assert-True (Test-Path -LiteralPath "$installPrefix\bin\swiftify.exe") 'Swiftify was not installed.'
-    Assert-True (Test-Path -LiteralPath "$installPrefix\bin\qtkeychain.dll") 'QtKeychain runtime was not deployed.'
+    Assert-True (-not (Test-Path -LiteralPath "$installPrefix\bin\qtkeychain.dll")) 'The OS credential backend must not be shipped.'
     Assert-True (Test-Path -LiteralPath "$installPrefix\bin\qcoro.dll") 'QCoro runtime was not deployed.'
     Assert-True ((Get-Content -LiteralPath "$installPrefix\bin\libstdc++-6.dll" -Raw).Trim() -eq 'selected compiler runtime') 'The selected compiler runtime must replace the deployment tool runtime.'
     Assert-True (@($script:invocations | Where-Object { $_.Arguments -contains '-DRust_TOOLCHAIN=stable-x86_64-pc-windows-gnu' }).Count -eq 1) 'The GNU Rust toolchain must be passed explicitly.'
-    Assert-True (@($script:invocations | Where-Object { $_.Arguments -like '-DCMAKE_PROJECT_INCLUDE=*' }).Count -eq 0) 'MinGW already names QtKeychain libqt6keychain.dll.'
+    Assert-True (@($script:invocations | Where-Object { $_.Arguments -like '-DCMAKE_PROJECT_INCLUDE=*' }).Count -eq 0) 'No legacy credential-library overrides should be configured.'
     $firstConfigurations = @($script:configurations.Keys | Sort-Object)
     Invoke-WindowsBuild @parameters
-    Assert-True (@($script:invocations | Where-Object { $_.Name -eq 'git.exe' }).Count -eq 2) 'Rerunning must reuse dependency checkouts.'
+    Assert-True (@($script:invocations | Where-Object { $_.Name -eq 'git.exe' }).Count -eq 1) 'Rerunning must reuse dependency checkouts.'
     Assert-True (($firstConfigurations -join '|') -eq (@($script:configurations.Keys | Sort-Object) -join '|')) 'Rerunning must reuse build directories.'
     Assert-True (@($script:invocations | Where-Object { $_.Name -eq 'rustup.exe' -and $_.Arguments -contains 'install' }).Count -eq 1) 'Rerunning must reuse the installed Rust toolchain.'
 
@@ -160,12 +160,11 @@ $env:VCToolsRedistDir = Join-Path $PSScriptRoot '..\..\VC\Redist\MSVC\14.44'
     Invoke-WindowsBuild @parameters
     Assert-True ($script:msvcInitializations -eq 1) 'MSVC must initialize its developer environment.'
     $prefixArgument = @($script:invocations | ForEach-Object { $_.Arguments } | Where-Object { $_ -like '-DCMAKE_PROJECT_INCLUDE=*' })
-    Assert-True ($prefixArgument.Count -eq 1) 'QtKeychain must be built as libqt6keychain.dll with MSVC, or windeployqt takes it for part of Qt.'
-    Assert-True ((Get-Content -LiteralPath ($prefixArgument[0] -replace '^-DCMAKE_PROJECT_INCLUDE=', '') -Raw).Trim() -eq 'set(CMAKE_SHARED_LIBRARY_PREFIX lib)') 'The MSVC QtKeychain build must use the lib prefix.'
+    Assert-True ($prefixArgument.Count -eq 0) 'MSVC no longer needs a legacy credential-library override.'
     Assert-True ((Get-Content -LiteralPath "$installPrefix\bin\vcruntime140.dll" -Raw).Trim() -eq 'msvc runtime') 'The MSVC runtime must be bundled beside the executable.'
     Assert-True (-not (Test-Path -LiteralPath "$installPrefix\bin\vc_redist.x64.exe")) 'The MSVC runtime installer must not be shipped.'
     Assert-True (@($script:invocations | Where-Object { $_.Arguments -contains '-DRust_TOOLCHAIN=stable-x86_64-pc-windows-msvc' }).Count -eq 1) 'MSVC must select its matching Rust toolchain.'
-    Assert-True ($script:configurations.Count -eq 6) 'Different Qt/compiler kits must have separate build directories.'
+    Assert-True ($script:configurations.Count -eq 4) 'Different Qt/compiler kits must have separate build directories.'
     Assert-True ($env:PATH -eq $originalPath) 'The original PATH must be restored.'
     Assert-True ($env:CARGO_BUILD_JOBS -eq $originalCargoJobs) 'The original Cargo parallelism must be restored.'
     Assert-True (-not (Test-Path Env:SWIFTIFY_TEST_VS_ENVIRONMENT)) 'Developer shell environment changes must not leak into the caller.'

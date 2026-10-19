@@ -94,7 +94,7 @@ packages. A pushed version tag publishes them under
 
 - **windows.** unzip it anywhere and run `bin\swiftify.exe`.
 - **linux.** unpack it anywhere and run `bin/swiftify`. it brings its own Qt, but needs
-  alsa and libsecret, which pretty much every desktop already has.
+  the system audio libraries described below.
 - **macOS.** choose your architecture, unzip and move `Swiftify.app` to a writable
   application directory. Ad-hoc builds are not notarized; macOS may require approval.
 
@@ -160,18 +160,17 @@ of the player-bar and track-list meters. The same switch is available at the top
 of the full-screen Sound panel. The global visualizer switch still takes priority.
 Decorative progress-bar shapes and the live background have their own settings.
 
-### macOS Keychain prompts
+### Saved logins without Keychain
 
-Spotify logins stay in the OS Keychain. The app caches them only in process memory,
-skips identical secure-store writes and restores a session once, not each time its
-window is raised.
+From 0.17.0, Spotify logins are stored in an **encrypted file**, not Keychain or
+another OS credential backend. Create a separate vault password (at least 12
+characters) and sign in to Spotify once again. Old Keychain entries are left
+untouched; the app never attempts to read them. Each launch asks for the vault
+password once; reopening the window and refreshing tokens do not ask again.
 
-macOS asks again whenever the app's signature changes. The release packages are
-signed with one certificate of this repository's own, so after you choose **Always
-Allow** once they, and every update the app installs, keep their access. A build you
-make yourself is signed ad hoc and looks like a new app each time; give it the same
-identity with `-DSWIFTIFY_CODESIGN_IDENTITY` (see [docs/updates.md](docs/updates.md)).
-No token is moved into plaintext preferences and no keychain access is widened.
+The key stays only in memory. There is no plaintext fallback or forgotten-password
+recovery. OTA updates preserve the encrypted file. See [credential vault details,
+migration, limitations and recovery](docs/credential-vault.md).
 
 ### Portable builds and updates
 
@@ -203,7 +202,7 @@ is still required.
 ### Build requirements
 
 - Qt 6.9 or newer: Qt Base, Qt Declarative and Qt Shader Tools, and on linux Qt WebSockets (for soloist)
-- QtKeychain and QCoro 0.10 or newer, both built for Qt 6
+- QCoro 0.10 or newer, built for Qt 6
 - CMake 3.24 or newer, Ninja, and a C++20 compiler
 - Rust (stable, from [rustup](https://rustup.rs))
 
@@ -219,11 +218,11 @@ build, drop that and run `ctest --test-dir build` if u want them.
 u need [homebrew](https://brew.sh) and apple's command line tools (`xcode-select --install`, or full xcode). then:
 
 ```sh
-brew install qtbase qtdeclarative qtshadertools qtkeychain qcoro6 cmake ninja
+brew install qtbase qtdeclarative qtshadertools qcoro6 cmake ninja
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 source "$HOME/.cargo/env"
 
-git clone https://github.com/shredos67/swiftify.git
+git clone https://github.com/ceoweb20/swiftify.git
 cd swiftify
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
 cmake --build build
@@ -239,7 +238,7 @@ dark and tinted looks; with just the command line tools it's built from the PNGs
 on arch either build a proper package, which installs to `/usr`:
 
 ```sh
-git clone https://github.com/shredos67/swiftify.git
+git clone https://github.com/ceoweb20/swiftify.git
 cd swiftify/packaging/arch
 makepkg -si
 ```
@@ -247,9 +246,9 @@ or use cmake:
 
 ```sh
 # replace with your package manager if not on arch
-sudo pacman -S --needed git qt6-base qt6-declarative qt6-shadertools qt6-wayland qt6-websockets qtkeychain-qt6 qcoro libpulse alsa-lib openssl cmake ninja rust pkgconf
+sudo pacman -S --needed git qt6-base qt6-declarative qt6-shadertools qt6-wayland qt6-websockets qcoro libpulse alsa-lib openssl cmake ninja rust pkgconf
 
-git clone https://github.com/shredos67/swiftify.git
+git clone https://github.com/ceoweb20/swiftify.git
 cd swiftify
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DCMAKE_INSTALL_PREFIX="$HOME/.local"
 cmake --build build
@@ -261,11 +260,11 @@ compatibility patches automatically:
 
 ```sh
 sudo apt-get install git qt6-base-dev qt6-declarative-dev qt6-shader-baker \
-    qt6-shadertools-dev qt6-wayland qt6-websockets-dev qtkeychain-qt6-dev qcoro-qt6-dev \
+    qt6-shadertools-dev qt6-wayland qt6-websockets-dev qcoro-qt6-dev \
     libpulse-dev libasound2-dev libssl-dev cmake ninja-build pkg-config
 # install rust from https://rustup.rs if you dont have it
 
-git clone https://github.com/shredos67/swiftify.git
+git clone https://github.com/ceoweb20/swiftify.git
 cd swiftify
 ./tools/build-debian.sh
 ```
@@ -273,21 +272,20 @@ cd swiftify
 or with `--install-deps` to install the dependencies automatically:
 
 ```sh
-git clone https://github.com/shredos67/swiftify.git
+git clone https://github.com/ceoweb20/swiftify.git
 cd swiftify
 ./tools/build-debian.sh --install-deps
 ```
 
-anywhere else, install the same reqs (Qt 6.9+ with D-Bus, OpenGL and Wayland, QtKeychain
-and QCoro for Qt 6, libpulse, plus the ALSA, OpenSSL and pkg-config dev packages), then
+anywhere else, install the same reqs (Qt 6.9+ with D-Bus, OpenGL and Wayland,
+QCoro for Qt 6, libpulse, plus the ALSA, OpenSSL and pkg-config dev packages), then
 run the cmake commands above. if you have Qt 6.8, use `tools/build-debian.sh` which
 applies the necessary compatibility patches.
 
 `cmake --install` drops `swiftify` in `~/.local/bin` (make sure that's on your `PATH`)
 and the desktop entry, icons and fonts in `~/.local/share`. 
 
-your login gets saved in the secret service through QtKeychain, so u need something
-providing one: gnome-keyring, kwallet or keepassxc.
+Logins use the password-protected vault on Linux too; no secret-service daemon is needed.
 
 on linux it also hooks into MPRIS (media keys, `playerctl`, shell media widgets),
 logind (pauses before the machine sleeps), pipewire/pulseaudio device changes, and
@@ -305,7 +303,7 @@ workload, or Qt for *MinGW 64-bit* with its matching MinGW toolchain.
 then run this in Windows PowerShell:
 
 ```powershell
-git clone https://github.com/shredos67/swiftify.git
+git clone https://github.com/ceoweb20/swiftify.git
 Set-Location swiftify
 .\tools\build-windows.ps1
 ```

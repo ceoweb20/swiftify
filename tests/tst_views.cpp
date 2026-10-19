@@ -14,6 +14,7 @@
 #include "render/SpectrumItem.h"
 #include "render/SpectrumSource.h"
 #include "spotify/CredentialStore.h"
+#include "spotify/CredentialVault.h"
 #include "spotify/OAuthFlow.h"
 #include "spotify/SpotifySession.h"
 #include "theme/PlayerStyle.h"
@@ -162,6 +163,59 @@ private:
     using Rig = swiftify::testing::ViewRig;
 
 private slots:
+    void vaultPasswordDialog_data()
+    {
+        QTest::addColumn<bool>("existing");
+        QTest::newRow("create") << false;
+        QTest::newRow("unlock") << true;
+    }
+
+    void vaultPasswordDialog()
+    {
+        QFETCH(bool, existing);
+        QTemporaryDir directory;
+        const QString path = directory.filePath(QStringLiteral("logins.vault"));
+        const QString secret = QStringLiteral("fixture vault password");
+        if (existing) {
+            CredentialVault initial(path);
+            initial.unlock(secret);
+            QTRY_VERIFY_WITH_TIMEOUT(initial.unlocked(), 15000);
+        }
+        Rig rig;
+        rig.settings.setPerformanceMode(true);
+        CredentialVault vault(path);
+        QQmlComponent component(&rig.engine);
+        component.setData("import QtQuick\nimport Swiftify\n"
+                          "Item { id: host; width: 526; height: 410; property alias dialog: gate;"
+                          " VaultDialog { id: gate; parent: host } }", QUrl());
+        std::unique_ptr<QObject> object(component.create());
+        QVERIFY2(object, qPrintable(component.errorString()));
+        qobject_cast<QQuickItem *>(object.get())->setParentItem(rig.window->contentItem());
+        auto *dialog = object->property("dialog").value<QObject *>();
+        QVERIFY(dialog);
+        QTRY_VERIFY(dialog->property("opened").toBool());
+        rig.render();
+        QVERIFY(dialog->property("height").toReal() <= 410);
+        auto *password = object->findChild<QQuickItem *>(QStringLiteral("vaultPassword"));
+        auto *confirmation = object->findChild<QQuickItem *>(QStringLiteral("vaultPasswordConfirmation"));
+        auto *unlock = object->findChild<QQuickItem *>(QStringLiteral("unlockCredentialVault"));
+        QVERIFY(password); QVERIFY(confirmation); QVERIFY(unlock);
+        QCOMPARE(password->property("echoMode").toInt(), 2); // TextInput.Password
+        QCOMPARE(password->property("passwordMaskDelay").toInt(), 0);
+        QCOMPARE(confirmation->isVisible(), !existing);
+        QVERIFY(!unlock->isEnabled());
+        password->setProperty("text", secret);
+        if (!existing) confirmation->setProperty("text", secret);
+        Rig::settle();
+        QVERIFY(unlock->isEnabled());
+        QVERIFY(QMetaObject::invokeMethod(unlock, "clicked"));
+        QCOMPARE(password->property("text").toString(), QString());
+        QCOMPARE(confirmation->property("text").toString(), QString());
+        QTRY_VERIFY_WITH_TIMEOUT(vault.unlocked(), 15000);
+        QTRY_VERIFY(!dialog->property("visible").toBool());
+        QVERIFY(vault.error().isEmpty());
+    }
+
     void languageSelectionRetranslatesTheSettings()
     {
         Rig rig;

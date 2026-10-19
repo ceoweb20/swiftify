@@ -22,15 +22,11 @@ dependency() {
     cmake --build "$WORK/$name" --parallel "$JOBS"
     cmake --install "$WORK/$name"
 }
-dependency qtkeychain https://github.com/frankosterfeld/qtkeychain.git 0.17.0 \
-    -DBUILD_WITH_QT5=OFF -DBUILD_TEST_APPLICATION=OFF -DBUILD_TRANSLATIONS=OFF
 dependency qcoro https://github.com/qcoro/qcoro.git v0.13.0 \
     -DUSE_QT_VERSION=6 -DQCORO_WITH_QTDBUS=OFF -DQCORO_WITH_QTWEBSOCKETS=OFF -DQCORO_WITH_QTQUICK=OFF \
     -DQCORO_WITH_QML=OFF -DQCORO_WITH_QTTEST=OFF -DQCORO_BUILD_EXAMPLES=OFF
-# a signing identity that stays the same from build to build (a certificate of
-# the project's own is enough) gives the app the same designated requirement each
-# time, which is what the keychain checks before it asks again. an ad hoc
-# signature is the build's own hash, so every build and every update is a stranger.
+# Keep a consistent release identity. Spotify logins use the encrypted vault,
+# not the OS credential store, regardless of how this bundle is signed.
 IDENTITY="${SWIFTIFY_CODESIGN_IDENTITY:--}"
 cmake -S "$SOURCE" -B "$WORK/app" "${common[@]}" \
     ${SWIFTIFY_UPDATE_PUBLIC_KEY:+"-DSWIFTIFY_UPDATE_PUBLIC_KEY=$SWIFTIFY_UPDATE_PUBLIC_KEY"} -DSWIFTIFY_COMPILE_APP_ICON=OFF \

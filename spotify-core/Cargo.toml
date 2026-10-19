@@ -4,6 +4,11 @@ version = "0.1.8"
 edition = "2024"
 
 [dependencies]
+argon2 = { version = "0.5", features = ["zeroize"] }
+base64 = "0.22"
+chacha20poly1305 = "0.10"
+getrandom = "0.2"
+zeroize = "1.8"
 env_logger = "0.11"
 # the dealer's message streams (reporter.rs)
 futures-util = "0.3"

@@ -27,6 +27,17 @@ SwiftifyCore *swiftify_core_new(void);
 void swiftify_core_free(SwiftifyCore *core);
 void swiftify_string_free(char *value);
 
+/* Opaque password-derived key, kept in memory only; no OS credential store. */
+typedef struct SwiftifyVault SwiftifyVault;
+/* Open an encrypted vault (empty encoded means create). Derivation is expensive:
+ * call from a worker thread. plaintext/error are owned strings, initially null. */
+SwiftifyVault *swiftify_vault_open(const char *password, const char *encoded,
+                                  char **plaintext, char **error);
+char *swiftify_vault_seal(const SwiftifyVault *vault, const char *plaintext, char **error);
+void swiftify_vault_free(SwiftifyVault *vault);
+/* Wipe and free a decrypted string instead of using swiftify_string_free. */
+void swiftify_secret_free(char *value);
+
 int swiftify_core_completion_fd(const SwiftifyCore *core);
 /* where there is no descriptor (windows: it is -1), callback(context) is
  * called from the finishing thread instead each time a completion is queued;

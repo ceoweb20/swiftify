@@ -7,8 +7,8 @@
 #   ./tools/build-linux-tarball.sh --qt ~/Qt/6.12.0/gcc_64 --out dist --jobs 8
 #
 # needs cmake, ninja, git, curl, a c++20 compiler (CC and CXX are used when
-# set), rust from rustup, and the dev packages for libpulse, alsa, openssl and
-# libsecret. the tarball still needs alsa, libsecret, libpulse, glib, dbus and
+# set), rust from rustup, and the dev packages for libpulse, alsa and openssl.
+# the tarball still needs alsa, libpulse, glib, dbus and
 # systemd's libraries on the machine it runs on, every desktop has them
 
 set -euo pipefail
@@ -77,7 +77,7 @@ common=(-G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF "-DCMAKE_PREFIX_
 [[ -n "${CC:-}" ]] && common+=("-DCMAKE_C_COMPILER=$CC")
 [[ -n "${CXX:-}" ]] && common+=("-DCMAKE_CXX_COMPILER=$CXX")
 
-# qtkeychain and qcoro are built against the same qt, at tags known to work
+# qcoro is built against the same qt, at a tag known to work
 build_dependency() {
     local name="$1" url="$2" tag="$3"
     shift 3
@@ -89,8 +89,6 @@ build_dependency() {
     cmake --build "$WORK/$name" --parallel "$JOBS"
     cmake --install "$WORK/$name"
 }
-build_dependency qtkeychain https://github.com/frankosterfeld/qtkeychain.git 0.17.0 \
-    -DBUILD_WITH_QT5=OFF -DBUILD_WITH_QT6=ON -DBUILD_TEST_APPLICATION=OFF -DBUILD_TRANSLATIONS=OFF
 build_dependency qcoro https://github.com/qcoro/qcoro.git v0.13.0 \
     -DUSE_QT_VERSION=6 -DQCORO_WITH_QTDBUS=OFF -DQCORO_WITH_QTWEBSOCKETS=OFF -DQCORO_WITH_QTQUICK=OFF \
     -DQCORO_WITH_QML=OFF -DQCORO_WITH_QTTEST=OFF -DQCORO_BUILD_EXAMPLES=OFF -DBUILD_TESTING=OFF
@@ -120,11 +118,9 @@ export QML_SOURCES_PATHS="$SOURCE/qml"
 export EXTRA_PLATFORM_PLUGINS="libqwayland.so"
 export LD_LIBRARY_PATH="$DEPS/lib:$QT/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 # the linuxdeploy plugin is found next to linuxdeploy, by its name.
-# qtkeychain is named outright, linuxdeploy's own pass does not look in
-# LD_LIBRARY_PATH and drops a library it cannot find without a word
 PATH="$WORK/tools:$PATH" "$WORK/tools/linuxdeploy-x86_64.AppImage" \
     --appdir "$APPDIR" --executable "$APPDIR/usr/bin/swiftify" \
-    --library "$DEPS/lib/libqt6keychain.so.1" "${wayland[@]}" --plugin qt
+    "${wayland[@]}" --plugin qt
 
 # the tarball is the usr tree: bin, lib, plugins, qml and share. the fonts are
 # found from bin/../share and qt from bin/qt.conf, so it runs from anywhere
@@ -134,8 +130,7 @@ PATH="$WORK/tools:$PATH" "$WORK/tools/linuxdeploy-x86_64.AppImage" \
 
 # what the desktop itself is built on comes from the machine, never the
 # build's ubuntu. an old libsystemd or glib in lib/ is found first by the
-# machine's own libraries too: libsecret then fails to load and no login is
-# kept, and two copies of a library in one process can corrupt its heap
+# machine's own libraries too; two copies in one process can corrupt its heap
 system_libraries=(
     'libsystemd.so*' 'libglib-2.0.so*' 'libgthread-2.0.so*' 'libgio-2.0.so*' 'libgobject-2.0.so*'
     'libdbus-1.so*' 'libgcrypt.so*' 'libapparmor.so*' 'libcap.so*' 'libffi.so*' 'libpcre.so*'

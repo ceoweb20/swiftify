@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.24)
 
 project(Swiftify
-    VERSION 0.16.2
+    VERSION 0.17.0
     DESCRIPTION "A native Spotify client"
     LANGUAGES C CXX)
 
@@ -74,7 +74,6 @@ endif()
 if(SWIFTIFY_SOLOIST)
     find_package(Qt6 6.9 REQUIRED COMPONENTS WebSockets)
 endif()
-find_package(Qt6Keychain REQUIRED)
 if(WIN32)
     find_package(Qt6 6.9 REQUIRED COMPONENTS Widgets)
 endif()
@@ -314,7 +313,6 @@ endif()
 target_link_libraries(swiftify_app PUBLIC
     Qt6::Core Qt6::Gui Qt6::Network Qt6::Concurrent Qt6::Qml Qt6::Quick Qt6::QuickControls2
     QCoro6::Core QCoro6::Network
-    qt6keychain
     material_color_utilities
     spotify_core)
 
@@ -489,9 +487,8 @@ if(APPLE)
     # and the font in with it, so the whole app checks out. a folder synced by
     # icloud tags files with finder and file-provider attributes, which
     # codesign refuses to seal, so they go first.
-    # ad hoc by default. an identity of one's own keeps the signature's
-    # requirement the same from build to build, so the keychain hands over
-    # the stored logins without asking again after each one
+    # Ad hoc by default; release builds may use a consistent signing identity.
+    # Credentials use the encrypted vault and do not depend on this identity.
     set(SWIFTIFY_CODESIGN_IDENTITY "-" CACHE STRING "codesign identity for the app bundle; - signs ad hoc")
     if(SWIFTIFY_BUILD_UPDATER)
         add_custom_command(TARGET swiftify POST_BUILD

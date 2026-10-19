@@ -110,7 +110,7 @@ public:
 
     /// reads the saved logins and reconnects them. called once at launch.
     void restoreSavedSessions();
-    /// waits, briefly, for logins still being written to the keychain: a
+    /// waits, briefly, for logins still being written to the credential store: a
     /// refresh token spotify rotated and nobody kept is a login lost
     void flushCredentialSaves();
     /// how a login page is opened without taking the screen; tests catch it

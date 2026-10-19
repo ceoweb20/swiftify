@@ -13,6 +13,7 @@
 #include "playback/PlaybackController.h"
 #include "render/SpectrumSource.h"
 #include "spotify/CredentialStore.h"
+#include "spotify/CredentialVault.h"
 #include "spotify/SpotifySession.h"
 #include "system/SingleInstance.h"
 #include "system/Updates.h"
@@ -297,8 +298,8 @@ int main(int argc, char *argv[])
     applyStreaming();
     QObject::connect(&settings, &Settings::streamingQualityChanged, &core, applyStreaming);
     QObject::connect(&settings, &Settings::songCacheMegabytesChanged, &core, applyStreaming);
-    KeychainCredentialStore keychain;
-    CachedCredentialStore credentials(&keychain);
+    CredentialVault vault(paths::dataDirectory() + QStringLiteral("/credentials/logins.vault"));
+    CachedCredentialStore credentials(&vault);
     SpotifySession session(&core, &credentials, &network, &errors);
     PlaybackController player(&core, &session, &settings, &errors);
     DiscordPresence discord(&player, &settings);
@@ -315,7 +316,7 @@ int main(int argc, char *argv[])
     installLater.setSingleShot(true);
     installLater.setInterval(20'000);
     const auto canInstallNow = [&] {
-        return updates.available() && updates.installAutomatically() && !updates.busy() && !player.isPlaying();
+        return vault.unlocked() && updates.available() && updates.installAutomatically() && !updates.busy() && !player.isPlaying();
     };
     const auto installWhenIdle = [&] {
         if (canInstallNow()) {
@@ -328,6 +329,7 @@ int main(int argc, char *argv[])
         if (canInstallNow()) updates.install();
     });
     QObject::connect(&updates, &Updates::updateFound, &app, installWhenIdle);
+    QObject::connect(&vault, &CredentialVault::changed, &app, installWhenIdle);
     QObject::connect(&player, &PlaybackController::playingChanged, &app, installWhenIdle);
     updates.scheduleAutomaticCheck();
     ArtworkCache artwork(&network);

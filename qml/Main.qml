@@ -48,6 +48,7 @@ ApplicationWindow {
         function onPanelsChanged() { window.closeCrowdedPanels() }
     }
     title: "Swiftify"
+    VaultDialog {}
     // on linux the app draws its whole frame. on macos the content runs under
     // a transparent title bar that keeps the traffic lights and nothing else.
     flags: App.macOS ? Qt.Window | Qt.ExpandedClientAreaHint | Qt.NoTitleBarBackgroundHint
