@@ -145,6 +145,12 @@ QtObject {
         Library.goToArtist(song)
     }
 
+    /// one of a song's artists, as chosen from the names on the player
+    function openArtist(artist: artist) {
+        immersiveOpen = false
+        Library.selectArtist(artist)
+    }
+
     /// connecting for the first time (SetupView) is under way: it shows
     /// until playback is connected as well as the library, not only the
     /// library. it begins only once the saved logins have been read, so a

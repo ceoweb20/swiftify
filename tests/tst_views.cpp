@@ -265,6 +265,106 @@ private slots:
         QTest::newRow("audio") << QStringLiteral("audio");
     }
 
+    void everyArtistOfASongOpensItsOwnPage_data()
+    {
+        QTest::addColumn<QString>("view");
+        QTest::addColumn<QString>("listName");
+        QTest::newRow("bar") << QStringLiteral("PlayerBar") << QStringLiteral("playerArtists");
+        QTest::newRow("fullscreen") << QStringLiteral("ImmersivePlayer") << QStringLiteral("immersiveArtists");
+    }
+
+    void everyArtistOfASongOpensItsOwnPage()
+    {
+        QFETCH(QString, view);
+        QFETCH(QString, listName);
+        Rig rig;
+        rig.settings.setPerformanceMode(true);
+        rig.connectPlayback();
+        Song song;
+        song.name = QStringLiteral("Together");
+        song.artists = QStringLiteral("First, Second, Third");
+        song.uri = QStringLiteral("spotify:track:0000000000000000000009");
+        song.durationMs = 200'000;
+        for (const char *name : {"First", "Second", "Third"}) {
+            Artist artist;
+            artist.name = QString::fromLatin1(name);
+            artist.id = QStringLiteral("id-") + artist.name.toLower();
+            artist.uri = QStringLiteral("spotify:artist:") + artist.id;
+            song.artistItems.append(artist);
+        }
+        rig.player.play(song, {song});
+        Rig::settle();
+        const auto call = rig.core.take(QStringLiteral("playTrack"));
+        QVERIFY(call);
+        call->succeed();
+        Rig::settle();
+
+        const auto page = rig.show(view);
+        QVERIFY(page);
+        auto *names = page->findChild<QQuickItem *>(listName);
+        QVERIFY(names);
+        QVERIFY(names->isVisible());
+        // one link for each artist, in the song's order
+        QList<QQuickItem *> links;
+        const std::function<void(QQuickItem *)> collect = [&](QQuickItem *parent) {
+            for (QQuickItem *item : parent->childItems()) {
+                const QString text = item->property("text").toString();
+                if (item->isVisible() && (text == QLatin1StringView("First") || text == QLatin1StringView("Second")
+                                          || text == QLatin1StringView("Third"))) {
+                    links.append(item);
+                }
+                collect(item);
+            }
+        };
+        collect(names);
+        std::sort(links.begin(), links.end(), [&](QQuickItem *a, QQuickItem *b) {
+            return a->mapToItem(names, QPointF()).x() < b->mapToItem(names, QPointF()).x();
+        });
+        QCOMPARE(links.size(), 3);
+        QCOMPARE(links.at(0)->property("text").toString(), QStringLiteral("First"));
+        QCOMPARE(links.at(2)->property("text").toString(), QStringLiteral("Third"));
+
+        for (int index : {1, 0, 2}) {
+            QQuickItem *link = links.at(index);
+            QTest::mouseClick(rig.window.get(), Qt::LeftButton, Qt::NoModifier,
+                              link->mapToScene(QPointF(link->width() / 2, link->height() / 2)).toPoint());
+            Rig::settle();
+            QCOMPARE(rig.library.currentArtist().id, song.artistItems.at(index).id);
+            QCOMPARE(rig.library.page(), LibraryStore::Page::Artist);
+        }
+    }
+
+    void aSongWithoutArtistIdsShowsItsNamesAsOneLine()
+    {
+        Rig rig;
+        rig.settings.setPerformanceMode(true);
+        rig.connectPlayback();
+        Song song;
+        song.name = QStringLiteral("Old");
+        song.artists = QStringLiteral("Someone, Else");
+        song.uri = QStringLiteral("spotify:track:0000000000000000000008");
+        song.durationMs = 200'000;
+        rig.player.play(song, {song});
+        Rig::settle();
+        const auto call = rig.core.take(QStringLiteral("playTrack"));
+        QVERIFY(call);
+        call->succeed();
+        Rig::settle();
+        const auto bar = rig.show(QStringLiteral("PlayerBar"));
+        QVERIFY(bar);
+        auto *names = bar->findChild<QQuickItem *>(QStringLiteral("playerArtists"));
+        QVERIFY(names);
+        bool shown = false;
+        const std::function<void(QQuickItem *)> look = [&](QQuickItem *parent) {
+            for (QQuickItem *item : parent->childItems()) {
+                shown = shown || (item->isVisible() && item->property("text").toString() == song.artists);
+                look(item);
+            }
+        };
+        look(names);
+        QVERIFY(shown);
+    }
+
     void playerSaveButtons_data()
     {
         QTest::addColumn<QString>("view");

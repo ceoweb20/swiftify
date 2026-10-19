@@ -320,9 +320,18 @@ Item {
                         }
                     }
                 }
+                ArtistNames {
+                    objectName: "playerArtists"
+                    width: parent.width
+                    visible: Player.hasSong
+                    song: Player.currentSong
+                    color: root.scheme.onSurfaceVariant
+                    hoverColor: root.scheme.onSurface
+                }
                 StyledText {
                     width: parent.width
-                    text: Player.hasSong ? Player.currentSong.artists : qsTr("Choose something to play")
+                    visible: !Player.hasSong
+                    text: qsTr("Choose something to play")
                     elide: Text.ElideRight
                     font.pixelSize: Appearance.fontSize.smaller
                     color: root.scheme.onSurfaceVariant

@@ -225,14 +225,15 @@ Item {
                     anchors.horizontalCenter: parent.horizontalCenter
                     spacing: 5
 
-                    StyledText {
+                    ArtistNames {
+                        objectName: "immersiveArtists"
                         anchors.verticalCenter: parent.verticalCenter
                         width: Math.max(0, Math.min(implicitWidth, metadata.width - more.width - (saveSong.visible ? saveSong.width + 5 : 0) - 5))
-                        text: root.shownSong.artists
-                        elide: Text.ElideRight
-                        font.pixelSize: Appearance.fontSize.larger
-                        font.weight: Font.Medium
+                        song: root.shownSong
+                        pixelSize: Appearance.fontSize.larger
+                        weight: Font.Medium
                         color: Qt.rgba(1, 1, 1, 0.62)
+                        hoverColor: "white"
                     }
                     SaveSongButton {
                         id: saveSong

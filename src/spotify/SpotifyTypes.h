@@ -71,6 +71,8 @@ struct Song {
     Q_PROPERTY(bool isExplicit MEMBER isExplicit FINAL)
     Q_PROPERTY(QString albumId MEMBER albumId FINAL)
     Q_PROPERTY(QString albumUri MEMBER albumUri FINAL)
+    /// each artist of the song, for a link to every one of them
+    Q_PROPERTY(QList<swiftify::Artist> artistItems MEMBER artistItems FINAL)
     Q_PROPERTY(bool valid READ isValid FINAL)
 
 public:
