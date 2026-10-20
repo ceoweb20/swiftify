@@ -171,7 +171,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            g++-12 clang-18 ninja-build pkg-config \
+            g++-12 clang-15 ninja-build pkg-config \
             libpulse-dev libasound2-dev libssl-dev \
             libgl1-mesa-dev libegl1-mesa-dev libxkbcommon-dev libxkbcommon-x11-0 \
             libfontconfig1-dev libfreetype-dev libdbus-1-dev \
@@ -189,11 +189,12 @@ jobs:
 
       # clang held to gcc 12's standard library, so it still runs on older
       # distros. gcc 12 miscompiles some coroutines, and the tarball it built
-      # corrupted its heap on linux
+      # corrupted its heap on linux. ubuntu 22.04 has clang 15 at the most,
+      # upstream's clang 18 needs ubuntu 24.04
       - name: build
         env:
-          CC: clang-18
-          CXX: clang++-18
+          CC: clang-15
+          CXX: clang++-15
           CFLAGS: --gcc-install-dir=/usr/lib/gcc/x86_64-linux-gnu/12
           CXXFLAGS: --gcc-install-dir=/usr/lib/gcc/x86_64-linux-gnu/12
         run: ./tools/build-linux-tarball.sh --qt "$QT_ROOT_DIR" --out dist
