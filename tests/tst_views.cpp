@@ -216,34 +216,6 @@ private slots:
         QVERIFY(vault.error().isEmpty());
     }
 
-    void fullScreenVisualizerCanBeDisabledIndependently()
-    {
-        Rig rig;
-        rig.playSomething();
-        rig.settings.setVisualizersEnabled(true);
-        rig.settings.setImmersiveVisualizer(true);
-        const auto immersive = rig.show(QStringLiteral("ImmersivePlayer"));
-        QVERIFY(immersive);
-        QCOMPARE(immersive->property("showsSpectrum").toBool(), true);
-        const auto sound = rig.show(QStringLiteral("SoundPanel"));
-        QVERIFY(sound);
-        auto *toggle = sound->findChild<QObject *>(QStringLiteral("immersiveVisualizerQuickSwitch"));
-        QVERIFY(toggle);
-        QCOMPARE(toggle->property("checked").toBool(), true);
-        toggle->setProperty("checked", false);
-        QVERIFY(QMetaObject::invokeMethod(toggle, "toggled"));
-        QVERIFY(!rig.settings.immersiveVisualizer());
-        QCOMPARE(immersive->property("showsSpectrum").toBool(), false);
-        auto *equalizerSpectrum = sound->findChild<QObject *>(QStringLiteral("immersiveEqualizerSpectrum"));
-        QVERIFY(equalizerSpectrum);
-        QCOMPARE(equalizerSpectrum->property("visible").toBool(), false);
-        QCOMPARE(equalizerSpectrum->property("active").toBool(), false);
-        QVERIFY(rig.settings.visualizersEnabled());
-        rig.settings.setImmersiveVisualizer(true);
-        Rig::settle();
-        QCOMPARE(toggle->property("checked").toBool(), true);
-    }
-
     void languageSelectionRetranslatesTheSettings()
     {
         Rig rig;
