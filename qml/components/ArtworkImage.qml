@@ -89,7 +89,12 @@ Item {
     readonly property real squiggleMiddle: Math.min(width, height) / 2 - squiggleAmplitude - squiggleThickness / 2 - 0.75
     readonly property real effectiveRadius: circular ? Math.min(face.width, face.height) / 2 : radius
 
-    onSourceChanged: sourceChangedAt = Date.now()
+    onSourceChanged: {
+        sourceChangedAt = Date.now()
+        if (source.toString().length === 0) {
+            back.source = ""
+        }
+    }
 
     function artworkUrl(url: url): string {
         const text = url.toString()
@@ -183,9 +188,14 @@ Item {
             source: root.artworkUrl(root.source)
             sourceSize: Qt.size(root.pixelSize, root.pixelSize)
             onStatusChanged: {
+                if (status === Image.Error) {
+                    back.source = ""
+                    return
+                }
                 if (status !== Image.Ready) {
                     return
                 }
+
                 sweep.stop()
                 frontLayer.reveal = 1
                 // the same cover at a new size is simply there

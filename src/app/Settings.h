@@ -24,6 +24,7 @@ class Settings : public QObject {
     Q_PROPERTY(bool trackListVisualizer READ trackListVisualizer WRITE setTrackListVisualizer NOTIFY trackListVisualizerChanged FINAL)
     Q_PROPERTY(bool immersiveVisualizer READ immersiveVisualizer WRITE setImmersiveVisualizer NOTIFY immersiveVisualizerChanged FINAL)
     Q_PROPERTY(bool circularVisualizer READ circularVisualizer WRITE setCircularVisualizer NOTIFY circularVisualizerChanged FINAL)
+    Q_PROPERTY(bool continuousVisualizer READ continuousVisualizer WRITE setContinuousVisualizer NOTIFY continuousVisualizerChanged FINAL)
     /// the players' covers round, with their squiggle edge, while visualizers
     /// are off; with them on, the circular style rounds them
     Q_PROPERTY(bool roundArtwork READ roundArtwork WRITE setRoundArtwork NOTIFY roundArtworkChanged FINAL)
@@ -100,6 +101,9 @@ public:
     /// ring around round artwork instead of a band of bars
     bool circularVisualizer() const { return m_circularVisualizer; }
     void setCircularVisualizer(bool value);
+    /// the immersive band as one row from bass to treble instead of mirrored
+    bool continuousVisualizer() const { return m_continuousVisualizer; }
+    void setContinuousVisualizer(bool value);
     bool roundArtwork() const { return m_roundArtwork; }
     void setRoundArtwork(bool value);
     /// bars or wave. stored under its first name, from when it applied to the ring alone
@@ -180,6 +184,7 @@ signals:
     void trackListVisualizerChanged();
     void immersiveVisualizerChanged();
     void circularVisualizerChanged();
+    void continuousVisualizerChanged();
     void roundArtworkChanged();
     void visualizerShapeChanged();
     void visualizerSensitivityChanged();
@@ -222,6 +227,7 @@ private:
     bool m_trackListVisualizer = true;
     bool m_immersiveVisualizer = true;
     bool m_circularVisualizer = false;
+    bool m_continuousVisualizer = false;
     bool m_roundArtwork = false;
     QString m_visualizerShape = QStringLiteral("bars");
     double m_visualizerSensitivity = 1.0;

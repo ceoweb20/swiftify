@@ -73,6 +73,7 @@ struct Song {
     Q_PROPERTY(QString albumUri MEMBER albumUri FINAL)
     /// each artist of the song, for a link to every one of them
     Q_PROPERTY(QList<swiftify::Artist> artistItems MEMBER artistItems FINAL)
+    Q_PROPERTY(bool isPlayable MEMBER isPlayable FINAL)
     Q_PROPERTY(bool valid READ isValid FINAL)
 
 public:
@@ -90,6 +91,9 @@ public:
     QString albumId;
     QString albumUri;
     QList<Artist> artistItems;
+    /// false when spotify will not give this account the track. the queue
+    /// passes over it
+    bool isPlayable = true;
 
     bool isValid() const { return !uri.isEmpty(); }
     /// the same occurrence, not merely the same track

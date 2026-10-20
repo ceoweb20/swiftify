@@ -86,6 +86,7 @@ QJsonObject Song::toJson() const
     if (!albumId.isEmpty()) object.insert(QStringLiteral("albumID"), albumId);
     if (!albumUri.isEmpty()) object.insert(QStringLiteral("albumURI"), albumUri);
     if (!artistArray.isEmpty()) object.insert(QStringLiteral("artistItems"), artistArray);
+    if (!isPlayable) object.insert(QStringLiteral("isPlayable"), false);
     return object;
 }
 
@@ -101,6 +102,7 @@ Song Song::fromJson(const QJsonObject &object)
     song.isExplicit = object.value(QStringLiteral("isExplicit")).toBool();
     song.albumId = object.value(QStringLiteral("albumID")).toString();
     song.albumUri = object.value(QStringLiteral("albumURI")).toString();
+    song.isPlayable = object.value(QStringLiteral("isPlayable")).toBool(true);
     for (const QJsonValue &value : object.value(QStringLiteral("artistItems")).toArray()) {
         const Artist artist = Artist::fromJson(value.toObject());
         if (artist.isValid()) {

@@ -201,7 +201,7 @@ is still required.
 
 ### Build requirements
 
-- Qt 6.9 or newer: Qt Base, Qt Declarative and Qt Shader Tools, and on linux Qt WebSockets (for soloist)
+- Qt 6.10 or newer: Qt Base, Qt Declarative and Qt Shader Tools, and on linux Qt WebSockets (for soloist)
 - QCoro 0.10 or newer, built for Qt 6
 - CMake 3.24 or newer, Ninja, and a C++20 compiler
 - Rust (stable, from [rustup](https://rustup.rs))
@@ -255,7 +255,7 @@ cmake --build build
 cmake --install build
 ```
 
-on debian/ubuntu (or derivatives with Qt 6.8), use the build script that handles
+on debian/ubuntu (or derivatives with Qt 6.8 or 6.9), use the build script that handles
 compatibility patches automatically:
 
 ```sh
@@ -277,9 +277,9 @@ cd swiftify
 ./tools/build-debian.sh --install-deps
 ```
 
-anywhere else, install the same reqs (Qt 6.9+ with D-Bus, OpenGL and Wayland,
+anywhere else, install the same reqs (Qt 6.10+ with D-Bus, OpenGL and Wayland,
 QCoro for Qt 6, libpulse, plus the ALSA, OpenSSL and pkg-config dev packages), then
-run the cmake commands above. if you have Qt 6.8, use `tools/build-debian.sh` which
+run the cmake commands above. if you have Qt 6.8 or 6.9, use `tools/build-debian.sh` which
 applies the necessary compatibility patches.
 
 `cmake --install` drops `swiftify` in `~/.local/bin` (make sure that's on your `PATH`)
@@ -295,7 +295,7 @@ the tray. `-DSWIFTIFY_DESKTOP_INTEGRATION=OFF` turns those off.
 
 **because most Windows users cant even use their own OS, i made a script that handles building so it's as simple as possible :)**
 
-first install Qt 6.9+ with *Qt Shader Tools*, CMake and Ninja from the Qt online installer,
+first install Qt 6.10+ with *Qt Shader Tools*, CMake and Ninja from the Qt online installer,
 Rust from [rustup](https://rustup.rs), and Git. choose either Qt for *MSVC 2022 64-bit*
 with Visual Studio 2022 17.1+ (or Build Tools) and its *Desktop development with C++*
 workload, or Qt for *MinGW 64-bit* with its matching MinGW toolchain.
@@ -312,7 +312,7 @@ for a different Qt kit, toolchain location or install directory, pass overrides:
 
 ```powershell
 .\tools\build-windows.ps1 -QtPath 'C:\Qt\6.11.2\msvc2022_64'
-.\tools\build-windows.ps1 -QtPath 'C:\Qt\6.9.3\mingw_64' -MingwPath 'C:\Qt\Tools\mingw1310_64\bin' -InstallPrefix "$env:LOCALAPPDATA\Programs\Swiftify"
+.\tools\build-windows.ps1 -QtPath 'C:\Qt\6.10.3\mingw_64' -MingwPath 'C:\Qt\Tools\mingw1310_64\bin' -InstallPrefix "$env:LOCALAPPDATA\Programs\Swiftify"
 ```
 
 adjust the example paths to your installed versions, MinGW must match your Qt

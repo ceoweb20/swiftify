@@ -33,7 +33,7 @@ done
 fail() { echo "error, $1" >&2; exit 1; }
 
 [[ "$(uname -s)" == Linux && "$(uname -m)" == x86_64 ]] || fail "this builds linux x86_64 only"
-[[ -n "$QT" ]] || fail "pass --qt with the path of a qt 6.9 or newer gcc_64 kit"
+[[ -n "$QT" ]] || fail "pass --qt with the path of a qt 6.10 or newer gcc_64 kit"
 QT="$(cd "$QT" && pwd)"
 [[ -x "$QT/bin/qmake" ]] || fail "no qmake in $QT/bin, pass the gcc_64 folder of the kit"
 for tool in cmake ninja git curl cargo; do

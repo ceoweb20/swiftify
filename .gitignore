@@ -5,7 +5,7 @@
 # bench_frames runs in (docs/perf.md)
 build/
 build-*/
-# prebuilt packages (tools/build-linux-tarball.sh)
+# prebuilt packages (tools/build-linux-tarball.sh, tools/build-macos-dmg.sh)
 dist/
 
 # the core's own cargo builds

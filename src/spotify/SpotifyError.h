@@ -29,6 +29,8 @@ public:
         Core,
         /// the core gave up on a request because a newer one replaced it
         Superseded,
+        /// spotify will not give this account the track
+        Unavailable,
     };
 
     SpotifyError(Kind kind, QString message, int retryAfterSeconds = -1, int httpStatus = 0)

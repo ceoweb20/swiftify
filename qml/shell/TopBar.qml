@@ -30,6 +30,16 @@ Item {
         }
     }
 
+    function openCatalogueSearch() {
+        if (Library.page !== Library.Page.Search) {
+            Library.showSearch();
+        }
+
+        //callLater to make sure focus works after page transition
+        search.focusField();
+        Qt.callLater(search.focusField);
+    }
+
     implicitHeight: Appearance.sizes.topBarHeight
 
     DragHandler {

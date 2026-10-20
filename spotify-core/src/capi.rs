@@ -796,6 +796,14 @@ mod tests {
     }
 
     #[test]
+    fn the_header_names_the_unavailable_message() {
+        // the front end skips a track spotify will not play by it
+        let header = include_str!("../include/swiftify_core.h");
+        let define = format!("#define SWIFTIFY_CORE_UNAVAILABLE \"{}\"", crate::UNAVAILABLE);
+        assert!(header.contains(&define));
+    }
+
+    #[test]
     fn null_handles_are_harmless() {
         assert_eq!(unsafe { swiftify_core_completion_fd(ptr::null()) }, -1);
         assert!(!unsafe { swiftify_core_session_is_valid(ptr::null()) });

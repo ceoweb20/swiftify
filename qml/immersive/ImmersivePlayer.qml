@@ -404,6 +404,7 @@ FocusScope {
         height: immersiveLayout.spectrumHeight
         kind: SpectrumView.Immersive
         wave: Settings.visualizerShape === "wave"
+        continuous: Settings.continuousVisualizer
         sensitivity: Settings.visualizerSensitivity
         active: Player.playing && root.showsSpectrum
         opacity: !root.showsSpectrum ? 0 : (root.usesPanelLayout ? 0.74 : 1)

@@ -126,6 +126,7 @@ T.AbstractButton {
             anchors.verticalCenter: parent.verticalCenter
             width: 44
             height: 44
+            opacity: root.song.isPlayable ? 1 : 0.38
 
             ArtworkImage {
                 anchors.fill: parent
@@ -176,6 +177,7 @@ T.AbstractButton {
             anchors.rightMargin: 8
             anchors.verticalCenter: parent.verticalCenter
             spacing: 3
+            opacity: root.song.isPlayable ? 1 : 0.38
 
             Row {
                 width: parent.width

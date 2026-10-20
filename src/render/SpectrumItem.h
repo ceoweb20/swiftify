@@ -23,6 +23,8 @@ class SpectrumItem : public QQuickItem {
 
     Q_PROPERTY(Kind kind READ kind WRITE setKind NOTIFY styleChanged FINAL)
     Q_PROPERTY(bool wave READ isWave WRITE setWave NOTIFY styleChanged FINAL)
+    /// an immersive band in one row instead of mirrored
+    Q_PROPERTY(bool continuous READ isContinuous WRITE setContinuous NOTIFY styleChanged FINAL)
     Q_PROPERTY(bool active READ isActive WRITE setActive NOTIFY activeChanged FINAL)
     Q_PROPERTY(qreal sensitivity READ sensitivity WRITE setSensitivity NOTIFY styleChanged FINAL)
     Q_PROPERTY(bool suspended READ isSuspended WRITE setSuspended NOTIFY suspendedChanged FINAL)
@@ -48,6 +50,8 @@ public:
     void setKind(Kind kind);
     bool isWave() const { return m_wave; }
     void setWave(bool wave);
+    bool isContinuous() const { return m_continuous; }
+    void setContinuous(bool continuous);
     bool isActive() const { return m_active; }
     void setActive(bool active);
     qreal sensitivity() const { return m_sensitivity; }
@@ -120,6 +124,7 @@ private:
 
     Kind m_kind = Kind::Compact;
     bool m_wave = false;
+    bool m_continuous = false;
     bool m_active = false;
     qreal m_sensitivity = 1;
     bool m_suspended = false;

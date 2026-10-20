@@ -154,6 +154,17 @@ private slots:
             QVERIFY(std::abs(levels[index] - levels[levels.size() - 1 - index]) < 0.001f);
         }
 
+        // a continuous band keeps its bars, bass on the left
+        item.setContinuous(true);
+        QCOMPARE(item.levels().size(), 48);
+        QCOMPARE(item.style().layout, SpectrumStyle::Layout::Ascending);
+        for (int frame = 0; frame < 40; ++frame) {
+            item.advance(1.0 / 60);
+        }
+        QVERIFY(item.levels().first() < item.levels().last());
+        item.setContinuous(false);
+        QCOMPARE(item.style().layout, SpectrumStyle::Layout::Mirrored);
+
         // garbage stays finite
         const float garbage[] = {std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity(), -1, 2};
         source.publish(garbage, 4);

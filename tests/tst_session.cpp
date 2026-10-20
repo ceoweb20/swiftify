@@ -858,6 +858,22 @@ private slots:
         QCOMPARE(description("rock &roll; &bogus; a&b"), QStringLiteral("rock &roll; &bogus; a&b"));
     }
 
+    void aTrackSaysWhetherItWillPlay()
+    {
+        const auto parse = [](const char *object) {
+            return json::track(QJsonDocument::fromJson(object).object());
+        };
+        QVERIFY(parse(R"({"type":"track","uri":"spotify:track:a","name":"A"})")->isPlayable);
+        const auto blocked = parse(R"({"type":"track","uri":"spotify:track:a","name":"A","is_playable":false})");
+        QVERIFY(!blocked->isPlayable);
+        QVERIFY(!Song::fromJson(blocked->toJson()).isPlayable);
+        QVERIFY(Song::fromJson(QJsonObject {{QStringLiteral("uri"), QStringLiteral("spotify:track:a")}}).isPlayable);
+        // a relinked copy keeps the uri playlists hold
+        const auto relinked = parse(R"({"type":"track","uri":"spotify:track:b","name":"A","is_playable":true,)"
+                                    R"("linked_from":{"uri":"spotify:track:a"}})");
+        QCOMPARE(relinked->uri, QStringLiteral("spotify:track:a"));
+    }
+
     void aLogoutForgetsALoginStillBeingWritten()
     {
         Rig rig;

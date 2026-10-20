@@ -260,14 +260,14 @@ Item {
                     }
                 }
 
-                StyledText {
+                ScrollingText {
                     width: parent.width
                     visible: root.shownSong.albumName.length > 0
                     text: root.shownSong.albumName
                     horizontalAlignment: Text.AlignHCenter
-                    elide: Text.ElideRight
                     font.pixelSize: Appearance.fontSize.smallie
                     color: Qt.rgba(1, 1, 1, 0.4)
+                    animateChange: !metadataFade.running
                 }
             }
 

@@ -79,6 +79,51 @@ fn append_page(uris: &mut Vec<String>, list: &SelectedListContent) -> bool {
     uris.len() > before && uris.len() < length
 }
 
+/// whom the songs are looked up for, which decides the ones that will play
+struct Listener {
+    country: String,
+    catalogue: String,
+}
+
+impl Listener {
+    fn of(session: &Session) -> Self {
+        Self {
+            country: session.country(),
+            catalogue: session
+                .get_user_attribute("catalogue")
+                .unwrap_or_else(|| "premium".to_owned()),
+        }
+    }
+
+    /// librespot's own check before it loads a track: the first restriction
+    /// for the account's catalogue that names countries decides. with no
+    /// country known yet every track counts as playable
+    fn can_play(&self, track: &metadata::Track) -> bool {
+        if self.country.is_empty() {
+            return true;
+        }
+        let listed = |countries: &str| {
+            countries
+                .as_bytes()
+                .chunks(2)
+                .any(|code| code == self.country.as_bytes())
+        };
+        for restriction in track
+            .restriction
+            .iter()
+            .filter(|restriction| restriction.catalogue_str.contains(&self.catalogue))
+        {
+            if restriction.has_countries_allowed() {
+                return listed(restriction.countries_allowed());
+            }
+            if restriction.has_countries_forbidden() {
+                return !listed(restriction.countries_forbidden());
+            }
+        }
+        true
+    }
+}
+
 /// each track's details by its uri. episodes and local files are left out,
 /// as the web api path leaves them out
 pub(crate) async fn track_metadata(
@@ -112,6 +157,7 @@ pub(crate) async fn track_metadata(
         batches.spawn(async move { session.spclient().get_extended_metadata(request).await });
     }
 
+    let listener = Listener::of(session);
     let mut tracks = HashMap::new();
     while let Some(joined) = batches.join_next().await {
         let response = joined
@@ -125,7 +171,7 @@ pub(crate) async fn track_metadata(
                 let Ok(track) = metadata::Track::parse_from_bytes(&any.value) else {
                     continue;
                 };
-                if let Some(payload) = TrackPayload::new(&data.entity_uri, &track) {
+                if let Some(payload) = TrackPayload::new(&data.entity_uri, &track, &listener) {
                     tracks.insert(data.entity_uri.clone(), payload);
                 }
             }
@@ -152,6 +198,7 @@ pub(crate) struct TrackPayload {
     name: String,
     duration_ms: i32,
     explicit: bool,
+    is_playable: bool,
     artists: Vec<ArtistPayload>,
     album: Option<AlbumPayload>,
 }
@@ -182,7 +229,7 @@ struct ImagePayload {
 impl TrackPayload {
     /// none for a track spotify sent back without a name, which it does for
     /// one it no longer has
-    fn new(uri: &str, track: &metadata::Track) -> Option<Self> {
+    fn new(uri: &str, track: &metadata::Track, listener: &Listener) -> Option<Self> {
         if track.name().is_empty() {
             return None;
         }
@@ -192,6 +239,7 @@ impl TrackPayload {
             name: track.name().to_owned(),
             duration_ms: track.duration(),
             explicit: track.explicit(),
+            is_playable: listener.can_play(track),
             artists: track.artist.iter().filter_map(ArtistPayload::new).collect(),
             album: track.album.as_ref().and_then(AlbumPayload::new),
         })
@@ -254,9 +302,34 @@ mod tests {
         metadata::{Album, Artist, Image, ImageGroup, Track},
         playlist4_external::{Item, ListItems, SelectedListContent},
     };
+    use librespot::protocol::metadata::Restriction;
     use protobuf::{EnumOrUnknown, MessageField};
 
-    use super::{ImageSize, TrackPayload, append_page};
+    use super::{ImageSize, Listener, TrackPayload, append_page};
+
+    fn listener(country: &str) -> Listener {
+        Listener {
+            country: country.to_owned(),
+            catalogue: "premium".to_owned(),
+        }
+    }
+
+    fn restricted(allowed: Option<&str>, forbidden: Option<&str>) -> Track {
+        let mut restriction = Restriction {
+            catalogue_str: vec!["premium".to_owned()],
+            ..Default::default()
+        };
+        if let Some(countries) = allowed {
+            restriction.set_countries_allowed(countries.to_owned());
+        }
+        if let Some(countries) = forbidden {
+            restriction.set_countries_forbidden(countries.to_owned());
+        }
+        Track {
+            restriction: vec![restriction],
+            ..Default::default()
+        }
+    }
 
     fn page(pos: i32, length: i32, uris: &[&str]) -> SelectedListContent {
         SelectedListContent {
@@ -329,12 +402,13 @@ mod tests {
             ..Default::default()
         };
 
-        let payload = TrackPayload::new("spotify:track:x", &track).unwrap();
+        let payload = TrackPayload::new("spotify:track:x", &track, &listener("SE")).unwrap();
         let json = serde_json::to_value(&payload).unwrap();
         assert_eq!(json["type"], "track");
         assert_eq!(json["uri"], "spotify:track:x");
         assert_eq!(json["name"], "Smooth Operator");
         assert_eq!(json["duration_ms"], 298_000);
+        assert_eq!(json["is_playable"], true);
         assert_eq!(json["artists"][0]["name"], "Sade");
         assert!(
             json["artists"][0]["uri"]
@@ -358,6 +432,23 @@ mod tests {
 
     #[test]
     fn a_track_spotify_no_longer_has_is_left_out() {
-        assert!(TrackPayload::new("spotify:track:x", &Track::default()).is_none());
+        assert!(TrackPayload::new("spotify:track:x", &Track::default(), &listener("SE")).is_none());
+    }
+
+    #[test]
+    fn a_track_plays_only_where_its_restrictions_allow() {
+        assert!(listener("SE").can_play(&restricted(Some("NOSEDK"), None)));
+        assert!(!listener("US").can_play(&restricted(Some("NOSEDK"), None)));
+        assert!(!listener("DE").can_play(&restricted(None, Some("FRDE"))));
+        assert!(listener("SE").can_play(&restricted(None, Some("FRDE"))));
+        assert!(listener("").can_play(&restricted(Some("NOSEDK"), None)));
+        assert!(listener("US").can_play(&Track::default()));
+    }
+
+    #[test]
+    fn restrictions_for_another_catalogue_are_ignored() {
+        let mut track = restricted(Some("SE"), None);
+        track.restriction[0].catalogue_str = vec!["free".to_owned()];
+        assert!(listener("US").can_play(&track));
     }
 }

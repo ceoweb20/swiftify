@@ -106,6 +106,17 @@ Item {
                     onActivated: (index) => Settings.circularVisualizer = index === 1
                 }
                 ConfigSelection {
+                    text: qsTr("Layout")
+                    // the ring stays mirrored
+                    enabled: Settings.visualizersEnabled && Settings.immersiveVisualizer && !Settings.circularVisualizer
+                    currentIndex: Settings.continuousVisualizer ? 1 : 0
+                    segments: [
+                        Segment { text: qsTr("Mirrored") },
+                        Segment { text: qsTr("Continuous") }
+                    ]
+                    onActivated: (index) => Settings.continuousVisualizer = index === 1
+                }
+                ConfigSelection {
                     text: qsTr("Shape")
                     enabled: Settings.visualizersEnabled && Settings.immersiveVisualizer
                     currentIndex: Settings.visualizerShape === "wave" ? 1 : 0

@@ -52,7 +52,7 @@ function Find-QtKit {
             if (Test-Path -LiteralPath $root) {
                 foreach ($versionDirectory in Get-ChildItem -LiteralPath $root -Directory) {
                     $version = $null
-                    if ([version]::TryParse($versionDirectory.Name, [ref]$version) -and $version -ge [version]'6.9') {
+                    if ([version]::TryParse($versionDirectory.Name, [ref]$version) -and $version -ge [version]'6.10') {
                         foreach ($kit in @('msvc2022_64', 'mingw_64')) {
                             $kitPath = Join-Path $versionDirectory.FullName $kit
                             if (Test-Path -LiteralPath "$kitPath\mkspecs\qconfig.pri") {
@@ -66,7 +66,7 @@ function Find-QtKit {
     )
     $selected = $candidates | Sort-Object Version -Descending | Select-Object -First 1
     if (-not $selected) {
-        throw 'No Qt 6.9+ x64 kit found. Install Qt, then pass -QtPath pointing to its msvc2022_64 or mingw_64 directory.'
+        throw 'No Qt 6.10+ x64 kit found. Install Qt, then pass -QtPath pointing to its msvc2022_64 or mingw_64 directory.'
     }
     return $selected.Path
 }
@@ -155,8 +155,8 @@ function Invoke-WindowsBuild {
     $QtPath = Find-QtKit $QtPath
     $qtConfiguration = Get-Content -LiteralPath "$QtPath\mkspecs\qconfig.pri" -Raw
     $qtVersion = [regex]::Match($qtConfiguration, '(?m)^QT_VERSION\s*=\s*(\S+)').Groups[1].Value
-    if (-not $qtVersion -or [version]$qtVersion -lt [version]'6.9' -or $qtConfiguration -notmatch '(?m)^QT_ARCH\s*=\s*x86_64\s*$') {
-        throw 'Swiftify requires a Qt 6.9+ x64 kit.'
+    if (-not $qtVersion -or [version]$qtVersion -lt [version]'6.10' -or $qtConfiguration -notmatch '(?m)^QT_ARCH\s*=\s*x86_64\s*$') {
+        throw 'Swiftify requires a Qt 6.10+ x64 kit.'
     }
     foreach ($module in @('Qt6Core', 'Qt6Widgets', 'Qt6Quick', 'Qt6QuickControls2', 'Qt6ShaderTools')) {
         if (-not (Test-Path -LiteralPath "$QtPath\lib\cmake\$module\${module}Config.cmake")) {

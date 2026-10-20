@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # build-debian.sh - Build and install swiftify on Debian/Ubuntu
 #
-# Handles Qt 6.8 compatibility by patching QML features that require Qt 6.9+.
+# Handles Qt 6.8 and 6.9 by patching out the QML features that need a newer Qt.
 # Run from the repository root or pass the repo path as an argument.
 #
 # Usage:
@@ -77,33 +77,33 @@ QT_MINOR=$(echo "$QT_VERSION" | cut -d. -f2)
 
 log "Detected Qt version: $QT_VERSION"
 
-# Apply Qt 6.8 compatibility patches if needed
-apply_qt68_patches() {
-    log "Applying Qt 6.8 compatibility patches..."
+# patch out what this qt is too old for
+apply_compat_patches() {
+    log "Applying Qt $QT_VERSION compatibility patches..."
 
     # Patch CMakeLists.txt version requirements
-    sed -i 's/Qt6 6\.9/Qt6 6.8/g' CMakeLists.txt
-    sed -i 's/REQUIRES 6\.9/REQUIRES 6.8/g' CMakeLists.txt
+    sed -i 's/Qt6 6\.10/Qt6 6.8/g' CMakeLists.txt
+    sed -i 's/REQUIRES 6\.10/REQUIRES 6.8/g' CMakeLists.txt
 
-    # Remove 'final' keyword from QML properties (Qt 6.9 feature)
+    # the final property modifier needs qt 6.10
     find qml -name "*.qml" -exec sed -i \
         -e 's/final readonly property/readonly property/g' \
         -e 's/final property/property/g' {} \;
 
-    # Remove ApplicationWindow padding properties (Qt 6.9 feature)
-    if grep -q "bottomPadding: 0" qml/Main.qml 2>/dev/null; then
+    # ApplicationWindow padding needs qt 6.9
+    if [[ "$QT_MINOR" -lt 9 ]] && grep -q "bottomPadding: 0" qml/Main.qml 2>/dev/null; then
         sed -i '/topPadding: 0/d; /leftPadding: 0/d; /rightPadding: 0/d; /bottomPadding: 0/d' qml/Main.qml
         # Also remove the comment about Qt 6.9
         sed -i '/since qt 6.9/,/clear itself/d' qml/Main.qml
     fi
 
-    log "Qt 6.8 patches applied"
+    log "Qt $QT_VERSION patches applied"
 }
 
 # Check if patches are needed
-if [[ "$QT_MAJOR" -eq 6 ]] && [[ "$QT_MINOR" -lt 9 ]]; then
-    warn "Qt $QT_VERSION detected (< 6.9). Applying compatibility patches..."
-    apply_qt68_patches
+if [[ "$QT_MAJOR" -eq 6 ]] && [[ "$QT_MINOR" -lt 10 ]]; then
+    warn "Qt $QT_VERSION detected (< 6.10). Applying compatibility patches..."
+    apply_compat_patches
 elif [[ "$QT_MAJOR" -lt 6 ]]; then
     error "Qt 6.8+ is required, but Qt $QT_VERSION was found"
 fi

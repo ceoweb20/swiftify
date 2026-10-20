@@ -157,7 +157,10 @@ std::optional<Artist> artist(const QJsonObject &object)
 std::optional<Song> track(const QJsonObject &object, const Album &fallbackAlbum)
 {
     const QString type = string(object, "type");
-    const QString uri = string(object, "uri");
+    // a market lets spotify send a relinked copy in its place. playlists and
+    // the library hold the original, and librespot finds the copy itself
+    const QString linkedUri = string(object.value(QStringLiteral("linked_from")).toObject(), "uri");
+    const QString uri = linkedUri.isEmpty() ? string(object, "uri") : linkedUri;
     if ((!type.isEmpty() && type != QLatin1StringView("track"))
         || !uri.startsWith(QLatin1StringView("spotify:track:"))) {
         return std::nullopt;
@@ -181,6 +184,8 @@ std::optional<Song> track(const QJsonObject &object, const Album &fallbackAlbum)
     song.isExplicit = object.value(QStringLiteral("explicit")).toBool();
     song.albumId = resolvedAlbum.id;
     song.albumUri = resolvedAlbum.uri;
+    // only sent when the request names a market
+    song.isPlayable = object.value(QStringLiteral("is_playable")).toBool(true);
     for (const QJsonValue &value : artistArray) {
         if (const auto parsed = artist(value.toObject())) {
             song.artistItems.append(*parsed);

@@ -192,8 +192,9 @@ private:
         }
         if (!ok) {
             // as RustCore tells a replaced request from a failed one
-            throw SpotifyError(payload == QLatin1StringView(SWIFTIFY_CORE_SUPERSEDED) ? SpotifyError::Kind::Superseded
-                                                                                     : SpotifyError::Kind::Core,
+            throw SpotifyError(payload == QLatin1StringView(SWIFTIFY_CORE_SUPERSEDED)     ? SpotifyError::Kind::Superseded
+                               : payload == QLatin1StringView(SWIFTIFY_CORE_UNAVAILABLE) ? SpotifyError::Kind::Unavailable
+                                                                                          : SpotifyError::Kind::Core,
                                payload);
         }
         co_return payload;

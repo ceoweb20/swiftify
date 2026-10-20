@@ -32,6 +32,8 @@ T.AbstractButton {
     }
 
     contentItem: Item {
+        opacity: root.song.isPlayable ? 1 : 0.38
+
         ArtworkImage {
             id: art
             anchors.left: parent.left

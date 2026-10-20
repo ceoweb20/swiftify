@@ -15,6 +15,7 @@ Platform.MenuBar {
     signal minimizeRequested()
     signal zoomRequested()
     signal showWindowRequested()
+    signal catalogueSearchRequested()
 
     Platform.Menu {
         title: qsTr("File")
@@ -114,6 +115,11 @@ Platform.MenuBar {
             checkable: true
             checked: Player.showingQueue
             onTriggered: Player.toggleQueuePanel()
+        }
+        Platform.MenuItem {
+            text: qsTr("Search Catalogue")
+            shortcut: "Ctrl+K"
+            onTriggered: root.catalogueSearchRequested()
         }
         Platform.MenuSeparator {}
         Platform.MenuItem {

@@ -62,6 +62,7 @@ private slots:
         QCOMPARE(settings.trackListVisualizer(), true);
         QCOMPARE(settings.immersiveVisualizer(), true);
         QCOMPARE(settings.circularVisualizer(), false);
+        QCOMPARE(settings.continuousVisualizer(), false);
         QCOMPARE(settings.visualizerShape(), QStringLiteral("bars"));
         QCOMPARE(settings.visualizerSensitivity(), 1.0);
         QCOMPARE(settings.streamingQuality(), 160);
@@ -165,6 +166,10 @@ private slots:
             settings.setImmersiveVisualizer(false);
             settings.setImmersiveVisualizer(false);
             QCOMPARE(immersiveSpy.count(), 1);
+            QSignalSpy continuousSpy(&settings, &Settings::continuousVisualizerChanged);
+            settings.setContinuousVisualizer(true);
+            settings.setContinuousVisualizer(true);
+            QCOMPARE(continuousSpy.count(), 1);
             settings.setStreamingQuality(96);
             settings.setSongCacheMegabytes(2000);
             settings.setPerformanceMode(true);
@@ -175,12 +180,14 @@ private slots:
         QCOMPARE(raw.value(QStringLiteral("playerBarVisualizer")).toBool(), false);
         QCOMPARE(raw.value(QStringLiteral("trackListVisualizer")).toBool(), false);
         QCOMPARE(raw.value(QStringLiteral("immersiveVisualizer")).toBool(), false);
+        QCOMPARE(raw.value(QStringLiteral("continuousVisualizer")).toBool(), true);
 
         Settings reopened(path);
         QCOMPARE(reopened.visualizerShape(), QStringLiteral("wave"));
         QCOMPARE(reopened.playerBarVisualizer(), false);
         QCOMPARE(reopened.trackListVisualizer(), false);
         QCOMPARE(reopened.immersiveVisualizer(), false);
+        QCOMPARE(reopened.continuousVisualizer(), true);
         QCOMPARE(reopened.streamingQuality(), 96);
         QCOMPARE(reopened.songCacheMegabytes(), 2000);
         QVERIFY(reopened.performanceMode());

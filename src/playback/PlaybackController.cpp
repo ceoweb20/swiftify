@@ -345,20 +345,27 @@ QList<Song> PlaybackController::previouslyPlayedSongs() const
     return index < 0 ? QList<Song> {} : activeQueue().mid(0, index);
 }
 
-std::optional<Song> PlaybackController::nextQueueSong(bool allowWrap) const
+std::optional<Song> PlaybackController::playableFrom(int index, int direction, bool allowWrap) const
 {
     const QList<Song> &queue = activeQueue();
-    if (queue.isEmpty()) {
-        return std::nullopt;
+    for (qsizetype step = 1; step <= queue.size(); ++step) {
+        qsizetype row = index + step * direction;
+        if (row < 0 || row >= queue.size()) {
+            if (!allowWrap) {
+                break;
+            }
+            row = (row + queue.size()) % queue.size();
+        }
+        if (queue.at(row).isPlayable) {
+            return queue.at(row);
+        }
     }
-    const int index = currentQueueIndex();
-    if (!m_currentSong || index < 0) {
-        return queue.first();
-    }
-    if (index < queue.size() - 1) {
-        return queue.at(index + 1);
-    }
-    return allowWrap ? std::optional(queue.first()) : std::nullopt;
+    return std::nullopt;
+}
+
+std::optional<Song> PlaybackController::nextQueueSong(bool allowWrap) const
+{
+    return playableFrom(m_currentSong ? currentQueueIndex() : -1, 1, allowWrap);
 }
 
 std::optional<Song> PlaybackController::upcomingSong() const
@@ -369,17 +376,15 @@ std::optional<Song> PlaybackController::upcomingSong() const
 std::optional<Song> PlaybackController::precedingSong() const
 {
     if (m_shuffle) {
-        return m_history.isEmpty() ? std::nullopt : std::optional(m_history.last());
+        const auto found = std::find_if(m_history.crbegin(), m_history.crend(),
+                                        [](const Song &song) { return song.isPlayable; });
+        return found == m_history.crend() ? std::nullopt : std::optional(*found);
     }
-    const QList<Song> &queue = activeQueue();
     const int index = currentQueueIndex();
     if (index < 0) {
         return std::nullopt;
     }
-    if (index == 0) {
-        return m_repeatMode == RepeatMode::All && !queue.isEmpty() ? std::optional(queue.last()) : std::nullopt;
-    }
-    return queue.at(index - 1);
+    return playableFrom(index, -1, m_repeatMode == RepeatMode::All);
 }
 
 bool PlaybackController::canSkipBackward() const
@@ -393,11 +398,7 @@ bool PlaybackController::canSkipBackward() const
     if (m_livePositionMs > kRestartThresholdMs) {
         return true;
     }
-    if (m_shuffle) {
-        return !m_history.isEmpty();
-    }
-    const int index = currentQueueIndex();
-    return index >= 0 && (index > 0 || m_repeatMode == RepeatMode::All);
+    return precedingSong().has_value();
 }
 
 bool PlaybackController::canSkipForward() const
@@ -410,7 +411,7 @@ bool PlaybackController::canSkipForward() const
     if (!m_currentSong || queue.isEmpty() || index < 0) {
         return false;
     }
-    return index < queue.size() - 1 || m_repeatMode == RepeatMode::All;
+    return nextQueueSong(m_repeatMode == RepeatMode::All).has_value();
 }
 
 void PlaybackController::rebuildShuffledQueue(const std::optional<Song> &startingWith)
@@ -512,6 +513,15 @@ void PlaybackController::beginPlayback(const Song &song, const QList<Song> &queu
     } else {
         m_shuffledQueue.clear();
     }
+    if (!song.isPlayable) {
+        const QList<Song> &active = activeQueue();
+        const auto at = std::find_if(active.begin(), active.end(),
+                                     [&](const Song &item) { return item.isSameInstance(song); });
+        if (const auto next = playableFrom(int(at - active.begin()), 1, m_repeatMode == RepeatMode::All)) {
+            startPlayback(*next, true, fromSearch);
+            return;
+        }
+    }
     startPlayback(song, true, fromSearch);
 }
 
@@ -595,6 +605,7 @@ void PlaybackController::startPlayback(const Song &song, bool recordHistory, boo
     }
 
     const CancelToken token = m_playbackRequest.renew();
+    const bool steppingBack = std::exchange(m_steppingBack, false);
     m_crossfadeStarted = crossfadeDurationMs > 0;
     const quint64 crossfadeSerial = ++m_crossfadeSerial;
     m_playbackNeedsLoad = true;
@@ -609,7 +620,7 @@ void PlaybackController::startPlayback(const Song &song, bool recordHistory, boo
     queueDidChange();
     syncMediaSession();
 
-    detach(runStartPlayback(song, token, fromSearch, crossfadeDurationMs, initialPositionMs));
+    detach(runStartPlayback(song, token, fromSearch, steppingBack, crossfadeDurationMs, initialPositionMs));
     if (crossfadeDurationMs > 0) {
         QTimer::singleShot(int(crossfadeDurationMs + 100), this, [this, crossfadeSerial] {
             if (crossfadeSerial == m_crossfadeSerial) {
@@ -620,10 +631,11 @@ void PlaybackController::startPlayback(const Song &song, bool recordHistory, boo
     }
 }
 
-QCoro::Task<> PlaybackController::runStartPlayback(Song song, CancelToken token, bool fromSearch,
+QCoro::Task<> PlaybackController::runStartPlayback(Song song, CancelToken token, bool fromSearch, bool steppingBack,
                                                     quint32 crossfadeDurationMs, quint32 initialPositionMs)
 {
     QString failure;
+    bool unavailable = false;
     bool cancelled = false;
     try {
         setStatus(QStringLiteral("Loading"));
@@ -695,6 +707,7 @@ QCoro::Task<> PlaybackController::runStartPlayback(Song song, CancelToken token,
         cancelled = true;
     } catch (const SpotifyError &error) {
         failure = error.message();
+        unavailable = error.kind() == SpotifyError::Kind::Unavailable;
     }
 
     const bool withdrawn = cancelled || isCancelled(token) || !isCurrent(song);
@@ -702,6 +715,8 @@ QCoro::Task<> PlaybackController::runStartPlayback(Song song, CancelToken token,
         // the core started the song anyway, because nobody told it the request
         // had been withdrawn.
         silenceWithdrawnPlayback();
+    } else if (unavailable && skipUnavailable(song, steppingBack)) {
+        // the next song is loading in its place
     } else if (!failure.isNull()) {
         // a load that timed out here is still running in the core, and would
         // start the song whenever it finally arrived.
@@ -908,23 +923,7 @@ void PlaybackController::skipBackward()
         seek(0);
         return;
     }
-    if (m_shuffle) {
-        if (m_history.isEmpty()) {
-            return;
-        }
-        startPlayback(m_history.takeLast(), false);
-        return;
-    }
-    const int index = currentQueueIndex();
-    if (index < 0) {
-        return;
-    }
-    const QList<Song> queue = activeQueue();
-    if (index > 0) {
-        startPlayback(queue.at(index - 1), false);
-    } else if (m_repeatMode == RepeatMode::All && !queue.isEmpty()) {
-        startPlayback(queue.last(), false);
-    }
+    stepBack();
 }
 
 void PlaybackController::skipToPreviousSong()
@@ -932,14 +931,51 @@ void PlaybackController::skipToPreviousSong()
     if (m_remote && m_core->skipRemote(false)) {
         return;
     }
+    stepBack();
+}
+
+bool PlaybackController::stepBack()
+{
     const std::optional<Song> previous = precedingSong();
     if (!previous) {
-        return;
+        return false;
     }
-    if (m_shuffle && !m_history.isEmpty()) {
-        m_history.removeLast();
+    if (m_shuffle) {
+        // the history goes back to it, along with the unplayable songs after it
+        const auto at = std::find_if(m_history.crbegin(), m_history.crend(),
+                                     [&](const Song &song) { return song.isSameInstance(*previous); });
+        m_history.erase(std::prev(at.base()), m_history.cend());
     }
+    m_steppingBack = true;
     startPlayback(*previous, false);
+    return true;
+}
+
+bool PlaybackController::skipUnavailable(const Song &song, bool steppingBack)
+{
+    // every occurrence of it, so the queue never stops on it again
+    bool marked = false;
+    for (QList<Song> *songs : {&m_queue, &m_shuffledQueue, &m_history}) {
+        for (Song &item : *songs) {
+            if (item.uri == song.uri && item.isPlayable) {
+                item.isPlayable = false;
+                marked = true;
+            }
+        }
+    }
+    if (marked) {
+        queueDidChange();
+    }
+    if (steppingBack && stepBack()) {
+        return true;
+    }
+    const std::optional<Song> next = nextQueueSong(m_repeatMode == RepeatMode::All);
+    if (!next) {
+        return false;
+    }
+    // left out of the history, as it never played
+    startPlayback(*next, false);
+    return true;
 }
 
 void PlaybackController::skipForward()

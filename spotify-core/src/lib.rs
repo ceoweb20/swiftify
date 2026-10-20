@@ -201,6 +201,10 @@ impl PlaybackTimeline {
 /// withdrawn it already, or asks again for the song it still wants.
 pub const SUPERSEDED: &str = "the request was replaced by a newer one";
 
+/// what a play request ends with when spotify will not give this account the
+/// track (SWIFTIFY_CORE_UNAVAILABLE in the c header). the front end skips it
+pub const UNAVAILABLE: &str = "Spotify could not load this track.";
+
 pub struct SpotifyCore {
     state: Mutex<SpotifyState>,
     /// bumped by every request that changes what plays: each song asked for,
@@ -655,7 +659,7 @@ impl SpotifyCore {
                 PlayerEvent::Playing { track_id, .. } if track_id == uri => return Ok(()),
                 PlayerEvent::Unavailable { track_id, .. } if track_id == uri => {
                     // previous error was incredibly misleading, so i changed it to a generic error
-                    return Err("Spotify could not load this track.".to_owned());
+                    return Err(UNAVAILABLE.to_owned());
                 }
                 PlayerEvent::Stopped { track_id, .. } if track_id == uri => {
                     return Err("the Spotify track stopped before playback began".to_owned());
@@ -758,7 +762,7 @@ impl SpotifyCore {
                     incoming.set_gain(0.0);
                     incoming.player.stop();
                     // previous error was incredibly misleading, so i changed it to a generic error
-                    return Err("Spotify could not load this track.".to_owned());
+                    return Err(UNAVAILABLE.to_owned());
                 }
                 PlayerEvent::Stopped { track_id, .. } if track_id == uri => {
                     incoming.set_gain(0.0);

@@ -216,6 +216,34 @@ private slots:
         QVERIFY(vault.error().isEmpty());
     }
 
+    void fullScreenVisualizerCanBeDisabledIndependently()
+    {
+        Rig rig;
+        rig.playSomething();
+        rig.settings.setVisualizersEnabled(true);
+        rig.settings.setImmersiveVisualizer(true);
+        const auto immersive = rig.show(QStringLiteral("ImmersivePlayer"));
+        QVERIFY(immersive);
+        QCOMPARE(immersive->property("showsSpectrum").toBool(), true);
+        const auto sound = rig.show(QStringLiteral("SoundPanel"));
+        QVERIFY(sound);
+        auto *toggle = sound->findChild<QObject *>(QStringLiteral("immersiveVisualizerQuickSwitch"));
+        QVERIFY(toggle);
+        QCOMPARE(toggle->property("checked").toBool(), true);
+        toggle->setProperty("checked", false);
+        QVERIFY(QMetaObject::invokeMethod(toggle, "toggled"));
+        QVERIFY(!rig.settings.immersiveVisualizer());
+        QCOMPARE(immersive->property("showsSpectrum").toBool(), false);
+        auto *equalizerSpectrum = sound->findChild<QObject *>(QStringLiteral("immersiveEqualizerSpectrum"));
+        QVERIFY(equalizerSpectrum);
+        QCOMPARE(equalizerSpectrum->property("visible").toBool(), false);
+        QCOMPARE(equalizerSpectrum->property("active").toBool(), false);
+        QVERIFY(rig.settings.visualizersEnabled());
+        rig.settings.setImmersiveVisualizer(true);
+        Rig::settle();
+        QCOMPARE(toggle->property("checked").toBool(), true);
+    }
+
     void languageSelectionRetranslatesTheSettings()
     {
         Rig rig;
@@ -2581,12 +2609,13 @@ private slots:
             QSKIP("counting frames needs the offscreen gpu rig");
         }
         rig.playSomething();
+        // counted from before the meter, which still draws as it goes away
+        int drawn = 0;
         const auto meter = rig.show(QStringLiteral("CompactMeter"));
         QVERIFY(meter);
         meter->setProperty("active", true);
         const QList<float> steady(48, 0.5f);
         rig.spectrum.publish(steady.constData(), 48);
-        int drawn = 0;
         QObject::connect(rig.control.get(), &QQuickRenderControl::sceneChanged, meter.get(), [&] { ++drawn; });
         const auto frames = [&](int count) {
             drawn = 0;

@@ -82,6 +82,16 @@ struct SpectrumStyle {
         return style;
     }
 
+    /// the immersive band as one row, bass on the left
+    static SpectrumStyle continuous()
+    {
+        SpectrumStyle style = immersive();
+        style.layout = Layout::Ascending;
+        style.count = 48;
+        style.symmetricGradient = false;
+        return style;
+    }
+
     static SpectrumStyle equalizer()
     {
         // The palette follows PlayerStyle: the cover's extracted colours, or

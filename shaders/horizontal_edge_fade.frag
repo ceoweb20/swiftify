@@ -1,7 +1,5 @@
 #version 440
-// scrolling text that fades out at its left and right edges, as the
-// immersive player's long titles do. the left fade grows in once the text
-// has moved off its start.
+// a scrolling row that fades out at its left and right edges.
 
 layout(location = 0) in vec2 qt_TexCoord0;
 layout(location = 0) out vec4 fragColor;
@@ -19,7 +17,7 @@ layout(binding = 1) uniform sampler2D source;
 void main()
 {
     float x = qt_TexCoord0.x;
-    float left = leftEdge > 0.0 ? clamp(x / leftEdge, 0.0, 1.0) : 1.0;
-    float right = rightEdge > 0.0 ? clamp((1.0 - x) / rightEdge, 0.0, 1.0) : 1.0;
-    fragColor = texture(source, qt_TexCoord0) * (left * right * qt_Opacity);
+    float leftFade = leftEdge > 0.001 ? clamp(x / leftEdge, 0.0, 1.0) : 1.0;
+    float rightFade = rightEdge > 0.001 ? clamp((1.0 - x) / rightEdge, 0.0, 1.0) : 1.0;
+    fragColor = texture(source, qt_TexCoord0) * (leftFade * rightFade * qt_Opacity);
 }

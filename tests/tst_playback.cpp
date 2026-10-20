@@ -388,6 +388,77 @@ private slots:
         QCOMPARE(rig.player.currentSong().uri, queue[0].uri);
     }
 
+    void theQueuePassesOverSongsThatWillNotPlay()
+    {
+        Rig rig;
+        QList<Song> queue = makeQueue(4);
+        queue[1].isPlayable = false;
+        queue[3].isPlayable = false;
+        rig.player.play(queue[0], queue);
+        rig.finishLoading();
+        QVERIFY(rig.player.upcomingSong()->isSameInstance(queue[2]));
+        rig.player.skipForward();
+        rig.finishLoading();
+        QVERIFY(rig.player.currentSong().isSameInstance(queue[2]));
+        QVERIFY(!rig.player.canSkipForward());
+        QVERIFY(rig.player.precedingSong()->isSameInstance(queue[0]));
+        rig.player.skipBackward();
+        rig.finishLoading();
+        QVERIFY(rig.player.currentSong().isSameInstance(queue[0]));
+
+        // picking one starts the next that will
+        rig.player.play(queue[1], queue);
+        rig.finishLoading();
+        QVERIFY(rig.player.currentSong().isSameInstance(queue[2]));
+    }
+
+    void aSongThatWillNotLoadIsSkipped()
+    {
+        Rig rig;
+        const QList<Song> queue = makeQueue(3);
+        rig.player.play(queue[0], queue);
+        rig.finishLoading();
+        rig.player.skipForward();
+        rig.settle();
+        rig.core.take(QStringLiteral("playFile"))->fail(QString::fromLatin1(SWIFTIFY_CORE_UNAVAILABLE));
+        rig.finishLoading();
+        QVERIFY(rig.player.isPlaying());
+        QVERIFY(rig.player.currentSong().isSameInstance(queue[2]));
+        QVERIFY(rig.errors.message().isEmpty());
+        QVERIFY(!rig.player.previouslyPlayedSongs().at(1).isPlayable);
+
+        // going back passes over it too
+        rig.player.skipBackward();
+        rig.finishLoading();
+        QVERIFY(rig.player.currentSong().isSameInstance(queue[0]));
+    }
+
+    void aSongThatWillNotLoadIsSkippedBackwards()
+    {
+        Rig rig;
+        const QList<Song> queue = makeQueue(3);
+        rig.player.play(queue[2], queue);
+        rig.finishLoading();
+        rig.player.skipBackward();
+        rig.settle();
+        rig.core.take(QStringLiteral("playFile"))->fail(QString::fromLatin1(SWIFTIFY_CORE_UNAVAILABLE));
+        rig.finishLoading();
+        QVERIFY(rig.player.currentSong().isSameInstance(queue[0]));
+    }
+
+    void theLastSongThatWillNotLoadShowsWhy()
+    {
+        Rig rig;
+        const QList<Song> queue = makeQueue(1);
+        rig.player.play(queue[0], queue);
+        rig.settle();
+        rig.core.take(QStringLiteral("playFile"))->fail(QString::fromLatin1(SWIFTIFY_CORE_UNAVAILABLE));
+        rig.settle();
+        QVERIFY(!rig.player.isPlaying());
+        QVERIFY(rig.core.pending.isEmpty());
+        QCOMPARE(rig.errors.message(), QString::fromLatin1(SWIFTIFY_CORE_UNAVAILABLE));
+    }
+
     void seekingNeverStartsSound()
     {
         Rig rig;

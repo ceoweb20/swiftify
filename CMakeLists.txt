@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.24)
 
 project(Swiftify
-    VERSION 0.17.0
+    VERSION 0.17.1
     DESCRIPTION "A native Spotify client"
     LANGUAGES C CXX)
 
@@ -57,30 +57,30 @@ if(NOT SWIFTIFY_UPDATE_PUBLIC_KEY STREQUAL "")
     endif()
 endif()
 
-find_package(Qt6 6.9 REQUIRED COMPONENTS
+find_package(Qt6 6.10 REQUIRED COMPONENTS
     Core Gui Network Concurrent Qml Quick QuickControls2 ShaderTools)
 if(BUILD_TESTING)
-    find_package(Qt6 6.9 REQUIRED COMPONENTS Test QuickTest)
+    find_package(Qt6 6.10 REQUIRED COMPONENTS Test QuickTest)
 endif()
 if(SWIFTIFY_IS_LINUX)
-    find_package(Qt6 6.9 REQUIRED COMPONENTS DBus Widgets)
+    find_package(Qt6 6.10 REQUIRED COMPONENTS DBus Widgets)
 else()
-    find_package(Qt6 6.9 OPTIONAL_COMPONENTS DBus)
+    find_package(Qt6 6.10 OPTIONAL_COMPONENTS DBus)
 endif()
 if(SWIFTIFY_DESKTOP_INTEGRATION)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(PULSE REQUIRED IMPORTED_TARGET libpulse)
 endif()
 if(SWIFTIFY_SOLOIST)
-    find_package(Qt6 6.9 REQUIRED COMPONENTS WebSockets)
+    find_package(Qt6 6.10 REQUIRED COMPONENTS WebSockets)
 endif()
 if(WIN32)
-    find_package(Qt6 6.9 REQUIRED COMPONENTS Widgets)
+    find_package(Qt6 6.10 REQUIRED COMPONENTS Widgets)
 endif()
 find_package(QCoro6 0.10 REQUIRED COMPONENTS Core Network)
 qcoro_enable_coroutines()
 
-qt_standard_project_setup(REQUIRES 6.9)
+qt_standard_project_setup(REQUIRES 6.10)
 # modules get their own folder so tooling finds them as <dir>/Swiftify/qmldir,
 # clear of the executable (the same name on a case-insensitive disk).
 set(QT_QML_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/qml_modules)
