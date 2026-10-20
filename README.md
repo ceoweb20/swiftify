@@ -46,10 +46,12 @@ first image shows equalizer, tempo and pitch settings. second picture shows how 
 
 ## Tutorials
 
-### "spotify could not load this track" (soloist)
+### "spotify could not load this track" / "spotify refuses this account the audio key" (soloist)
 
 spotify refuses librespot the keys to decrypt songs on newer accounts (librespot's
-logs say `error audio key 0 1`), so every song fails. on linux swiftify can play
+logs say `error audio key 0 1`), so every song fails — swiftify then stops and says
+"Spotify refuses this account the audio key to play tracks with" instead of skipping
+through the queue. on linux swiftify can play
 spotify's songs through [spotify soloist](https://developer.spotify.com/documentation/soloist)
 instead, spotify's own connect client, which isnt affected.
 

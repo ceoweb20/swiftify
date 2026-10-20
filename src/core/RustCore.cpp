@@ -154,9 +154,10 @@ QCoro::Task<QString> RustCore::request(Start start)
         throw Cancelled();
     }
     if (!ok) {
-        throw SpotifyError(payload == QLatin1StringView(SWIFTIFY_CORE_SUPERSEDED)     ? SpotifyError::Kind::Superseded
-                           : payload == QLatin1StringView(SWIFTIFY_CORE_UNAVAILABLE) ? SpotifyError::Kind::Unavailable
-                                                                                      : SpotifyError::Kind::Core,
+        throw SpotifyError(payload == QLatin1StringView(SWIFTIFY_CORE_SUPERSEDED)           ? SpotifyError::Kind::Superseded
+                           : payload == QLatin1StringView(SWIFTIFY_CORE_UNAVAILABLE)       ? SpotifyError::Kind::Unavailable
+                           : payload == QLatin1StringView(SWIFTIFY_CORE_AUDIO_KEY_REFUSED) ? SpotifyError::Kind::AudioKeyRefused
+                                                                                           : SpotifyError::Kind::Core,
                            payload);
     }
     co_return payload;

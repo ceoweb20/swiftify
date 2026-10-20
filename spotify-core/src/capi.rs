@@ -804,6 +804,14 @@ mod tests {
     }
 
     #[test]
+    fn the_header_names_the_audio_key_refusal_message() {
+        // the front end stops and explains instead of skipping the queue
+        let header = include_str!("../include/swiftify_core.h");
+        let define = format!("#define SWIFTIFY_CORE_AUDIO_KEY_REFUSED \"{}\"", crate::AUDIO_KEY_REFUSED);
+        assert!(header.contains(&define));
+    }
+
+    #[test]
     fn null_handles_are_harmless() {
         assert_eq!(unsafe { swiftify_core_completion_fd(ptr::null()) }, -1);
         assert!(!unsafe { swiftify_core_session_is_valid(ptr::null()) });

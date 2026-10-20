@@ -57,6 +57,9 @@ bool swiftify_core_take_completion(const SwiftifyCore *core, uint64_t *request_i
 #define SWIFTIFY_CORE_SUPERSEDED "the request was replaced by a newer one"
 /* a play call for a track spotify will not give this account fails with this */
 #define SWIFTIFY_CORE_UNAVAILABLE "Spotify could not load this track."
+/* a play call for an account spotify refuses the audio key for fails with
+ * this: new accounts only play through spotify's own clients */
+#define SWIFTIFY_CORE_AUDIO_KEY_REFUSED "Spotify refused the audio key for this account."
 
 void swiftify_core_connect(const SwiftifyCore *core, uint64_t request_id, const char *access_token,
                            const char *client_id);

@@ -420,7 +420,9 @@ private slots:
         rig.finishLoading();
         rig.player.skipForward();
         rig.settle();
-        rig.core.take(QStringLiteral("playFile"))->fail(QString::fromLatin1(SWIFTIFY_CORE_UNAVAILABLE));
+        rig.core.take(QStringLiteral("playTrack"))->fail(QString::fromLatin1(SWIFTIFY_CORE_UNAVAILABLE));
+        rig.reconnect();
+        rig.core.take(QStringLiteral("playTrack"))->fail(QString::fromLatin1(SWIFTIFY_CORE_UNAVAILABLE));
         rig.finishLoading();
         QVERIFY(rig.player.isPlaying());
         QVERIFY(rig.player.currentSong().isSameInstance(queue[2]));
@@ -441,7 +443,9 @@ private slots:
         rig.finishLoading();
         rig.player.skipBackward();
         rig.settle();
-        rig.core.take(QStringLiteral("playFile"))->fail(QString::fromLatin1(SWIFTIFY_CORE_UNAVAILABLE));
+        rig.core.take(QStringLiteral("playTrack"))->fail(QString::fromLatin1(SWIFTIFY_CORE_UNAVAILABLE));
+        rig.reconnect();
+        rig.core.take(QStringLiteral("playTrack"))->fail(QString::fromLatin1(SWIFTIFY_CORE_UNAVAILABLE));
         rig.finishLoading();
         QVERIFY(rig.player.currentSong().isSameInstance(queue[0]));
     }
@@ -452,11 +456,39 @@ private slots:
         const QList<Song> queue = makeQueue(1);
         rig.player.play(queue[0], queue);
         rig.settle();
-        rig.core.take(QStringLiteral("playFile"))->fail(QString::fromLatin1(SWIFTIFY_CORE_UNAVAILABLE));
+        // the lyrics of the asked song have no bearing on its load
+        rig.core.take(QStringLiteral("lyrics"))->fail(QStringLiteral("no lyrics"));
+        rig.core.take(QStringLiteral("playTrack"))->fail(QString::fromLatin1(SWIFTIFY_CORE_UNAVAILABLE));
+        rig.reconnect();
+        rig.core.take(QStringLiteral("playTrack"))->fail(QString::fromLatin1(SWIFTIFY_CORE_UNAVAILABLE));
         rig.settle();
         QVERIFY(!rig.player.isPlaying());
         QVERIFY(rig.core.pending.isEmpty());
         QCOMPARE(rig.errors.message(), QString::fromLatin1(SWIFTIFY_CORE_UNAVAILABLE));
+    }
+
+    void aRefusedAudioKeyStopsInsteadOfBurningTheQueue()
+    {
+        Rig rig;
+        const QList<Song> queue = makeQueue(3);
+        rig.player.play(queue[0], queue);
+        rig.settle();
+        rig.core.take(QStringLiteral("lyrics"))->fail(QStringLiteral("no lyrics"));
+        rig.finishLoading();
+        rig.player.skipForward();
+        rig.settle();
+        rig.core.take(QStringLiteral("lyrics"))->fail(QStringLiteral("no lyrics"));
+        rig.core.take(QStringLiteral("playTrack"))->fail(QString::fromLatin1(SWIFTIFY_CORE_AUDIO_KEY_REFUSED));
+        rig.settle();
+        // spotify refuses the account, not the song: no reconnect and second
+        // try, no skip that marks the song unplayable and burns the queue,
+        // and the banner explains what helps
+        QVERIFY(!rig.player.isPlaying());
+        QVERIFY(rig.core.pending.isEmpty());
+        QVERIFY(rig.player.currentSong().isSameInstance(queue[1]));
+        QVERIFY(rig.player.currentSong().isPlayable);
+        QVERIFY(!rig.errors.message().isEmpty());
+        QVERIFY(rig.errors.message() != QString::fromLatin1(SWIFTIFY_CORE_AUDIO_KEY_REFUSED));
     }
 
     void seekingNeverStartsSound()

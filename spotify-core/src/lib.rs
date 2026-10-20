@@ -205,6 +205,13 @@ pub const SUPERSEDED: &str = "the request was replaced by a newer one";
 /// track (SWIFTIFY_CORE_UNAVAILABLE in the c header). the front end skips it
 pub const UNAVAILABLE: &str = "Spotify could not load this track.";
 
+/// what a play request ends with when spotify refuses this account the key to
+/// decrypt tracks with (SWIFTIFY_CORE_AUDIO_KEY_REFUSED in the c header): new
+/// accounts only play through spotify's own clients. it is the account that
+/// is refused, not the song, so the front end stops and explains instead of
+/// skipping it
+pub const AUDIO_KEY_REFUSED: &str = "Spotify refused the audio key for this account.";
+
 pub struct SpotifyCore {
     state: Mutex<SpotifyState>,
     /// bumped by every request that changes what plays: each song asked for,
@@ -523,6 +530,16 @@ impl SpotifyCore {
         }
     }
 
+    /// audio key requests the current session has had refused: spotify
+    /// refuses every one of them for an account it has locked out of the
+    /// keys, and runs of them for one it is rate-limiting
+    fn audio_key_refusals(&self) -> u64 {
+        self.lock_state()
+            .ok()
+            .and_then(|state| state.session.clone())
+            .map_or(0, |session| session.audio_key().refusals())
+    }
+
     /// whether the audio device has stopped taking what we hand it.
     pub fn audio_output_stalled(&self) -> bool {
         if self.output_health.is_stalled() {
@@ -621,6 +638,9 @@ impl SpotifyCore {
         let player = Arc::clone(&active.player);
         let mut events = player.get_player_event_channel();
 
+        // a refusal arriving while this loads tells an account spotify has
+        // locked out of the keys from a track it simply will not hand over
+        let refusals_before = self.audio_key_refusals();
         {
             let _switching = self.lock_switching();
             if !self.is_latest_request(ticket) {
@@ -658,6 +678,9 @@ impl SpotifyCore {
             match event {
                 PlayerEvent::Playing { track_id, .. } if track_id == uri => return Ok(()),
                 PlayerEvent::Unavailable { track_id, .. } if track_id == uri => {
+                    if self.audio_key_refusals() > refusals_before {
+                        return Err(AUDIO_KEY_REFUSED.to_owned());
+                    }
                     // previous error was incredibly misleading, so i changed it to a generic error
                     return Err(UNAVAILABLE.to_owned());
                 }
@@ -703,6 +726,9 @@ impl SpotifyCore {
         };
         let mut events = incoming.player.get_player_event_channel();
 
+        // as play_track_as: a refusal while this loads is the account's, not
+        // the song's
+        let refusals_before = self.audio_key_refusals();
         {
             let _switching = self.lock_switching();
             if !self.is_latest_request(ticket) {
@@ -761,6 +787,9 @@ impl SpotifyCore {
                 PlayerEvent::Unavailable { track_id, .. } if track_id == uri => {
                     incoming.set_gain(0.0);
                     incoming.player.stop();
+                    if self.audio_key_refusals() > refusals_before {
+                        return Err(AUDIO_KEY_REFUSED.to_owned());
+                    }
                     // previous error was incredibly misleading, so i changed it to a generic error
                     return Err(UNAVAILABLE.to_owned());
                 }

@@ -28,6 +28,14 @@ namespace {
 PlaybackController *s_instance = nullptr;
 
 const QString kCatchphrase = QStringLiteral("i mean i guess bro");
+/// what the banner shows when spotify refuses the account the audio key to
+/// decrypt tracks with: the account is refused, not the song, so skipping
+/// would only burn the queue. soloist plays for such accounts instead (the
+/// README's "spotify could not load this track" section); the error banner
+/// translates this exact text.
+const QString kAudioKeyRefused = QStringLiteral("Spotify refuses this account the audio key to play tracks with. "
+                                                "New accounts only play through Spotify's own clients: install "
+                                                "Soloist (see the README) and Swiftify will play through it.");
 const QString kVolumeKey = QStringLiteral("playerVolume");
 const QString kVolumeBeforeMuteKey = QStringLiteral("playerVolumeBeforeMute");
 const QString kPlaybackStateKey = QStringLiteral("lastPlaybackState");
@@ -636,6 +644,7 @@ QCoro::Task<> PlaybackController::runStartPlayback(Song song, CancelToken token,
 {
     QString failure;
     bool unavailable = false;
+    bool audioKeyRefused = false;
     bool cancelled = false;
     try {
         setStatus(QStringLiteral("Loading"));
@@ -673,7 +682,10 @@ QCoro::Task<> PlaybackController::runStartPlayback(Song song, CancelToken token,
                 try {
                     co_await m_core->crossfadeTrack(song.uri, crossfadeDurationMs);
                 } catch (const SpotifyError &error) {
-                    if (error.kind() == SpotifyError::Kind::Superseded) {
+                    // a refused key is the account's, not the crossfade's:
+                    // a normal load would only ask spotify for it again
+                    if (error.kind() == SpotifyError::Kind::Superseded
+                        || error.kind() == SpotifyError::Kind::AudioKeyRefused) {
                         throw;
                     }
                     qCDebug(lcPlayer) << "Crossfade could not start; loading normally:" << error.message();
@@ -683,13 +695,21 @@ QCoro::Task<> PlaybackController::runStartPlayback(Song song, CancelToken token,
             } else {
                 co_await m_core->playTrack(song.uri);
             }
-        } catch (const SpotifyError &) {
+        } catch (const SpotifyError &error) {
+            // reconnecting does not change a refused audio key: a retry would
+            // only ask spotify for a key it has just refused
+            if (error.kind() == SpotifyError::Kind::AudioKeyRefused) {
+                throw;
+            }
             retry = true;
         }
         if (fallbackFromCrossfade && !retry) {
             try {
                 co_await m_core->playTrack(song.uri);
-            } catch (const SpotifyError &) {
+            } catch (const SpotifyError &error) {
+                if (error.kind() == SpotifyError::Kind::AudioKeyRefused) {
+                    throw;
+                }
                 retry = true;
             }
         }
@@ -708,6 +728,7 @@ QCoro::Task<> PlaybackController::runStartPlayback(Song song, CancelToken token,
     } catch (const SpotifyError &error) {
         failure = error.message();
         unavailable = error.kind() == SpotifyError::Kind::Unavailable;
+        audioKeyRefused = error.kind() == SpotifyError::Kind::AudioKeyRefused;
     }
 
     const bool withdrawn = cancelled || isCancelled(token) || !isCurrent(song);
@@ -729,7 +750,9 @@ QCoro::Task<> PlaybackController::runStartPlayback(Song song, CancelToken token,
         setLoading(false);
         setPlaying(false);
         syncMediaSession();
-        reportError(QStringLiteral("Playing %1").arg(song.uri), failure);
+        // a refused audio key is the account's, not this song's: say what
+        // helps instead of the core's technical line
+        reportError(QStringLiteral("Playing %1").arg(song.uri), audioKeyRefused ? kAudioKeyRefused : failure);
     } else {
         setStatus(QStringLiteral("Playing"));
         m_playbackNeedsLoad = false;
