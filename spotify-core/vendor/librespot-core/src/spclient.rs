@@ -60,6 +60,7 @@ const NO_METRICS_AND_SALT: RequestOptions = RequestOptions {
     metrics: false,
     salt: false,
     base_url: None,
+    omit_client_token: false,
 };
 
 #[derive(Debug, Error)]
@@ -91,9 +92,14 @@ impl Default for RequestStrategy {
 }
 
 pub struct RequestOptions {
-    metrics: bool,
-    salt: bool,
-    base_url: Option<&'static str>,
+    pub metrics: bool,
+    pub salt: bool,
+    pub base_url: Option<&'static str>,
+    /// Leaves the `client-token` header off entirely. The PlayPlay license
+    /// endpoint answers 403 for a token minted for librespot's identity and
+    /// 400 for the desktop constant third-party clients hardcode, but
+    /// accepts the request with no client token at all.
+    pub omit_client_token: bool,
 }
 
 impl Default for RequestOptions {
@@ -102,6 +108,7 @@ impl Default for RequestOptions {
             metrics: true,
             salt: true,
             base_url: None,
+            omit_client_token: false,
         }
     }
 }
@@ -505,13 +512,15 @@ impl SpClient {
                 HeaderValue::from_str(&format!("{} {}", token.token_type, token.access_token,))?,
             );
 
-            match self.client_token().await {
-                Ok(client_token) => {
-                    let _ = headers_mut.insert(CLIENT_TOKEN, HeaderValue::from_str(&client_token)?);
-                }
-                Err(e) => {
-                    // currently these endpoints seem to work fine without it
-                    warn!("Unable to get client token: {e} Trying to continue without...")
+            if !options.omit_client_token {
+                match self.client_token().await {
+                    Ok(client_token) => {
+                        let _ = headers_mut.insert(CLIENT_TOKEN, HeaderValue::from_str(&client_token)?);
+                    }
+                    Err(e) => {
+                        // currently these endpoints seem to work fine without it
+                        warn!("Unable to get client token: {e} Trying to continue without...")
+                    }
                 }
             }
 

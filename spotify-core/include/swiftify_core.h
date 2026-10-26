@@ -95,6 +95,8 @@ char *swiftify_write_local_tags(const char *path, const char *edits, const uint8
                                 size_t artwork_len);
 
 void swiftify_core_disconnect(const SwiftifyCore *core);
+/* Personalized Spotify shelves and saved playlists, using the playback session. */
+void swiftify_core_discovery_json(const SwiftifyCore *core, uint64_t request_id, const char *locale);
 
 char *swiftify_core_play(const SwiftifyCore *core);
 char *swiftify_core_pause(const SwiftifyCore *core);

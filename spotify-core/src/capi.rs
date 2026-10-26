@@ -450,6 +450,12 @@ async_call!(
     }
 );
 async_call!(
+    /// personalized home shelves and the complete saved rootlist; no tokens leave Rust.
+    swiftify_core_discovery_json(locale) => |core| {
+        core.discovery_json(locale).await
+    }
+);
+async_call!(
     /// completes with an artist's top songs as json, read through the session.
     swiftify_core_artist_top_tracks_json(artist_uri) => |core| {
         core.artist_top_tracks_json(artist_uri).await

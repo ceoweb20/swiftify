@@ -6,6 +6,7 @@
 #include "app/Fonts.h"
 #include "app/ErrorCenter.h"
 #include "app/Settings.h"
+#include "app/Translations.h"
 #include "artwork/ArtworkCache.h"
 #include "audio/AudioShaping.h"
 #include "library/CollectionModels.h"

@@ -107,6 +107,83 @@ and a macos dmg for apple silicon.
 
 ## Building from source
 
+### Language and Discord activity
+
+In **Settings → Appearance → Language**, choose **System**, **English**, or
+**Русский**. The choice is saved and takes effect immediately, without restarting.
+Track metadata, playlist names, search queries and custom preset names are not translated.
+
+**Settings → Account → Discord Rich Presence** optionally shares the current track,
+artist, public Spotify cover and progress with the running Discord **desktop** app.
+It is off by default. Activity requests use the listening type and the name
+**Spotify**. A pause keeps the track visible with **Paused / На паузе**, without
+running timestamps; resuming restores progress. Disabling RPC clears the activity.
+This is Rich Presence, not Spotify's official linked-account activity; it does not
+enable Listen Along. Some Discord versions may prefer the application's registered
+name over the requested activity name; in that case, rename your application in the
+Developer Portal. Discord's own
+activity privacy settings must also allow displaying activity.
+
+This build has no shared Discord application registered for Swiftify yet. Create
+an application named Swiftify at <https://discord.com/developers/applications> and
+paste its numeric **Application ID** into the field, then press Enter or leave the
+field. This is a public identifier, **not** a bot token, client secret, or Spotify
+Client ID. Applications such as Sonora ship their developer's shared Application ID,
+which is why their users don't need this step; do not reuse another app's ID.
+
+RPC uses local IPC and automatically reconnects when Discord starts again. There
+is no additional SDK or dependency. Local file paths and private cover URLs are
+never included. The RPC protocol has automated tests against a fake local Discord
+server; testing the real Discord status requires a valid application ID and Discord.
+
+Translations use Qt `qsTr` / `qsTranslate` and an embedded UTF-8 catalog at
+`translations/ru.json`; no additional Linguist tools are required. Russian plural
+entries contain three forms (one, few, many).
+
+### Personalized Spotify playlists
+
+**Made for You / Для тебя** in the sidebar opens all personalized playlists
+returned for the signed-in playback account. Home also shows Spotify's own
+playlist shelves and the Made For You page (Daily Mixes, Blends, On Repeat,
+Discover Weekly, etc., when Spotify provides them). Shelves scroll horizontally;
+the full grid is not limited to the home page's eight-card previews.
+
+Saved playlists are also read from the session rootlist, including playlists
+inside folders, and merged by ID with the existing Web API library. Personalized
+recommendations remain separate from saved playlists and cannot be edited unless
+the account actually owns or collaborates on a saved copy. They can be pinned in
+Swiftify without following or modifying them on Spotify.
+
+This uses the existing playback login: no cookies, new scopes, or developer app
+are needed. A refresh button reloads collections; failures preserve existing
+collections and do not block playback or the ordinary library. The playback and
+library logins must belong to the same account. Section names follow the selected
+interface language (refresh if changed during an in-flight load).
+
+The discovery API is **internal and unsupported by Spotify**, so availability
+and response formats can change. Query definitions are read only from Spotify's
+public web-player assets, cached in memory for 24 hours, and never executed. No
+external hash registry is used, and tokens remain in the Rust core.
+
+**Jam is a live collaborative session, not a playlist. Spotify AI DJ also is not
+a normal playlist and has no documented public API for its generated commentary
+and program control. Neither native Jam sessions nor AI DJ are implemented here.**
+Use the official Spotify client for those features. A playlist named DJ is not a
+replacement for Spotify AI DJ.
+
+### Continue after restarting
+
+Swiftify remembers the current track, its position, queue, shuffle order, and
+repeat mode. After restarting, the track is shown **paused**; only pressing Play
+loads it into the audio core and resumes from the saved position. Startup never
+starts music automatically. A restored position can also be changed before Play.
+
+State is kept locally alongside preferences, checkpointed during playback and
+flushed on orderly quit. Logging out clears it. Missing local files and unavailable
+Spotify tracks are not silently replaced with another song; Play reports the usual
+loading error. Invalid snapshots are ignored. Extremely large queues keep up to
+2,000 entries around the current occurrence and up to 100 history entries.
+
 ### Build requirements
 
 - Qt 6.10 or newer: Qt Base, Qt Declarative, Qt Shader Tools and Qt WebSockets

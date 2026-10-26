@@ -28,6 +28,7 @@ Item {
         case Library.Page.Search: return searchPage
         case Library.Page.Songs: return savedPage
         case Library.Page.Playlists: return playlistsPage
+        case Library.Page.Personalized: return personalizedPage
         case Library.Page.PinnedPlaylists: return pinnedPage
         case Library.Page.Playlist: return playlistPage
         case Library.Page.Album: return albumPage
@@ -201,6 +202,7 @@ Item {
     Component { id: searchPage; SearchView {} }
     Component { id: savedPage; SavedSongsView {} }
     Component { id: playlistsPage; PlaylistsView {} }
+    Component { id: personalizedPage; PlaylistsView { personalized: true } }
     Component { id: pinnedPage; PlaylistsView { pinnedOnly: true } }
     Component { id: playlistPage; PlaylistView {} }
     Component { id: albumPage; AlbumView {} }
