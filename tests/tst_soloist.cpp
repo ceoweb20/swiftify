@@ -1,5 +1,6 @@
 #include "FakeCore.h"
 #include "soloist/SoloistCore.h"
+#include "soloist/SoloistSetup.h"
 
 #include <QCoroTask>
 #include <QDateTime>
@@ -9,6 +10,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSignalSpy>
+#include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QWebSocket>
@@ -440,16 +442,58 @@ private slots:
     {
         qputenv("SWIFTIFY_SOLOIST", m_program.toUtf8());
         qputenv("SOLOIST_API_KEY", "test-api-key");
-        qputenv("SWIFTIFY_PLAYBACK", "librespot");
-        QVERIFY(!SoloistCore::detect().has_value());
-
-        qunsetenv("SWIFTIFY_PLAYBACK");
-        const auto detected = SoloistCore::detect();
-        QVERIFY(detected.has_value());
-        QCOMPARE(detected->program, m_program);
-        QCOMPARE(detected->apiKey, QStringLiteral("test-api-key"));
+        // there is no librespot fallback anymore: the config is always there,
+        // and an unset program or key is explained when something plays
+        const auto detected = SoloistCore::configured();
+        QCOMPARE(detected.program, m_program);
+        QCOMPARE(detected.apiKey, QStringLiteral("test-api-key"));
         qunsetenv("SWIFTIFY_SOLOIST");
         qunsetenv("SOLOIST_API_KEY");
+    }
+
+    void soloistArchivesMatchEachPlatform()
+    {
+        using soloist::archiveUrl;
+        const QString base = QStringLiteral("https://soloist-builds.spotifycdn.com/");
+        QCOMPARE(archiveUrl(u"linux", u"x86_64"), base + QStringLiteral("soloist_release_x86_64.tar.gz"));
+        QCOMPARE(archiveUrl(u"linux", u"aarch64"), base + QStringLiteral("soloist_release_arm64.tar.gz"));
+        QCOMPARE(archiveUrl(u"linux", u"armv7l"), base + QStringLiteral("soloist_release_arm32.tar.gz"));
+        QCOMPARE(archiveUrl(u"macos", u"arm64"), base + QStringLiteral("soloist_release_osx_arm64.tar.gz"));
+        QCOMPARE(archiveUrl(u"windows", u"x86_64"), base + QStringLiteral("soloist_release_windows_x86_64.zip"));
+        QCOMPARE(archiveUrl(u"windows", u"AMD64"), base + QStringLiteral("soloist_release_windows_x86_64.zip"));
+        // spotify has no intel mac or windows arm build
+        QVERIFY(archiveUrl(u"macos", u"x86_64").isEmpty());
+        QVERIFY(archiveUrl(u"windows", u"arm64").isEmpty());
+        QVERIFY(archiveUrl(u"freebsd", u"x86_64").isEmpty());
+    }
+
+    void apiKeyIsWrittenAndReadBack()
+    {
+        QStandardPaths::setTestModeEnabled(true);
+        qunsetenv("SOLOIST_API_KEY");
+        QString error;
+        QVERIFY2(soloist::writeApiKey(QStringLiteral(" secret-key \n"), &error), qPrintable(error));
+        QCOMPARE(soloist::readApiKey(), QStringLiteral("secret-key"));
+#ifndef Q_OS_WIN
+        const auto others = QFileDevice::ReadGroup | QFileDevice::WriteGroup | QFileDevice::ExeGroup
+            | QFileDevice::ReadOther | QFileDevice::WriteOther | QFileDevice::ExeOther;
+        QVERIFY(!(QFile::permissions(soloist::apiKeyPath()) & others));
+#endif
+        QFile::remove(soloist::apiKeyPath());
+        QStandardPaths::setTestModeEnabled(false);
+    }
+
+    void refreshIsDueBeforeTheBuildExpires()
+    {
+        const QDateTime now = QDateTime::currentDateTime();
+        soloist::InstallMetadata metadata;
+        metadata.valid = true;
+        metadata.installedAt = now.addDays(-81);
+        QVERIFY(soloist::needsRefresh(metadata, now));
+        metadata.installedAt = now.addDays(-10);
+        QVERIFY(!soloist::needsRefresh(metadata, now));
+        // a soloist installed by hand has no metadata, and is left alone
+        QVERIFY(!soloist::needsRefresh({}, now));
     }
 
     void settingVolumeSendsSetVolumeToSoloist()

@@ -1,6 +1,7 @@
 #include "soloist/SoloistCore.h"
 
 #include "app/Paths.h"
+#include "soloist/SoloistSetup.h"
 #include "spotify/SpotifyError.h"
 #ifdef SWIFTIFY_DESKTOP_INTEGRATION
 #include "soloist/SoloistAudioRoute.h"
@@ -17,6 +18,7 @@
 #include <QJsonArray>
 #include <QLoggingCategory>
 #include <QScopeGuard>
+#include <QSignalBlocker>
 #include <QStandardPaths>
 
 #include <algorithm>
@@ -115,11 +117,15 @@ SoloistCore::SoloistCore(PlaybackCore *fallback, SoloistConfig config, QObject *
         m_status = Status::Idle;
         // exit code 10 is a build past its 90 days
         const QString last = m_processOutput.trimmed().section(u'\n', -3);
-        m_failure = code == 10 && status == QProcess::NormalExit
-            ? QStringLiteral("This Soloist build has expired. Download a new one from developer.spotify.com.")
+        const bool expired = code == 10 && status == QProcess::NormalExit;
+        m_failure = expired
+            ? QStringLiteral("This Soloist build has expired. A new one is being downloaded from Spotify; try again in a moment.")
             : QStringLiteral("Soloist stopped (exit code %1). %2").arg(code).arg(last);
         qCWarning(lcSoloist).noquote() << m_failure;
         emit stateChanged();
+        if (expired) {
+            emit buildExpired();
+        }
     });
     connect(&m_process, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
         if (error == QProcess::FailedToStart) {
@@ -164,11 +170,38 @@ SoloistCore::SoloistCore(PlaybackCore *fallback, SoloistConfig config, QObject *
 
 SoloistCore::~SoloistCore()
 {
+    stopDaemon();
+#ifdef Q_OS_WIN
+    if (m_job) {
+        ::CloseHandle(m_job);
+    }
+#endif
+}
+
+SoloistConfig SoloistCore::configured()
+{
+    SoloistConfig config;
+    config.program = soloist::findProgram();
+    config.apiKey = soloist::readApiKey();
+    if (config.program.isEmpty()) {
+        qCInfo(lcSoloist) << "Soloist is not installed yet";
+    }
+    if (config.apiKey.isEmpty()) {
+        qCInfo(lcSoloist) << "No Soloist API key in SOLOIST_API_KEY or ~/.config/soloist/api-key yet";
+    }
+    config.dataDirectory = paths::dataDirectory() + QStringLiteral("/soloist");
+    return config;
+}
+
+void SoloistCore::stopDaemon()
+{
     m_portWatch.stop();
-    m_socket.disconnect(this);
+    // intentional stops are not failures: no "soloist stopped" error, and no
+    // reconnect while the binary is being replaced
+    const QSignalBlocker blockProcess(m_process);
+    const QSignalBlocker blockSocket(m_socket);
     m_socket.abort();
     if (m_process.state() != QProcess::NotRunning) {
-        m_process.disconnect(this);
 #ifdef Q_OS_WIN
         m_process.kill();
         m_process.waitForFinished(1000);
@@ -180,75 +213,20 @@ SoloistCore::~SoloistCore()
         }
 #endif
     }
-#ifdef Q_OS_WIN
-    if (m_job) {
-        ::CloseHandle(m_job);
-    }
-#endif
+    m_socketOpen = false;
+    m_authKnown = false;
+    m_loggedIn = false;
+    m_active = false;
+    m_status = Status::Idle;
 }
 
-std::optional<SoloistConfig> SoloistCore::detect()
+void SoloistCore::reloadConfiguration()
 {
-    if (qEnvironmentVariable("SWIFTIFY_PLAYBACK") == QLatin1StringView("librespot")) {
-        return std::nullopt;
-    }
-
-    SoloistConfig config;
-    config.program = qEnvironmentVariable("SWIFTIFY_SOLOIST");
-    if (config.program.isEmpty()) {
-        config.program = QStandardPaths::findExecutable(QStringLiteral("soloist"));
-    }
-    if (config.program.isEmpty()) {
-        // a launcher's PATH often leaves out ~/.local/bin, where soloist's
-        // guide installs it without sudo, and homebrew's bin on macos
-        const QStringList extraPaths{
-            QCoreApplication::applicationDirPath(),
-            QDir::homePath() + QStringLiteral("/.local/bin"),
-#ifdef Q_OS_MACOS
-            QStringLiteral("/opt/homebrew/bin"),
-            QStringLiteral("/usr/local/bin"),
-#elif defined(Q_OS_WIN)
-            QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + QStringLiteral("/soloist"),
-            QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/Programs/soloist"),
-#endif
-        };
-        config.program = QStandardPaths::findExecutable(QStringLiteral("soloist"), extraPaths);
-    }
-    if (config.program.isEmpty()) {
-        qCInfo(lcSoloist) << "Soloist not found; playing through librespot";
-        return std::nullopt;
-    }
-
-    config.apiKey = qEnvironmentVariable("SOLOIST_API_KEY").trimmed();
-    if (config.apiKey.isEmpty()) {
-        const QString configDir = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
-        const QString dotConfig = QDir::homePath() + QStringLiteral("/.config");
-        const QStringList candidates{
-            configDir + QStringLiteral("/soloist/api-key"),
-            dotConfig + QStringLiteral("/soloist/api-key"),
-#ifdef Q_OS_WIN
-            configDir + QStringLiteral("/soloist/api-key.txt"),
-            dotConfig + QStringLiteral("/soloist/api-key.txt"),
-#endif
-        };
-        for (const QString &path : candidates) {
-            QFile file(path);
-            if (file.open(QIODevice::ReadOnly)) {
-                config.apiKey = QString::fromUtf8(file.readAll()).trimmed();
-                if (!config.apiKey.isEmpty()) {
-                    break;
-                }
-            }
-        }
-    }
-    if (config.apiKey.isEmpty()) {
-        qCWarning(lcSoloist) << "Soloist found, but no API key in SOLOIST_API_KEY or ~/.config/soloist/api-key;"
-                                " playing through librespot";
-        return std::nullopt;
-    }
-
-    config.dataDirectory = paths::dataDirectory() + QStringLiteral("/soloist");
-    return config;
+    m_config = configured();
+    stopDaemon();
+    m_failure.clear();
+    startDaemon();
+    emit stateChanged();
 }
 
 // --- the daemon -----------------------------------------------------------------
@@ -259,6 +237,21 @@ void SoloistCore::startDaemon()
         return;
     }
     m_failure.clear();
+    if (m_config.program.isEmpty()) {
+        m_failure = soloist::platformSupported()
+            ? QStringLiteral("Spotify plays through Spotify Soloist, which is not installed yet. "
+                             "Install it in Settings → Spotify Soloist.")
+            : QStringLiteral("Spotify Soloist has no build for this computer, so Spotify cannot play here. "
+                             "It runs on Linux, Apple Silicon Macs and 64-bit Windows. Your own music files still play.");
+        emit stateChanged();
+        return;
+    }
+    if (m_config.apiKey.isEmpty()) {
+        m_failure = QStringLiteral("Spotify Soloist needs your own API key. Generate it at "
+                                   "developer.spotify.com/dashboard/soloist and paste it in Settings → Spotify Soloist.");
+        emit stateChanged();
+        return;
+    }
     m_processOutput.clear();
     QDir().mkpath(m_config.dataDirectory);
 #ifdef Q_OS_MACOS

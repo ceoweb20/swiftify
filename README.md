@@ -53,29 +53,40 @@ you can download swiftify for your operating system at [https://shredos.dev](htt
 
 ## Tutorials
 
-### "spotify could not load this track" (soloist)
+### spotify playback (soloist)
 
 spotify refuses librespot the keys to decrypt songs on newer accounts (librespot's
-logs say `error audio key 0 1`), so every song fails. swiftify can play
-spotify's songs through [spotify soloist](https://developer.spotify.com/documentation/soloist)
-instead, spotify's own connect client, which isnt affected.
+logs say `error audio key 0 1`), so every song fails. swiftify therefore plays
+spotify's songs only through [spotify soloist](https://developer.spotify.com/documentation/soloist),
+spotify's own connect client, and keeps librespot for the login, lyrics, playlists
+and your own music files. there is no librespot playback fallback.
 
-1. install soloist from its [getting started guide](https://developer.spotify.com/documentation/soloist/tutorials/getting-started)
-   (`~/.local/bin/soloist`, `/opt/homebrew/bin/soloist`, on your `PATH`, or beside `swiftify.exe` on windows)
+soloist runs on linux (x86_64, aarch64, armv7), apple silicon macs and 64-bit
+windows. there is no intel mac build. its binaries may not be redistributed, so
+swiftify does not ship one: it downloads the build for your platform from
+spotify when you ask it to.
+
+1. open settings → spotify soloist and press "install soloist". it lands in
+   swiftify's data directory; a soloist you installed yourself also works
+   (`~/.local/bin/soloist`, `/opt/homebrew/bin/soloist`, on your `PATH`, or
+   beside `swiftify.exe` on windows)
 2. make a soloist api key in the [developer dashboard](https://developer.spotify.com/dashboard/soloist)
-   and put it in `~/.config/soloist/api-key` (or `%LOCALAPPDATA%\soloist\api-key` on windows, or `SOLOIST_API_KEY`)
-3. start swiftify. it starts soloist itself, as a connect device called "Swiftify".
+   and paste it in the same settings page. every user needs their own key;
+   it is kept in `~/.config/soloist/api-key` (or `%LOCALAPPDATA%\soloist\api-key`
+   on windows, or `SOLOIST_API_KEY`)
+3. press play in swiftify. it starts soloist itself, as a connect device called "Swiftify".
    the first time, pick "Swiftify" once in the devices list of the spotify desktop app on
    the same computer (or the phone app), so soloist is signed in
-4. press play in swiftify
+
+for a shell, or a build agent, `tools/install-soloist.sh` (linux and macos) and
+`tools/install-soloist.ps1` (windows) install the right build for the machine.
 
 on linux with pipewire, swiftify makes a sink called "Swiftify (Soloist)" for soloist to play into,
 and plays that on through its own output, so the equalizer and the visualizers still work.
 under pulseaudio alone, or on macos and windows, soloist plays straight to the speakers.
 `SWIFTIFY_SOLOIST_ROUTE=off` does that on purpose. tempo and pitch only work on your own
-music files, and crossfade waits for each song to end. soloist builds expire after 90 days,
-download a new one when it says so.
-`SWIFTIFY_PLAYBACK=librespot swiftify` goes back to librespot alone.
+music files, and crossfade waits for each song to end. soloist builds expire after 90 days;
+swiftify replaces its own download before that, and again if one ever expires.
 
 if spotify on your phone doesnt list "Swiftify" for step 3, a firewall (ufw) is probably
 dropping the pairing connection; pair from the spotify desktop app on the same computer.

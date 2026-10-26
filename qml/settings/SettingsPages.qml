@@ -715,6 +715,59 @@ Item {
             }
 
             ContentSection {
+                title: "Spotify Soloist"
+                symbol: "speaker"
+
+                StatusRow {
+                    label: qsTr("Soloist")
+                    value: !Soloist.installed ? qsTr("not installed")
+                           : Soloist.version.length > 0 ? Soloist.version : qsTr("installed")
+                    good: Soloist.installed
+                }
+                StatusRow {
+                    label: qsTr("Soloist API key")
+                    value: Soloist.apiKeyConfigured ? qsTr("saved") : qsTr("missing")
+                    good: Soloist.apiKeyConfigured
+                }
+                OutlinedTextField {
+                    id: soloistKey
+                    x: 8
+                    width: Math.min(460, parent.width - 16)
+                    placeholder: qsTr("Soloist API key")
+                    onAccepted: Soloist.saveApiKey(text)
+                }
+                Flow {
+                    x: 8
+                    width: parent.width - 16
+                    spacing: 8
+
+                    TextButton {
+                        variant: TextButton.Tonal
+                        symbol: "download"
+                        text: Soloist.busy ? qsTr("Installing…")
+                              : Soloist.installed ? qsTr("Reinstall Soloist") : qsTr("Install Soloist")
+                        enabled: Soloist.supported && !Soloist.busy
+                        onClicked: Soloist.install()
+                    }
+                    TextButton {
+                        variant: TextButton.Text
+                        text: qsTr("Get an API key")
+                        onClicked: Qt.openUrlExternally("https://developer.spotify.com/dashboard/soloist")
+                    }
+                }
+                NoteText {
+                    text: !Soloist.supported
+                          ? qsTr("Spotify Soloist only runs on Linux, Apple Silicon Macs and 64-bit Windows, so Spotify cannot play on this computer. Your own music files still play.")
+                          : Soloist.busy && Soloist.progress >= 0
+                            ? qsTr("Downloading from Spotify: ") + Math.round(Soloist.progress * 100) + "%"
+                            : Soloist.status.length > 0 ? Soloist.status
+                            : Soloist.updateRecommended
+                              ? qsTr("This Soloist build is close to its 90-day expiry. Reinstall it to keep playback working.")
+                              : qsTr("Spotify plays through Soloist, downloaded from Spotify itself. The key is yours alone: generate it in the developer dashboard. Then pick “Swiftify” in Spotify's devices once to pair.")
+                }
+            }
+
+            ContentSection {
                 title: "Discord Rich Presence"
                 symbol: "share"
 

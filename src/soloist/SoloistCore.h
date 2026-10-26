@@ -23,9 +23,10 @@ struct SoloistConfig {
     QString deviceName = QStringLiteral("Swiftify");
 };
 
-/// plays spotify songs through spotify soloist, spotify's own connect client,
-/// for accounts spotify no longer gives librespot the keys for. soloist runs
-/// as a child process and is driven over its local websocket api.
+/// plays spotify songs through spotify soloist, spotify's own connect client.
+/// soloist is the only way spotify plays: librespot is kept for the login,
+/// lyrics, playlists and the person's own music files, never for streaming.
+/// soloist runs as a child process and is driven over its local websocket api.
 ///
 /// what soloist can't do is left to `fallback`, the rust core: the login,
 /// lyrics, and the person's own music files. where the sound server allows,
@@ -41,10 +42,16 @@ public:
     SoloistCore(PlaybackCore *fallback, SoloistConfig config, QObject *parent = nullptr);
     ~SoloistCore() override;
 
-    /// soloist on the PATH (or SWIFTIFY_SOLOIST) and a key in SOLOIST_API_KEY
-    /// or ~/.config/soloist/api-key; nothing if either is missing, or if
-    /// SWIFTIFY_PLAYBACK=librespot asks for the rust core alone
-    static std::optional<SoloistConfig> detect();
+    /// soloist on the PATH, in swiftify's own install directory, or where
+    /// soloist's guide puts it (SWIFTIFY_SOLOIST overrides), and a key in
+    /// SOLOIST_API_KEY or ~/.config/soloist/api-key. the program or the key
+    /// is empty when it is not set up yet; playing then explains what to do
+    static SoloistConfig configured();
+    /// re-reads the program and the key after the installer provided them,
+    /// restarting soloist with what changed
+    void reloadConfiguration();
+    /// stops the child process, as an update of its binary needs
+    void stopDaemon();
 
     QCoro::Task<QString> connectSession(QString accessToken, QString clientId) override;
     QCoro::Task<QString> connectStoredSession(QString login, QString clientId) override;
@@ -88,6 +95,8 @@ public:
 signals:
     /// anything soloist reported, or a reset; what waiting calls wake on
     void stateChanged();
+    /// the build passed its 90 days and exited; a new one should be installed
+    void buildExpired();
 
 private:
     enum class Status { Idle, Playing, Paused, Buffering };

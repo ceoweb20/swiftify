@@ -21,9 +21,8 @@
 #include "theme/PlayerStyle.h"
 #include "theme/Theme.h"
 
-#ifdef SWIFTIFY_HAS_SOLOIST
 #include "soloist/SoloistCore.h"
-#endif
+#include "soloist/SoloistInstaller.h"
 #if defined(SWIFTIFY_HAS_DBUS) && defined(Q_OS_LINUX)
 #include "system/dbus/Mpris.h"
 #include "system/dbus/SleepMonitor.h"
@@ -278,17 +277,28 @@ int main(int argc, char *argv[])
     Theme theme(&settings);
     QNetworkAccessManager network;
     RustCore rustCore;
-#ifdef SWIFTIFY_HAS_SOLOIST
-    // spotify's songs through soloist when it is installed and has a key, with
-    // the rust core keeping the login, lyrics and local files
-    std::unique_ptr<SoloistCore> soloistCore;
-    if (auto soloist = SoloistCore::detect()) {
-        soloistCore = std::make_unique<SoloistCore>(&rustCore, std::move(*soloist));
+    // spotify's songs always play through soloist; the rust core keeps the
+    // login, lyrics, playlists and the person's own music files. when soloist
+    // or its key is missing, playing explains how to set it up in settings
+    SoloistCore soloistCore(&rustCore, SoloistCore::configured());
+    PlaybackCore &core = soloistCore;
+    // soloist's binaries may not be redistributed, so the app downloads the
+    // build for this platform from spotify when asked, and replaces it before
+    // the 90 days a soloist build lives run out
+    SoloistInstaller soloistInstaller;
+    QObject::connect(&soloistInstaller, &SoloistInstaller::configurationChanged,
+                     &soloistCore, &SoloistCore::reloadConfiguration);
+    QObject::connect(&soloistInstaller, &SoloistInstaller::busyChanged, &soloistCore, [&] {
+        // a running soloist holds its executable, above all on windows
+        if (soloistInstaller.busy()) {
+            soloistCore.stopDaemon();
+        }
+    });
+    QObject::connect(&soloistCore, &SoloistCore::buildExpired, &soloistInstaller,
+                     &SoloistInstaller::install);
+    if (soloistInstaller.updateRecommended()) {
+        soloistInstaller.install();
     }
-    PlaybackCore &core = soloistCore ? static_cast<PlaybackCore &>(*soloistCore) : rustCore;
-#else
-    PlaybackCore &core = rustCore;
-#endif
     // what playback connects with: the streaming quality, and how much of
     // what it streams is kept so a song played again needs no download
     const auto applyStreaming = [&] {
