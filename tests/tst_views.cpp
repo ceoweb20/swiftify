@@ -1,4 +1,5 @@
 #include "app/Translations.h"
+#include "soloist/SoloistInstaller.h"
 #include "FakeCore.h"
 #include "ViewRig.h"
 
@@ -151,6 +152,38 @@ private:
     using Rig = swiftify::testing::ViewRig;
 
 private slots:
+    void soloistSettingsUseThePlaybackInstaller()
+    {
+        SoloistInstaller installer(nullptr);
+        QQmlEngine engine;
+        QCOMPARE(engine.singletonInstance<SoloistInstaller *>("Swiftify", "Soloist"), &installer);
+    }
+
+    void soloistSetupSectionDrawsWithoutCredentials()
+    {
+        fonts::loadIconFont();
+        SoloistInstaller installer(nullptr);
+        Rig rig;
+        rig.settings.setLanguage(QStringLiteral("en"));
+        rig.settings.setThemeMode(QStringLiteral("dark"));
+        rig.window->setColor(QColor(QStringLiteral("#141313")));
+        const auto pages = rig.show(QStringLiteral("SettingsPages"));
+        QVERIFY(pages);
+        pages->setProperty("page", 6);
+        Rig::settle();
+        auto *section = pages->findChild<QQuickItem *>(QStringLiteral("soloistSetupSection"));
+        QVERIFY(section);
+        QVERIFY(section->isVisible());
+        const QString path = qEnvironmentVariable("SWIFTIFY_TEST_SCREENSHOT");
+        if (!path.isEmpty()) {
+            pages->setY(-section->mapToItem(pages.get(), QPointF()).y());
+            Rig::settle();
+            const qreal ratio = rig.window->devicePixelRatio();
+            QVERIFY(rig.render().copy(0, 0, qRound(pages->width() * ratio),
+                                      qRound((section->height() + 12) * ratio)).save(path));
+        }
+    }
+
     void fullScreenVisualizerCanBeDisabledIndependently()
     {
         Rig rig;

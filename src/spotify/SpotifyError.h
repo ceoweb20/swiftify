@@ -31,6 +31,10 @@ public:
         Superseded,
         /// spotify will not give this account the track
         Unavailable,
+        /// spotify refuses this account the audio key to decrypt tracks with:
+        /// new accounts only play through the official clients, which soloist
+        /// drives for swiftify
+        AudioKeyRefused,
     };
 
     SpotifyError(Kind kind, QString message, int retryAfterSeconds = -1)

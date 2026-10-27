@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.24)
 
 project(Swiftify
-    VERSION 0.23.0
+    VERSION 0.24.0
     DESCRIPTION "A native Spotify client"
     LANGUAGES C CXX)
 
@@ -39,9 +39,8 @@ endif()
 # the wayland, d-bus and pipewire pieces. off elsewhere so the portable parts
 # can be built and tested on a development machine without them.
 option(SWIFTIFY_DESKTOP_INTEGRATION "Build the Linux desktop integration" ${SWIFTIFY_IS_LINUX})
-# spotify soloist plays spotify's songs for accounts spotify no longer gives
-# librespot the keys for.
-option(SWIFTIFY_SOLOIST "Play Spotify songs through Spotify Soloist when it is installed" ON)
+# Soloist fallback support is available on all platforms. Its binary is
+# downloaded from Spotify at runtime, never bundled with Swiftify.
 
 find_package(Qt6 6.10 REQUIRED COMPONENTS
     Core Gui Network Concurrent Qml Quick QuickControls2 ShaderTools)
@@ -57,9 +56,7 @@ if(SWIFTIFY_DESKTOP_INTEGRATION)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(PULSE REQUIRED IMPORTED_TARGET libpulse)
 endif()
-if(SWIFTIFY_SOLOIST)
-    find_package(Qt6 6.10 REQUIRED COMPONENTS WebSockets)
-endif()
+find_package(Qt6 6.10 REQUIRED COMPONENTS WebSockets)
 find_package(Qt6Keychain REQUIRED)
 if(WIN32)
     find_package(Qt6 6.10 REQUIRED COMPONENTS Widgets)
@@ -191,9 +188,7 @@ endif()
 if(NOT TARGET Qt6::DBus)
     list(FILTER SWIFTIFY_SOURCES EXCLUDE REGEX "^src/system/dbus/")
 endif()
-if(NOT SWIFTIFY_SOLOIST)
-    list(FILTER SWIFTIFY_SOURCES EXCLUDE REGEX "^src/soloist/")
-elseif(NOT SWIFTIFY_DESKTOP_INTEGRATION)
+if(NOT SWIFTIFY_DESKTOP_INTEGRATION)
     # routing soloist through swiftify records it with libpulse
     list(FILTER SWIFTIFY_SOURCES EXCLUDE REGEX "^src/soloist/SoloistAudioRoute")
 endif()
@@ -279,13 +274,11 @@ target_compile_definitions(swiftify_app PUBLIC
 target_compile_definitions(swiftify_app PRIVATE
     SWIFTIFY_BUILD_FONT_DIRECTORY="${SWIFTIFY_FONT_DIRECTORY}")
 # main.cpp picks the core, and is built outside swiftify_app
-target_compile_definitions(swiftify_app PUBLIC $<$<BOOL:${SWIFTIFY_SOLOIST}>:SWIFTIFY_HAS_SOLOIST>)
+target_compile_definitions(swiftify_app PUBLIC SWIFTIFY_HAS_SOLOIST)
 if(TARGET Qt6::DBus)
     target_link_libraries(swiftify_app PUBLIC Qt6::DBus)
 endif()
-if(SWIFTIFY_SOLOIST)
-    target_link_libraries(swiftify_app PUBLIC Qt6::WebSockets)
-endif()
+target_link_libraries(swiftify_app PUBLIC Qt6::WebSockets)
 if(SWIFTIFY_DESKTOP_INTEGRATION)
     target_link_libraries(swiftify_app PUBLIC PkgConfig::PULSE)
 endif()

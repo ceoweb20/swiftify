@@ -1,6 +1,7 @@
 #include "soloist/SoloistCore.h"
 
 #include "app/Paths.h"
+#include "soloist/SoloistSetup.h"
 #include "spotify/SpotifyError.h"
 #ifdef SWIFTIFY_DESKTOP_INTEGRATION
 #include "soloist/SoloistAudioRoute.h"
@@ -17,6 +18,7 @@
 #include <QJsonArray>
 #include <QLoggingCategory>
 #include <QScopeGuard>
+#include <QSignalBlocker>
 #include <QStandardPaths>
 
 #include <algorithm>
@@ -71,6 +73,7 @@ SoloistCore::SoloistCore(PlaybackCore *fallback, SoloistConfig config, QObject *
     : PlaybackCore(parent)
     , m_fallback(fallback)
     , m_config(std::move(config))
+    , m_useSoloist(!m_config.tryLibrespot)
     , m_liveBuffer(nullptr, &swiftify_live_buffer_free)
 {
     m_process.setProcessChannelMode(QProcess::MergedChannels);
@@ -115,11 +118,15 @@ SoloistCore::SoloistCore(PlaybackCore *fallback, SoloistConfig config, QObject *
         m_status = Status::Idle;
         // exit code 10 is a build past its 90 days
         const QString last = m_processOutput.trimmed().section(u'\n', -3);
-        m_failure = code == 10 && status == QProcess::NormalExit
-            ? QStringLiteral("This Soloist build has expired. Download a new one from developer.spotify.com.")
+        const bool expired = code == 10 && status == QProcess::NormalExit;
+        m_failure = expired
+            ? QStringLiteral("This Soloist build has expired. A new one is being downloaded from Spotify; try again in a moment.")
             : QStringLiteral("Soloist stopped (exit code %1). %2").arg(code).arg(last);
         qCWarning(lcSoloist).noquote() << m_failure;
         emit stateChanged();
+        if (expired) {
+            emit buildExpired();
+        }
     });
     connect(&m_process, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
         if (error == QProcess::FailedToStart) {
@@ -158,17 +165,58 @@ SoloistCore::SoloistCore(PlaybackCore *fallback, SoloistConfig config, QObject *
     });
     connect(&m_socket, &QWebSocket::textMessageReceived, this, &SoloistCore::handleMessage);
 
-    // started at once, so the device is there to pair with before anything plays
-    QTimer::singleShot(0, this, &SoloistCore::startDaemon);
+    // Do not launch a second Spotify device while librespot is working.
+    if (m_useSoloist) {
+        QTimer::singleShot(0, this, &SoloistCore::startDaemon);
+    }
+    connect(m_fallback, &PlaybackCore::remoteTrackStarted, this, [this](const Song &song) {
+        if (!m_useSoloist) emit remoteTrackStarted(song);
+    });
+    connect(m_fallback, &PlaybackCore::remotePlayingChanged, this, [this](bool playing) {
+        if (!m_useSoloist) emit remotePlayingChanged(playing);
+    });
+    connect(m_fallback, &PlaybackCore::remoteVolumeChanged, this, [this](float volume) {
+        if (!m_useSoloist) {
+            m_volume = volume;
+            emit remoteVolumeChanged(volume);
+        }
+    });
 }
 
 SoloistCore::~SoloistCore()
 {
+    stopDaemon();
+#ifdef Q_OS_WIN
+    if (m_job) {
+        ::CloseHandle(m_job);
+    }
+#endif
+}
+
+SoloistConfig SoloistCore::configured()
+{
+    SoloistConfig config;
+    config.program = soloist::findProgram();
+    config.apiKey = soloist::readApiKey();
+    if (config.program.isEmpty()) {
+        qCInfo(lcSoloist) << "Soloist is not installed yet";
+    }
+    if (config.apiKey.isEmpty()) {
+        qCInfo(lcSoloist) << "No Soloist API key in SOLOIST_API_KEY or ~/.config/soloist/api-key yet";
+    }
+    config.dataDirectory = paths::dataDirectory() + QStringLiteral("/soloist");
+    return config;
+}
+
+void SoloistCore::stopDaemon()
+{
     m_portWatch.stop();
-    m_socket.disconnect(this);
+    // intentional stops are not failures: no "soloist stopped" error, and no
+    // reconnect while the binary is being replaced
+    const QSignalBlocker blockProcess(m_process);
+    const QSignalBlocker blockSocket(m_socket);
     m_socket.abort();
     if (m_process.state() != QProcess::NotRunning) {
-        m_process.disconnect(this);
 #ifdef Q_OS_WIN
         m_process.kill();
         m_process.waitForFinished(1000);
@@ -180,75 +228,32 @@ SoloistCore::~SoloistCore()
         }
 #endif
     }
-#ifdef Q_OS_WIN
-    if (m_job) {
-        ::CloseHandle(m_job);
-    }
-#endif
+    m_socketOpen = false;
+    m_authKnown = false;
+    m_loggedIn = false;
+    m_active = false;
+    m_status = Status::Idle;
 }
 
-std::optional<SoloistConfig> SoloistCore::detect()
+void SoloistCore::reloadConfiguration()
 {
-    if (qEnvironmentVariable("SWIFTIFY_PLAYBACK") == QLatin1StringView("librespot")) {
-        return std::nullopt;
-    }
+    m_config = configured();
+    stopDaemon();
+    m_failure.clear();
+    if (m_useSoloist) startDaemon();
+    emit stateChanged();
+}
 
-    SoloistConfig config;
-    config.program = qEnvironmentVariable("SWIFTIFY_SOLOIST");
-    if (config.program.isEmpty()) {
-        config.program = QStandardPaths::findExecutable(QStringLiteral("soloist"));
+void SoloistCore::useSoloist()
+{
+    m_useSoloist = true;
+    emit backendChanged();
+    // A refused account stays on Soloist until logout/reset, not one retry
+    // per song. Stop the primary output before Soloist takes over.
+    try {
+        m_fallback->pause();
+    } catch (const SpotifyError &) {
     }
-    if (config.program.isEmpty()) {
-        // a launcher's PATH often leaves out ~/.local/bin, where soloist's
-        // guide installs it without sudo, and homebrew's bin on macos
-        const QStringList extraPaths{
-            QCoreApplication::applicationDirPath(),
-            QDir::homePath() + QStringLiteral("/.local/bin"),
-#ifdef Q_OS_MACOS
-            QStringLiteral("/opt/homebrew/bin"),
-            QStringLiteral("/usr/local/bin"),
-#elif defined(Q_OS_WIN)
-            QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + QStringLiteral("/soloist"),
-            QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/Programs/soloist"),
-#endif
-        };
-        config.program = QStandardPaths::findExecutable(QStringLiteral("soloist"), extraPaths);
-    }
-    if (config.program.isEmpty()) {
-        qCInfo(lcSoloist) << "Soloist not found; playing through librespot";
-        return std::nullopt;
-    }
-
-    config.apiKey = qEnvironmentVariable("SOLOIST_API_KEY").trimmed();
-    if (config.apiKey.isEmpty()) {
-        const QString configDir = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
-        const QString dotConfig = QDir::homePath() + QStringLiteral("/.config");
-        const QStringList candidates{
-            configDir + QStringLiteral("/soloist/api-key"),
-            dotConfig + QStringLiteral("/soloist/api-key"),
-#ifdef Q_OS_WIN
-            configDir + QStringLiteral("/soloist/api-key.txt"),
-            dotConfig + QStringLiteral("/soloist/api-key.txt"),
-#endif
-        };
-        for (const QString &path : candidates) {
-            QFile file(path);
-            if (file.open(QIODevice::ReadOnly)) {
-                config.apiKey = QString::fromUtf8(file.readAll()).trimmed();
-                if (!config.apiKey.isEmpty()) {
-                    break;
-                }
-            }
-        }
-    }
-    if (config.apiKey.isEmpty()) {
-        qCWarning(lcSoloist) << "Soloist found, but no API key in SOLOIST_API_KEY or ~/.config/soloist/api-key;"
-                                " playing through librespot";
-        return std::nullopt;
-    }
-
-    config.dataDirectory = paths::dataDirectory() + QStringLiteral("/soloist");
-    return config;
 }
 
 // --- the daemon -----------------------------------------------------------------
@@ -259,6 +264,33 @@ void SoloistCore::startDaemon()
         return;
     }
     m_failure.clear();
+    if (m_config.program.isEmpty() || m_config.apiKey.isEmpty()) {
+        const auto latest = configured();
+        m_config.program = latest.program;
+        m_config.apiKey = latest.apiKey;
+    }
+    if (m_config.tryLibrespot && (m_config.program.isEmpty() || m_config.apiKey.isEmpty())) {
+        m_failure = QStringLiteral("Spotify refused librespot's audio key. Playback through librespot may not work "
+                                   "on newer accounts. Install Spotify Soloist and enter your own Soloist API key "
+                                   "in Settings → Account → Spotify Soloist, then press Play again.");
+        emit stateChanged();
+        return;
+    }
+    if (m_config.program.isEmpty()) {
+        m_failure = soloist::platformSupported()
+            ? QStringLiteral("Spotify plays through Spotify Soloist, which is not installed yet. "
+                             "Install it in Settings → Spotify Soloist.")
+            : QStringLiteral("Spotify Soloist has no build for this computer, so Spotify cannot play here. "
+                             "It runs on Linux, Apple Silicon Macs and 64-bit Windows. Your own music files still play.");
+        emit stateChanged();
+        return;
+    }
+    if (m_config.apiKey.isEmpty()) {
+        m_failure = QStringLiteral("Spotify Soloist needs your own API key. Generate it at "
+                                   "developer.spotify.com/dashboard/soloist and paste it in Settings → Spotify Soloist.");
+        emit stateChanged();
+        return;
+    }
     m_processOutput.clear();
     QDir().mkpath(m_config.dataDirectory);
 #ifdef Q_OS_MACOS
@@ -410,6 +442,7 @@ void SoloistCore::handleMessage(const QString &text)
 
 void SoloistCore::followRemote()
 {
+    if (!m_useSoloist) return;
     // a play of swiftify's own is under way, or a song's end is being handed
     // over: what soloist says now is not someone else's doing
     // (a gate stays shut after swiftify's queue has run out; only just after
@@ -425,15 +458,8 @@ void SoloistCore::followRemote()
         m_expectedStarted = false;
         m_endAtMs = 0;
         if (m_localActive) {
-            try {
-                m_fallback->pause();
-            } catch (const SpotifyError &) {
-            }
+            m_fallback->pause();
             m_localActive = false;
-            try {
-                m_fallback->setVolume(m_routed ? 1.0f : m_volume);
-            } catch (const SpotifyError &) {
-            }
         }
         playRouted();
         gate(false);
@@ -441,9 +467,7 @@ void SoloistCore::followRemote()
         emit remoteTrackStarted(songFromItem());
         return;
     }
-    // a file of the person's own playing leaves soloist paused, which is
-    // not a pause anyone pressed
-    if (m_localActive || !(m_status == Status::Playing || m_status == Status::Paused)) {
+    if (!(m_status == Status::Playing || m_status == Status::Paused)) {
         return;
     }
     const bool playing = m_status == Status::Playing;
@@ -493,7 +517,8 @@ Song SoloistCore::songFromItem() const
 
 bool SoloistCore::skipRemote(bool forward)
 {
-    if (!m_remote || m_localActive) {
+    if (!m_useSoloist) return m_fallback->skipRemote(forward);
+    if (!m_remote) {
         return false;
     }
     send(forward ? QStringLiteral("skip_next") : QStringLiteral("skip_prev"));
@@ -668,6 +693,7 @@ int SoloistCore::soloistVolume() const
 
 void SoloistCore::playRouted()
 {
+    if (m_routed) m_fallback->setVolume(m_gated ? 0.0f : 1.0f);
     if (m_routed && !m_fallback->playLiveBuffer(m_liveBuffer.get())) {
         qCWarning(lcSoloist) << "Swiftify's output would not take Soloist's audio";
     }
@@ -684,6 +710,28 @@ void SoloistCore::stopSoloist()
 
 QCoro::Task<> SoloistCore::playTrack(QString spotifyUri)
 {
+    if (m_localActive && m_useSoloist) m_fallback->pause();
+    m_localActive = false;
+    const quint64 initialResets = m_resets;
+    if (!m_useSoloist) {
+        try {
+            co_await m_fallback->playTrack(spotifyUri);
+            co_return;
+        } catch (const SpotifyError &error) {
+            throwIfReset(initialResets);
+            if (error.kind() != SpotifyError::Kind::AudioKeyRefused) throw;
+            useSoloist();
+        }
+    }
+    if (m_config.tryLibrespot && (m_config.program.isEmpty() || m_config.apiKey.isEmpty())) {
+        m_config = configured();
+        if (m_config.program.isEmpty() || m_config.apiKey.isEmpty()) {
+            throw SpotifyError(SpotifyError::Kind::AudioKeyRefused,
+                QStringLiteral("Spotify refused librespot's audio key. Playback through librespot may not work "
+                               "on newer accounts. Install Spotify Soloist and enter your own Soloist API key "
+                               "in Settings → Account → Spotify Soloist, then press Play again."));
+        }
+    }
     const quint64 resets = m_resets;
     const quint64 request = ++m_requests;
     // soloist's state is the old song's until this one starts, however it ends
@@ -695,17 +743,6 @@ QCoro::Task<> SoloistCore::playTrack(QString spotifyUri)
         throw SpotifyError(SpotifyError::Kind::Superseded, QStringLiteral("superseded"));
     }
 
-    if (m_localActive) {
-        try {
-            m_fallback->pause();
-        } catch (const SpotifyError &) {
-        }
-        m_localActive = false;
-        try {
-            m_fallback->setVolume(m_routed ? 1.0f : m_volume);
-        } catch (const SpotifyError &) {
-        }
-    }
     m_expectedUri = spotifyUri;
     m_expectedStarted = false;
     m_endOfTrack = false;
@@ -762,19 +799,32 @@ QCoro::Task<> SoloistCore::playTrack(QString spotifyUri)
     gate(false);
 }
 
-void SoloistCore::preloadTrack(const QString &, bool)
+void SoloistCore::preloadTrack(const QString &uri, bool standby)
 {
-    // soloist buffers ahead by itself
+    if (!m_useSoloist) m_fallback->preloadTrack(uri, standby);
 }
 
-QCoro::Task<> SoloistCore::crossfadeTrack(QString spotifyUri, quint32)
+QCoro::Task<> SoloistCore::crossfadeTrack(QString spotifyUri, quint32 durationMs)
 {
+    const quint64 initialResets = m_resets;
+    if (!m_useSoloist) {
+        try {
+            co_await m_fallback->crossfadeTrack(spotifyUri, durationMs);
+            co_return;
+        } catch (const SpotifyError &error) {
+            throwIfReset(initialResets);
+            if (error.kind() != SpotifyError::Kind::AudioKeyRefused) throw;
+            useSoloist();
+        }
+        co_await playTrack(spotifyUri);
+        co_return;
+    }
     // soloist takes one song at a time, so there is no fading one into the
     // next here. the next song waits for this one to finish instead of
     // cutting it short.
     const quint64 resets = m_resets;
     const quint64 request = ++m_requests;
-    while (!m_localActive && m_expectedStarted && m_itemUri == m_expectedUri && !endReached()
+    while (m_expectedStarted && m_itemUri == m_expectedUri && !endReached()
            && m_status != Status::Idle) {
         co_await waitForChange(200);
         throwIfReset(resets);
@@ -796,26 +846,21 @@ QCoro::Task<> SoloistCore::playFile(QString path)
     m_remote = false;
     gate(false);
     m_localActive = true;
-    try {
-        m_fallback->setVolume(m_volume);
-    } catch (const SpotifyError &) {
-    }
+    m_fallback->setVolume(m_volume);
     co_await m_fallback->playFile(path);
 }
 
 QCoro::Task<> SoloistCore::restartAudioOutput()
 {
-    if (m_localActive || m_routed) {
+    if (!m_useSoloist || m_localActive || m_routed) {
         co_await m_fallback->restartAudioOutput();
-    }
-    if (m_routed && !m_localActive) {
-        playRouted();
+        if (m_useSoloist && !m_localActive) playRouted();
     }
 }
 
 void SoloistCore::play()
 {
-    if (m_localActive) {
+    if (!m_useSoloist || m_localActive) {
         m_fallback->play();
         return;
     }
@@ -829,7 +874,7 @@ void SoloistCore::play()
 
 void SoloistCore::pause()
 {
-    if (m_localActive) {
+    if (!m_useSoloist || m_localActive) {
         m_fallback->pause();
         return;
     }
@@ -838,7 +883,7 @@ void SoloistCore::pause()
 
 void SoloistCore::seek(quint32 positionMs)
 {
-    if (m_localActive) {
+    if (!m_useSoloist || m_localActive) {
         m_fallback->seek(positionMs);
         return;
     }
@@ -853,9 +898,13 @@ void SoloistCore::seek(quint32 positionMs)
 void SoloistCore::setVolume(float volume)
 {
     m_volume = std::clamp(volume, 0.0f, 1.0f);
+    if (!m_useSoloist || m_localActive) {
+        m_fallback->setVolume(m_volume);
+        return;
+    }
     try {
         // held at nothing while the gap between songs is gated; otherwise unity gain for routed soloist
-        m_fallback->setVolume(m_gated ? 0.0f : (m_routed && !m_localActive ? 1.0f : m_volume));
+        m_fallback->setVolume(m_gated ? 0.0f : (m_routed ? 1.0f : m_volume));
     } catch (const SpotifyError &) {
     }
     send(QStringLiteral("set_volume"), {{QStringLiteral("volume"), soloistVolume()}});
@@ -863,14 +912,12 @@ void SoloistCore::setVolume(float volume)
 
 bool SoloistCore::audioOutputStalled() const
 {
-    return (m_localActive || m_routed) && m_fallback->audioOutputStalled();
+    return (!m_useSoloist || m_localActive || m_routed) && m_fallback->audioOutputStalled();
 }
 
 quint32 SoloistCore::playbackPositionMs() const
 {
-    if (m_localActive) {
-        return m_fallback->playbackPositionMs();
-    }
+    if (!m_useSoloist || m_localActive) return m_fallback->playbackPositionMs();
     // an end not yet taken reads as the end, even once soloist has started
     // the song over; with the clock stopped for the last moments, the time
     // still runs on toward the end
@@ -885,14 +932,13 @@ quint32 SoloistCore::playbackPositionMs() const
 
 quint32 SoloistCore::playbackDurationMs() const
 {
-    return m_localActive ? m_fallback->playbackDurationMs() : quint32(m_durationMs);
+    if (!m_useSoloist || m_localActive) return m_fallback->playbackDurationMs();
+    return quint32(m_durationMs);
 }
 
 bool SoloistCore::takeEndOfTrack()
 {
-    if (m_localActive) {
-        return m_fallback->takeEndOfTrack();
-    }
+    if (!m_useSoloist || m_localActive) return m_fallback->takeEndOfTrack();
     if (!m_endOfTrack && endReached()) {
         m_endOfTrack = true;
     }
@@ -923,18 +969,23 @@ QCoro::Task<QString> SoloistCore::connectStoredSession(QString login, QString cl
 
 void SoloistCore::disconnectSession()
 {
+    stopDaemon();
+    m_useSoloist = !m_config.tryLibrespot;
+    emit backendChanged();
     m_fallback->disconnectSession();
 }
 
 void SoloistCore::reset()
 {
-    stopSoloist();
+    stopDaemon();
+    m_useSoloist = !m_config.tryLibrespot;
+    emit backendChanged();
     ++m_resets;
+    m_localActive = false;
     m_expectedUri.clear();
     m_expectedStarted = false;
     m_endOfTrack = false;
     m_endAtMs = 0;
-    m_localActive = false;
     m_remote = false;
     m_reportedPlaying.reset();
     gate(false);
@@ -1004,7 +1055,8 @@ void SoloistCore::setSpectrumEnabled(bool enabled)
 
 int SoloistCore::spectrumLevels(float *out, int capacity) const
 {
-    return m_fallback->spectrumLevels(out, capacity);
+    // unrouted, soloist's audio goes straight to pipewire, past the analyser
+    return !m_useSoloist || m_localActive || m_routed ? m_fallback->spectrumLevels(out, capacity) : 0;
 }
 
 } // namespace swiftify

@@ -733,7 +733,8 @@ QCoro::Task<> PlaybackController::runStartPlayback(Song song, CancelToken token,
                     try {
                         co_await m_core->crossfadeTrack(song.uri, crossfadeDurationMs);
                     } catch (const SpotifyError &error) {
-                        if (error.kind() == SpotifyError::Kind::Superseded) {
+                        if (error.kind() == SpotifyError::Kind::Superseded
+                            || error.kind() == SpotifyError::Kind::AudioKeyRefused) {
                             throw;
                         }
                         qCDebug(lcPlayer) << "Crossfade could not start; loading normally:" << error.message();
@@ -743,13 +744,15 @@ QCoro::Task<> PlaybackController::runStartPlayback(Song song, CancelToken token,
                 } else {
                     co_await m_core->playTrack(song.uri);
                 }
-            } catch (const SpotifyError &) {
+            } catch (const SpotifyError &error) {
+                if (error.kind() == SpotifyError::Kind::AudioKeyRefused) throw;
                 retry = true;
             }
             if (fallbackFromCrossfade && !retry) {
                 try {
                     co_await m_core->playTrack(song.uri);
-                } catch (const SpotifyError &) {
+                } catch (const SpotifyError &error) {
+                    if (error.kind() == SpotifyError::Kind::AudioKeyRefused) throw;
                     retry = true;
                 }
             }

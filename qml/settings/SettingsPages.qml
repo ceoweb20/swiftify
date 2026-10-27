@@ -715,6 +715,63 @@ Item {
             }
 
             ContentSection {
+                title: "Spotify Soloist"
+                objectName: "soloistSetupSection"
+                symbol: "speaker"
+
+                StatusRow {
+                    label: qsTr("Soloist")
+                    value: Soloist.installed ? qsTr("installed") : qsTr("not installed")
+                    good: Soloist.installed
+                }
+                StatusRow {
+                    label: qsTr("Soloist API key")
+                    value: Soloist.apiKeyConfigured ? qsTr("saved") : qsTr("missing")
+                    good: Soloist.apiKeyConfigured
+                }
+                OutlinedTextField {
+                    id: soloistKey
+                    x: 8
+                    width: Math.min(460, parent.width - 16)
+                    placeholder: qsTr("Soloist API key")
+                    onAccepted: Soloist.saveApiKey(text)
+                    Connections {
+                        target: soloistKey.inputItem
+                        function onActiveFocusChanged() {
+                            if (!soloistKey.inputItem.activeFocus && soloistKey.text.trim().length > 0)
+                                Soloist.saveApiKey(soloistKey.text)
+                        }
+                    }
+                }
+                Flow {
+                    x: 8
+                    width: parent.width - 16
+                    spacing: 8
+                    TextButton {
+                        variant: TextButton.Tonal
+                        symbol: "download"
+                        text: Soloist.busy ? qsTr("Installing…")
+                              : Soloist.installed ? qsTr("Reinstall Soloist") : qsTr("Install Soloist")
+                        enabled: Soloist.supported && !Soloist.busy
+                        onClicked: Soloist.install()
+                    }
+                    TextButton {
+                        variant: TextButton.Text
+                        text: qsTr("Get an API key")
+                        onClicked: Qt.openUrlExternally("https://developer.spotify.com/dashboard/soloist")
+                    }
+                }
+                NoteText {
+                    text: !Soloist.supported
+                          ? qsTr("Librespot is the default player. Spotify Soloist fallback is available on Linux, Apple Silicon Macs and 64-bit Windows.")
+                          : Soloist.busy && Soloist.progress >= 0
+                            ? qsTr("Downloading from Spotify: ") + Math.round(Soloist.progress * 100) + "%"
+                            : Soloist.status.length > 0 ? qsTranslate("Soloist", Soloist.status)
+                            : qsTr("Librespot plays by default. If Spotify refuses its audio key, Swiftify switches to Soloist. Install Soloist and enter your own API key. Pick “Swiftify” in Spotify's devices once to pair.")
+                }
+            }
+
+            ContentSection {
                 title: "Discord Rich Presence"
                 symbol: "share"
 

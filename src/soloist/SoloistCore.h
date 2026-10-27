@@ -21,14 +21,15 @@ struct SoloistConfig {
     QString apiKey;
     QString dataDirectory;
     QString deviceName = QStringLiteral("Swiftify");
+    bool tryLibrespot = true;
 };
 
-/// plays spotify songs through spotify soloist, spotify's own connect client,
-/// for accounts spotify no longer gives librespot the keys for. soloist runs
-/// as a child process and is driven over its local websocket api.
+/// Tries librespot first, then uses Spotify Soloist if the account is refused
+/// audio keys. Other errors do not switch backends. Soloist runs as a child
+/// process and is driven over its local websocket API.
 ///
 /// what soloist can't do is left to `fallback`, the rust core: the login,
-/// lyrics, and the person's own music files. where the sound server allows,
+/// lyrics and playlists. where the sound server allows,
 /// soloist plays into a sink of swiftify's own, recorded and played on through
 /// the rust core, so the equalizer and the visualizers reach it too; tempo
 /// and pitch can't apply to audio that arrives as it plays.
@@ -41,10 +42,17 @@ public:
     SoloistCore(PlaybackCore *fallback, SoloistConfig config, QObject *parent = nullptr);
     ~SoloistCore() override;
 
-    /// soloist on the PATH (or SWIFTIFY_SOLOIST) and a key in SOLOIST_API_KEY
-    /// or ~/.config/soloist/api-key; nothing if either is missing, or if
-    /// SWIFTIFY_PLAYBACK=librespot asks for the rust core alone
-    static std::optional<SoloistConfig> detect();
+    /// soloist on the PATH, in swiftify's own install directory, or where
+    /// soloist's guide puts it (SWIFTIFY_SOLOIST overrides), and a key in
+    /// SOLOIST_API_KEY or ~/.config/soloist/api-key. the program or the key
+    /// is empty when it is not set up yet; playing then explains what to do
+    static SoloistConfig configured();
+    /// re-reads the program and the key after the installer provided them,
+    /// restarting soloist with what changed
+    void reloadConfiguration();
+    /// stops the child process, as an update of its binary needs
+    void stopDaemon();
+    bool usingSoloist() const { return m_useSoloist; }
 
     QCoro::Task<QString> connectSession(QString accessToken, QString clientId) override;
     QCoro::Task<QString> connectStoredSession(QString login, QString clientId) override;
@@ -85,8 +93,11 @@ public:
     bool skipRemote(bool forward) override;
 
 signals:
+    void backendChanged();
     /// anything soloist reported, or a reset; what waiting calls wake on
     void stateChanged();
+    /// the build passed its 90 days and exited; a new one should be installed
+    void buildExpired();
 
 private:
     enum class Status { Idle, Playing, Paused, Buffering };
@@ -122,9 +133,11 @@ private:
     int soloistVolume() const;
     /// hands what soloist plays to the rust core, if it is routed through it
     void playRouted();
+    void useSoloist();
 
     PlaybackCore *m_fallback;
     SoloistConfig m_config;
+    bool m_useSoloist = false;
     std::unique_ptr<SwiftifyLiveBuffer, void (*)(SwiftifyLiveBuffer *)> m_liveBuffer;
 #ifdef SWIFTIFY_DESKTOP_INTEGRATION
     std::unique_ptr<SoloistAudioRoute> m_route;
@@ -159,7 +172,6 @@ private:
     quint64 m_messages = 0;
 
     float m_volume = 0.75f;
-    /// a file of the person's own is playing, through the rust core
     bool m_localActive = false;
     /// the song swiftify last asked soloist for, and whether it has started
     QString m_expectedUri;

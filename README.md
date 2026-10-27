@@ -58,7 +58,23 @@ you can download swiftify for your operating system at [https://shredos.dev](htt
 spotify refuses librespot the keys to decrypt songs on newer accounts (librespot's
 logs say `error audio key 0 1`), so every song fails. swiftify can play
 spotify's songs through [spotify soloist](https://developer.spotify.com/documentation/soloist)
-instead, spotify's own connect client, which isnt affected.
+instead, spotify's own connect client, which isnt affected. librespot is tried
+first; only a confirmed audio-key refusal switches to Soloist. Other errors do
+not change the player. The choice lasts until logout or restart. Your own music
+files always use the Rust core.
+
+Open **Settings → Account → Spotify Soloist** to install Soloist directly from
+Spotify and save your personal API key. Spotify prohibits redistributing its
+binaries, so they are downloaded at runtime, not bundled with releases. The
+installer chooses Linux x86_64/aarch64/armv7, Apple Silicon macOS, or x86_64
+Windows as appropriate. Intel Macs have no official Soloist build.
+
+Each user must create their own key; no key is supplied with Swiftify. After
+first pairing, the stored Soloist session is reused. Saving a key or installing
+Soloist updates the existing player without restarting Swiftify. Builds expire
+after 90 days; managed downloads are refreshed after 80 days and on expiry.
+
+For manual installation:
 
 1. install soloist from its [getting started guide](https://developer.spotify.com/documentation/soloist/tutorials/getting-started)
    (`~/.local/bin/soloist`, `/opt/homebrew/bin/soloist`, on your `PATH`, or beside `swiftify.exe` on windows)
@@ -75,7 +91,10 @@ under pulseaudio alone, or on macos and windows, soloist plays straight to the s
 `SWIFTIFY_SOLOIST_ROUTE=off` does that on purpose. tempo and pitch only work on your own
 music files, and crossfade waits for each song to end. soloist builds expire after 90 days,
 download a new one when it says so.
-`SWIFTIFY_PLAYBACK=librespot swiftify` goes back to librespot alone.
+`tools/install-soloist.sh` and `tools/install-soloist.ps1` install the appropriate
+official archive for shell-based setups. Stream-quality selection through the
+Soloist API is not implemented: its documented protocol cannot set or verify
+Lossless quality.
 
 if spotify on your phone doesnt list "Swiftify" for step 3, a firewall (ufw) is probably
 dropping the pairing connection; pair from the spotify desktop app on the same computer.
