@@ -1,473 +1,254 @@
-# Swiftify
+# swiftify
 
-a spotify player for desktop, built with Qt Quick on top of a Rust core that
-wraps [librespot](https://github.com/librespot-org/librespot). it follows
-Material 3 Expressive (heavy inspo from end4) and has an immersive player,
-synced lyrics, visualizers and an equalizer.
-![Alt text](/assets/home.png)
-this apps purpose is to replace spotifys heavy webview client, but its also mostly eyecandy lol
-it runs significantly lighter than the spotify client.
+a spotify desktop player, the way i want to use it.
 
-**EVEN WITH THE EYECANDY TURNED ON....** it is lighter than spotify + spotifys renderers both on cpu AND ram!!!!!
+[download](https://github.com/ceoweb20/swiftify/releases/latest) · [first launch](#first-launch) · [build from source](#build-from-source) · [upstream](https://github.com/swiftify-org/swiftify)
 
-id recommend turning the visualizers and background off if the app runs in the background tho lol
+this is my personal fork of [swiftify](https://github.com/swiftify-org/swiftify), not a separate project built from scratch. i keep what i use, add what i miss, and remove what feels like clutter to me. compared with the original, this is the version i find more comfortable to use. it follows my preferences, not a plan to be the right client for everyone.
 
-***anyways runs on linux (made for wayland and hyprland) macos, and windows.***
+the foundation is still c++ and qt quick, with a rust core built around [librespot](https://github.com/librespot-org/librespot). no electron or bundled web browser.
 
-## previews
-first image shows equalizer, tempo and pitch settings. second picture shows how the immersive player and the visualizer/lyrics look
-<table border="0">
+![swiftify home with dj mix, pinned playlists and the current track](docs/screenshots/showcase-home.png)
+
+<table>
   <tr>
-    <td><img src="/assets/eq.png" alt="equalizer and tempo" width="400"/></td>
-    <td><img src="/assets/immersive.png" alt="immersive player with visualizers" width="400"/></td>
+    <td width="50%"><img src="docs/screenshots/showcase-lyrics.png" alt="fullscreen player with synced lyrics" /></td>
+    <td width="50%"><img src="docs/screenshots/showcase-player.png" alt="fullscreen artwork and playback controls" /></td>
+  </tr>
+  <tr>
+    <td><sub>synced lyrics and a cover-colored background</sub></td>
+    <td><sub>just the artwork, the track and the controls</sub></td>
   </tr>
 </table>
 
-## download
+## what's different here
 
-you can download swiftify for your operating system at [https://shredos.dev](https://shredos.dev/#download)
+- **less clutter.** local-file management, playlist-link collections and the extra librespot connect-device settings are removed. fullscreen visualizers are controlled inside the fullscreen player, without a second switch in settings.
+- **cover-driven themes.** the whole interface can follow the current artwork. there are also light and dark presets, including aurora and desert bloom, plus optional matugen integration.
+- **a personal dj mix.** one button builds a queue from your spotify mixes, favourites, recent listening and top tracks by those artists. up to 40 tracks, no duplicate tracks, and different artists next to each other where possible.
+- **librespot first, soloist when needed.** an audio-key refusal can switch playback to spotify's official soloist client. installation and api-key setup live in settings.
+- **english and russian.** live language switching, translated dialogs and errors, and dates and numbers that follow the selected language.
+- **less login friction.** encrypted spotify logins with automatic vault unlock on macos and windows. existing vaults need their old password once to migrate.
+- **installers and updates.** macos disk images, a windows setup executable, and signed in-app update packages.
 
-<br/>
+the rest of the player is here too: search, saved songs, playlists, pinned playlists, synced lyrics, an equalizer, a sleep timer, media keys, optional discord activity and listening stats.
 
-## Contents
+## install
 
-- [Before you start](#before-you-start)
-- [Prebuilt builds](#prebuilt-builds)
-- [Building from source](#building-from-source)
-  - [Build requirements](#build-requirements)
-  - [macOS](#macos)
-  - [Linux](#linux)
-  - [Windows](#windows)
-- [Stats](#stats)
-- [Command line](#command-line)
+get this fork from **[github releases](https://github.com/ceoweb20/swiftify/releases/latest)**. upstream downloads are a different build.
 
-## Before you start
+| platform | download | installation |
+| --- | --- | --- |
+| macos · apple silicon | `macos-aarch64.dmg` | open the image and drag the app to applications |
+| macos · intel | `macos-x86_64.dmg` | same, but soloist is unavailable on intel macs |
+| windows · x64 | `windows-x86_64-setup.exe` | run setup; it adds shortcuts and an uninstaller without requiring administrator access |
+| linux · x64 | `linux-x86_64.zip` | extract it and run `./Swiftify/bin/swiftify` |
 
-- **spotify premium.** playback goes through librespot, and that only works with premium.
-- **a spotify client id.** your library, playlists and search come from the spotify
-  web api through your own developer app. the first launch walks u through it:
-  make an app in the [spotify developer dashboard](https://developer.spotify.com/dashboard),
-  add `http://127.0.0.1:8898/login` as a redirect uri, and paste the apps client id
-  into swiftify. you dont need the client secret.
+the filenames also include the version number. screenshots show the current code; a published release can lag behind while builds finish.
 
-## Tutorials
+linux packages bundle qt, but still need the host's audio and system libraries, including alsa, pulseaudio or pipewire-pulse, glib and dbus. macos builds are not notarized, and windows builds are not authenticode-signed, so the os may ask you to approve the first launch.
 
-### spotify playback (librespot with soloist fallback)
+the other zip files are portable builds and update payloads. `.json` and `.sig` files are update metadata, not installers. keep a portable installation's files together.
 
-spotify refuses librespot the keys to decrypt songs on newer accounts (librespot's
-logs say `error audio key 0 1`). swiftify tries librespot first, and switches to
-[spotify soloist](https://developer.spotify.com/documentation/soloist), spotify's
-own connect client, only when Spotify refuses the account's audio key. Network
-errors, unavailable tracks and cancelled requests do not switch players.
-Once switched, Soloist handles subsequent tracks until logout or restart.
-If it is not configured, playback stops with instructions to install Soloist
-and enter your own API key in Settings → Account → Spotify Soloist.
+## first launch
 
-soloist runs on linux (x86_64, aarch64, armv7), apple silicon macs and 64-bit
-windows. there is no intel mac build. its binaries may not be redistributed, so
-swiftify does not ship one: it downloads the build for your platform from
-spotify when you ask it to.
+you need a spotify premium account for librespot playback, and a client id from your own spotify developer app for the library, playlists and search.
 
-1. open settings → spotify soloist and press "install soloist". it lands in
-   swiftify's data directory; a soloist you installed yourself also works
-   (`~/.local/bin/soloist`, `/opt/homebrew/bin/soloist`, on your `PATH`, or
-   beside `swiftify.exe` on windows)
-2. make a soloist api key in the [developer dashboard](https://developer.spotify.com/dashboard/soloist)
-   and paste it in the same settings page. every user needs their own key;
-   it is kept in `~/.config/soloist/api-key` (or `%LOCALAPPDATA%\soloist\api-key`
-   on windows, or `SOLOIST_API_KEY`)
-3. press play in swiftify. it starts soloist itself, as a connect device called "Swiftify".
-   the first time, pick "Swiftify" once in the devices list of the spotify desktop app on
-   the same computer (or the phone app), so soloist is signed in
+1. open the [spotify developer dashboard](https://developer.spotify.com/dashboard) and create an app. select the web api if asked.
+2. add this exact redirect uri in the app's settings:
 
-for a shell, or a build agent, `tools/install-soloist.sh` (linux and macos) and
-`tools/install-soloist.ps1` (windows) install the right build for the machine.
+   ```text
+   http://127.0.0.1:8898/login
+   ```
 
-on linux with pipewire, swiftify makes a sink called "Swiftify (Soloist)" for soloist to play into,
-and plays that on through its own output, so the equalizer and the visualizers still work.
-under pulseaudio alone, or on macos and windows, soloist plays straight to the speakers.
-`SWIFTIFY_SOLOIST_ROUTE=off` does that on purpose. tempo and pitch do not apply to
-Soloist, and crossfade waits for each song to end. soloist builds expire after 90 days;
-swiftify replaces its own download before that, and again if one ever expires.
+3. copy the client id into swiftify and choose **connect library**. the client secret is not needed.
+4. choose **connect playback** and finish the spotify login in your browser.
+5. pick something to play.
 
-if spotify on your phone doesnt list "Swiftify" for step 3, a firewall (ufw) is probably
-dropping the pairing connection; pair from the spotify desktop app on the same computer.
+use the same spotify account for the library and playback if you want personalized mixes to match. the spotify api can restrict some playlists or library operations; swiftify cannot grant permissions that spotify does not provide.
 
-### Discord RPC
+### if librespot cannot play
 
-Enable under Settings → Account → Discord Rich Presence (disabled by default) to broadcast 
-your current track, artist, public album cover, and playback status to the Discord desktop app.
-This uses a standard listening activity named Swiftify; pauses freeze progress and display Paused. 
-Because this uses custom RPC rather than Spotify's official account integration, Listen Along is not supported.
-Ensure Discord’s own activity privacy settings allow game/activity status.
-To use Discord RPC you need to create an application on [Discord's Developer Portal](https://discord.com/developers/applications)
-and copy it's ID into the settings. Swiftify connects over local IPC (Unix sockets or Windows named pipes) with zero external
-SDKs and automatic reconnection.
-It checks standard paths for native, Flatpak, Snap, Canary, PTB, and third-party clients like Vesktop.
-For more verbose logging run swiftify with `QT_LOGGING_RULES="swiftify.discord.debug=true"`
+some accounts, particularly newer ones, are refused the audio keys librespot needs. swiftify detects that refusal and switches to **[spotify soloist](https://developer.spotify.com/documentation/soloist)**. an ordinary network error or an unavailable track does not trigger the switch.
 
-## Prebuilt builds
+to set it up:
 
-The release workflow produces Windows/Linux x86_64 and macOS Apple Silicon/Intel
-packages. A pushed version tag publishes them under
-[releases](https://github.com/ceoweb20/swiftify/releases).
+1. open **settings → account → spotify soloist** and choose **install soloist**.
+2. create your own key in the [soloist dashboard](https://developer.spotify.com/dashboard/soloist).
+3. paste the key into swiftify and press enter.
+4. once, open the official spotify app on the same network and select the device named **swiftify**. this pairs soloist with your account.
+5. return to swiftify and press play.
 
-- **windows.** run `swiftify-<version>-windows-x86_64-setup.exe`. It installs for
-  your user, adds shortcuts and registers an uninstaller; administrator access is not required.
-- **linux.** unpack it anywhere and run `bin/swiftify`. it brings its own Qt, but needs
-  the system audio libraries described below.
-- **macOS.** open the `.dmg` for your architecture and drag `Swiftify.app` to
-  Applications. Ad-hoc builds are not notarized; macOS may require approval.
+pairing is saved. you do not need to repeat it on every launch or open spotify every time you use swiftify. each user needs their own soloist key; none is included with this app.
 
-ZIP archives are also published for the signed updater and portable installations.
-Keep an extracted portable tree together. In-app installation is only available
-in updater-enabled builds, in a user-writable installation; system installations
-should use their package manager.
+soloist is downloaded directly from spotify, not bundled or redistributed. official builds exist for linux x86_64/arm, apple silicon macos and x86_64 windows. builds expire after 90 days; swiftify refreshes its managed download after 80 days and when an expired build exits.
 
-## Building from source
+manual installations also work: put the executable on your path, use `SWIFTIFY_SOLOIST` to point to it, or use [the shell installer](tools/install-soloist.sh) / [the powershell installer](tools/install-soloist.ps1). a key can also be supplied through `SOLOIST_API_KEY` or the `soloist/api-key` file in the system configuration directory.
 
-### Language and Discord activity
+## a few things worth knowing
 
-In **Settings → Appearance → Language**, choose **System**, **English**, or
-**Русский**. The choice is saved and takes effect immediately, without restarting.
-Track metadata, playlist names, search queries and custom preset names are not translated.
+### dj mix is not spotify ai dj
 
-**Settings → Account → Discord Rich Presence** optionally shares the current track,
-artist, public Spotify cover and progress with the running Discord **desktop** app.
-It is off by default. Activity requests use the listening type and the name
-**Spotify**. A pause keeps the track visible with **Paused / На паузе**, without
-running timestamps; resuming restores progress. Disabling RPC clears the activity.
-This is Rich Presence, not Spotify's official linked-account activity; it does not
-enable Listen Along. Some Discord versions may prefer the application's registered
-name over the requested activity name; in that case, rename your application in the
-Developer Portal. Discord's own
-activity privacy settings must also allow displaying activity.
+the button on home assembles a local queue using the music available to your account. it removes duplicate and unplayable tracks, avoids immediately replaying the current song, and tries to space artists apart. **new dj mix** builds another queue.
 
-This build has no shared Discord application registered for Swiftify yet. Create
-an application named Swiftify at <https://discord.com/developers/applications> and
-paste its numeric **Application ID** into the field, then press Enter or leave the
-field. This is a public identifier, **not** a bot token, client secret, or Spotify
-Client ID. Applications such as Sonora ship their developer's shared Application ID,
-which is why their users don't need this step; do not reuse another app's ID.
+it is not spotify's ai dj algorithm, has no announcer, and does not create a playlist on your account. spotify does not expose an official api for controlling ai dj. if personalized playlists are unavailable, swiftify falls back to your library and listening history. a failed or cancelled request leaves your existing queue alone.
 
-RPC uses local IPC and automatically reconnects when Discord starts again. There
-is no additional SDK or dependency. Local file paths and private cover URLs are
-never included. The RPC protocol has automated tests against a fake local Discord
-server; testing the real Discord status requires a valid application ID and Discord.
+### themes and fullscreen playback
 
-### Language and playback quality
+choose **settings → appearance → colours → cover colors** to let the interface follow the playing cover. palettes are cached and calculated off the ui thread; they fade between tracks and fall back to the default palette when artwork is missing.
 
-English and Russian are available in Settings → Appearance → Language, including
-menus, dialogs, playback errors and Soloist setup. Dates, weekdays and numbers
-follow the selected language. Track names, artist names and user playlists are
-not translated.
+matugen is optional. it generates a material-style palette from an image, usually your wallpaper. swiftify can follow its json output; you do not need it to use the built-in themes.
 
-Librespot no longer advertises a second Connect device; only Soloist does so when
-it is needed for fallback playback. The legacy device-name setting was removed.
+the fullscreen player's sound panel has its own visualizer switch. the global visualizer setting still takes priority.
 
-The Lossless section appears only while the Soloist backend is selected. The
-library account's subscription is read from Spotify's profile API. Premium is a
-requirement, not proof that Lossless is available for the paired Soloist account
-or its region. Configure the Swiftify device's quality in Spotify itself: the
-current Soloist WebSocket API cannot set or verify delivered stream quality.
+### soloist audio and lossless
 
-Translations use Qt `qsTr` / `qsTranslate` and an embedded UTF-8 catalog at
-`translations/ru.json`; no additional Linguist tools are required. Russian plural
-entries contain three forms (one, few, many).
+soloist supports lossless playback up to **24-bit / 44.1 khz** with premium, according to [spotify's documentation](https://github.com/spotify/soloist). availability also depends on the account and region. its current api cannot set or verify the delivered quality, so swiftify does not pretend that a local switch can enable it.
 
-### Cover colors and DJ Mix
+the lossless information section appears when the soloist backend is selected. the 96/160/320 kbit/s setting controls librespot, not soloist.
 
-**Settings → Appearance → Colours → Cover colors** makes the app follow the
-playing cover. It reuses the player's cached, background-generated Material
-palettes and its existing color fade; no extra downloads or idle polling are
-added. Light/dark mode is respected. A missing or unreadable cover falls back to
-Swiftify's default palette, rather than keeping the previous track's colors.
+on macos and windows, soloist outputs directly to the system, outside the rust audio pipeline. rust-side equalizer, spectrum analysis, tempo and pitch processing do not apply to that output. linux with pipewire can route soloist through swiftify for the equalizer and visualizers; `SWIFTIFY_SOLOIST_ROUTE=off` disables that route. soloist playback also does not use swiftify's librespot crossfade.
 
-**Start DJ Mix** on Home assembles up to 40 tracks from available personalized
-Spotify playlists, saved songs, recent listening and top tracks by those artists.
-It removes duplicate/unplayable tracks, excludes the current song, and spaces
-artists where possible. The collection requests are bounded. Missing playlists
-fall back to library data; an empty/failed request leaves the old queue intact.
-Cancelling or manually choosing a track withdraws a pending mix. The resulting
-queue is local to Swiftify: no playlist is created or changed on Spotify.
+### saved logins
 
-This is Swiftify's own mix, **not Spotify AI DJ** and not the same recommendation
-algorithm. It has no voice narration or undocumented DJ control endpoint. Use
-**New DJ Mix** to build another queue; it does not claim endless DJ playback.
+spotify logins stay in an encrypted vault outside the application directory. macos can remember its unlock password in keychain; windows uses user-scoped dpapi encryption. new installations create a random vault password automatically.
 
-### Personalized Spotify playlists
+if you already have a password-protected vault, enter its old password **once** to migrate. subsequent launches unlock automatically when secure storage is available. linux keeps the manual password flow. a locked keychain, denied access or a changed macos signing identity can require manual unlock again.
 
-**Made for You / Для тебя** in the sidebar opens all personalized playlists
-returned for the signed-in playback account. Home also shows Spotify's own
-playlist shelves and the Made For You page (Daily Mixes, Blends, On Repeat,
-Discover Weekly, etc., when Spotify provides them). Shelves scroll horizontally;
-the full grid is not limited to the home page's eight-card previews.
+reinstalling the app does not require deleting your data. see [vault storage and recovery](docs/credential-vault.md) before moving or resetting the credential files.
 
-Saved playlists are also read from the session rootlist, including playlists
-inside folders, and merged by ID with the existing Web API library. Personalized
-recommendations remain separate from saved playlists and cannot be edited unless
-the account actually owns or collaborates on a saved copy. They can be pinned in
-Swiftify without following or modifying them on Spotify.
+### discord and listening stats
 
-This uses the existing playback login: no cookies, new scopes, or developer app
-are needed. A refresh button reloads collections; failures preserve existing
-collections and do not block playback or the ordinary library. The playback and
-library logins must belong to the same account. Section names follow the selected
-interface language (refresh if changed during an in-flight load).
+discord activity is optional and off by default. create an app in the [discord developer portal](https://discord.com/developers/applications), then paste its application id into **settings → account → discord rich presence**. no bot token is needed. discord's desktop app and activity-sharing permission must be enabled. this is rich presence, not spotify's linked-account activity or listen along.
 
-The discovery API is **internal and unsupported by Spotify**, so availability
-and response formats can change. Query definitions are read only from Spotify's
-public web-player assets, cached in memory for 24 hours, and never executed. No
-external hash registry is used, and tokens remain in the Rust core.
+the stats page can use local listening history or a public [stats.fm](https://stats.fm) profile. local history stays on your computer and can be exported as csv. its collection can be disabled in settings.
 
-**Jam is a live collaborative session, not a playlist. Spotify AI DJ also is not
-a normal playlist and has no documented public API for its generated commentary
-and program control. Neither native Jam sessions nor AI DJ are implemented here.**
-Use the official Spotify client for those features. A playlist named DJ is not a
-replacement for Spotify AI DJ.
+### updates and restarting
 
-### Continue after restarting
+release builds can check for updates and install them while nothing is playing. both automatic checking and installation can be disabled under **settings → about → updates**. system-package installations should use their package manager instead.
 
-Swiftify remembers the current track, its position, queue, shuffle order, and
-repeat mode. After restarting, the track is shown **paused**; only pressing Play
-loads it into the audio core and resumes from the saved position. Startup never
-starts music automatically. A restored position can also be changed before Play.
+the player remembers the last track, position and queue, but restores them **paused**. opening the app should not start music by itself.
 
-State is kept locally alongside preferences, checkpointed during playback and
-flushed on orderly quit. Logging out clears it. Missing local files and unavailable
-Spotify tracks are not silently replaced with another song; Play reports the usual
-loading error. Invalid snapshots are ignored. Extremely large queues keep up to
-2,000 entries around the current occurrence and up to 100 history entries.
+## build from source
 
-### Full-screen visualizers
+you need git, a c++20 compiler, **qt 6.10 or newer**, qcoro for qt 6, cmake 3.24+, ninja and a current stable rust toolchain from [rustup](https://rustup.rs).
 
-**Settings → Visualizer → Full-screen player visualizer** controls the immersive
-bars/wave, artwork ring and the live spectrum behind the equalizer independently
-of the player-bar and track-list meters. The same switch is available at the top
-of the full-screen Sound panel. The global visualizer switch still takes priority.
-Decorative progress-bar shapes and the live background have their own settings.
-
-### Saved logins and automatic unlock
-
-Spotify logins stay in an **encrypted file**. On macOS, its unlock password is
-remembered in Keychain; Windows stores it with user-scoped DPAPI encryption.
-New installations create a random vault password automatically. Existing
-password-protected vaults need the old password once, then unlock on subsequent
-launches without asking again. Linux keeps the manual vault-password flow.
-
-No password is stored in plaintext preferences. If OS secure storage is
-unavailable, the app falls back to manual unlock instead of weakening encryption.
-OTA updates preserve the encrypted file. See [credential vault details,
-migration, limitations and recovery](docs/credential-vault.md).
-
-### Portable builds and updates
-
-GitHub Actions builds macOS (Apple Silicon and Intel), Windows x64 and Linux x64
-portable packages. When all four builds pass on `main` and `CMakeLists.txt` names a
-version that has no release yet, that release is published with the packages and
-signed update manifests. Pushing a `v<version>` tag does the same. The portable packages look for new releases once a day and install a verified one
-by themselves, restarting once nothing is playing (**Settings → About → Updates**;
-both switches can be turned off). System/package-manager installations are not
-overwritten.
-
-Releases are signed with this repository's own Ed25519 key, and the macOS packages with
-a certificate of its own (not notarized, so a browser download needs right-click → Open
-once). See [release/update setup, trust model and limitations](docs/updates.md).
-
-### Saving the current song and Windows widgets
-
-The heart beside the current track in the bottom player and full-screen player
-uses the same Spotify saved-song state as track menus. It stays synchronized
-across both players, and ignores duplicate clicks while Spotify is updating the library. Saving still requires a connected Spotify
-library with the existing saved-song permissions.
-
-Windows builds with a sufficiently recent SMTC SDK also publish track duration
-and position through the media-session timeline, not just taskbar progress.
-Widgets using the Windows media-session API can read these values; other/custom
-widget integrations may need their own support. Runtime verification on Windows
-is still required.
-
-### Build requirements
-
-- Qt 6.10 or newer: Qt Base, Qt Declarative, Qt Shader Tools and Qt WebSockets
-- QCoro 0.10 or newer, built for Qt 6
-- CMake 3.24 or newer, Ninja, and a C++20 compiler
-- Rust (stable, from [rustup](https://rustup.rs))
-
-the first cmake run needs internet: it pulls [Corrosion](https://github.com/corrosion-rs/corrosion)
-(which builds the rust core as part of the cmake build) and two fonts, Material Symbols
-Rounded and Google Sans Flex, each checked against a pinned hash.
-
-the builds below skip the tests with `-DBUILD_TESTING=OFF`. for a manual CMake
-build, drop that and run `ctest --test-dir build` if u want them.
-
-### macOS
-
-u need [homebrew](https://brew.sh) and apple's command line tools (`xcode-select --install`, or full xcode). then:
+qt needs the base, declarative, shader tools and websockets modules. linux also needs the pulse/alsa and openssl development packages. the first configure downloads corrosion and the interface/icon fonts, with pinned versions or hashes.
 
 ```sh
-brew install qtbase qtdeclarative qtshadertools qtwebsockets qcoro6 cmake ninja
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-source "$HOME/.cargo/env"
-
 git clone https://github.com/ceoweb20/swiftify.git
 cd swiftify
+```
+
+<details>
+<summary>macos</summary>
+
+install apple's command line tools and the dependencies through homebrew. install rust separately if it is not already available.
+
+```sh
+xcode-select --install
+brew install cmake ninja qtbase qtdeclarative qtshadertools qtwebsockets qcoro6
+
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
-cmake --build build
-ditto build/swiftify.app /Applications/Swiftify.app
+cmake --build build --parallel
+open build/swiftify.app
 ```
 
-it's signed ad hoc, so no developer account needed.
-with full xcode installed the icon gets compiled with `actool` and picks up macos 26's glass,
-dark and tinted looks; with just the command line tools it's built from the PNGs.
+this is a local, ad-hoc-signed build. for a self-contained package with qt bundled, use [the macos release script](tools/build-macos-portable.sh) with `QT_ROOT_DIR` pointing to your qt kit. it produces both a disk image and the updater zip.
 
-### Linux
+</details>
 
-on arch either build a proper package, which installs to `/usr`:
+<details>
+<summary>linux</summary>
 
-```sh
-git clone https://github.com/ceoweb20/swiftify.git
-cd swiftify/packaging/arch
-makepkg -si
-```
-or use cmake:
+for arch-based systems:
 
 ```sh
-# replace with your package manager if not on arch
-sudo pacman -S --needed git qt6-base qt6-declarative qt6-shadertools qt6-wayland qt6-websockets qcoro libpulse alsa-lib openssl cmake ninja rust pkgconf
+sudo pacman -S --needed git cmake ninja rust pkgconf \
+  qt6-base qt6-declarative qt6-shadertools qt6-wayland qt6-websockets \
+  qcoro libpulse alsa-lib openssl
 
-git clone https://github.com/ceoweb20/swiftify.git
-cd swiftify
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DCMAKE_INSTALL_PREFIX="$HOME/.local"
-cmake --build build
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+  -DBUILD_TESTING=OFF -DCMAKE_INSTALL_PREFIX="$HOME/.local"
+cmake --build build --parallel
 cmake --install build
 ```
 
-on debian/ubuntu (or derivatives with Qt 6.8 or 6.9), use the build script that handles
-compatibility patches automatically:
+make sure `~/.local/bin` is on your path. a [pkgbuild](packaging/arch/PKGBUILD) is also included if you prefer a package-managed installation.
+
+on debian or ubuntu, the [debian build script](tools/build-debian.sh) can install distro dependencies:
 
 ```sh
-sudo apt-get install git qt6-base-dev qt6-declarative-dev qt6-shader-baker \
-    qt6-shadertools-dev qt6-wayland qt6-websockets-dev qcoro-qt6-dev \
-    libpulse-dev libasound2-dev libssl-dev cmake ninja-build pkg-config
-# install rust from https://rustup.rs if you dont have it
-
-git clone https://github.com/ceoweb20/swiftify.git
-cd swiftify
-./tools/build-debian.sh
-```
-
-or with `--install-deps` to install the dependencies automatically:
-
-```sh
-git clone https://github.com/ceoweb20/swiftify.git
-cd swiftify
 ./tools/build-debian.sh --install-deps
 ```
 
-anywhere else, install the same reqs (Qt 6.10+ with D-Bus, OpenGL and Wayland,
-QCoro for Qt 6, libpulse, plus the ALSA, OpenSSL and pkg-config dev packages), then
-run the cmake commands above. if you have Qt 6.8 or 6.9, use `tools/build-debian.sh` which
-applies the necessary compatibility patches.
+install rust, cmake and ninja first. the script has compatibility patches for older system qt versions and modifies the checkout; a qt 6.10+ build remains the preferred configuration.
 
-`cmake --install` drops `swiftify` in `~/.local/bin` (make sure that's on your `PATH`)
-and the desktop entry, icons and fonts in `~/.local/share`. 
+linux integration includes mpris/media keys, the system tray and pausing before sleep. `-DSWIFTIFY_DESKTOP_INTEGRATION=OFF` disables the pulse/desktop integration pieces for development builds.
 
-Logins use the password-protected vault on Linux too; no secret-service daemon is needed.
+</details>
 
-on linux it also hooks into MPRIS (media keys, `playerctl`, shell media widgets),
-logind (pauses before the machine sleeps), pipewire/pulseaudio device changes, and
-the tray. `-DSWIFTIFY_DESKTOP_INTEGRATION=OFF` turns those off.
+<details>
+<summary>windows</summary>
 
-### Windows
+install git, cmake, ninja, rust and a qt kit with shader tools and websockets. the recommended combination is **visual studio 2022** with the desktop c++ workload and **qt 6.10.3 msvc2022_64**, matching the release workflow.
 
-**because most Windows users cant even use their own OS, i made a script that handles building so it's as simple as possible :)**
-
-first install Qt 6.10+ with *Qt Shader Tools* and *Qt WebSockets*, CMake and Ninja from the Qt online installer,
-Rust from [rustup](https://rustup.rs), and Git. choose either Qt for *MSVC 2022 64-bit*
-with Visual Studio 2022 17.1+ (or Build Tools) and its *Desktop development with C++*
-workload, or Qt for *MinGW 64-bit* with its matching MinGW toolchain.
-
-then run this in Windows PowerShell:
+from powershell in the repository root:
 
 ```powershell
-git clone https://github.com/ceoweb20/swiftify.git
-Set-Location swiftify
-.\tools\build-windows.ps1
+.\tools\build-windows.ps1 -QtPath 'C:\Qt\6.10.3\msvc2022_64'
 ```
 
-for a different Qt kit, toolchain location or install directory, pass overrides:
-
-```powershell
-.\tools\build-windows.ps1 -QtPath 'C:\Qt\6.11.2\msvc2022_64'
-.\tools\build-windows.ps1 -QtPath 'C:\Qt\6.10.3\mingw_64' -MingwPath 'C:\Qt\Tools\mingw1310_64\bin' -InstallPrefix "$env:LOCALAPPDATA\Programs\Swiftify"
-```
-
-adjust the example paths to your installed versions, MinGW must match your Qt
-kit, not just the example folder name. 
-
-**the toolchain decides one feature:** the Windows media controls (the media overlay,
-lock screen and media keys showing what's playing) need `SystemMediaTransportControls`
-in the compiler's Windows headers.
-
-| toolchain | media controls |
-|---|---|
-| MSVC 2022 | yes |
-| Qt's MinGW 13.1 (`mingw1310_64`, mingw-w64 runtime v11) | no, everything else works |
-| a newer mingw-w64 (tested: GCC 16.1, runtime v14) | yes |
-
-when they're left out, cmake warns `building without the Windows media controls`.
-for every feature, build with MSVC. a newer MinGW works too, but it isn't the one
-your Qt kit was built with, so the script warns about the mismatch.
-
-quit a running installed copy through its tray menu before updating it.
-
-if PowerShell blocks the script, review it first, then run
-`powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\build-windows.ps1`.
-this applies only to that process, not your machine's execution policy.
-
-start the installed app with:
+the script builds dependencies, installs the app and deploys the required qt/runtime libraries. its default destination is `%LOCALAPPDATA%\Programs\Swiftify`:
 
 ```powershell
 & "$env:LOCALAPPDATA\Programs\Swiftify\bin\swiftify.exe"
 ```
 
-font downloads are hash-checked on every configure; on Windows, a failed CMake
-download is retried with `curl.exe` using the system certificate store.
+matching mingw kits are supported through `-MingwPath`, but older mingw headers lack windows media controls. use msvc if you want the complete feature set. if powershell blocks the script, a process-local override is available:
 
-
-## Stats
-
-the Stats page (in the sidebar, or `swiftify --stats`) shows what you've been listening to,
-like the [listening-stats](https://github.com/HeadshotInteractive/listening-stats) spicetify app:
-listening time, plays, top songs, artists, albums and genres, when in the day and the week you
-listen, a calendar of the last year, and your recent plays. pick a period (today, 4 weeks,
-6 months, all time) and rank by plays or by time.
-
-it reads from either:
-
-- **stats.fm**, by username. your profile's stats have to be public; nothing else is needed.
-- **this computer**: every song you listen to for 30 seconds or more (or half of a shorter one)
-  gets kept in `listening-history.jsonl` in swiftify's data folder, and never leaves it. genres
-  come from spotify through your library login. you can export the history as csv, or turn
-  tracking off, under Settings → Listening Stats.
-
-## Command line
-
-only one swiftify runs at a time. launching it again just passes the command to the one
-that's already running, so these work great as keybinds:
-
-| flag | |
-|---|---|
-| `--immersive` | open the immersive player |
-| `--play-pause` | play or pause |
-| `--next` | next song |
-| `--previous` | previous song |
-| `--stats` | open the stats page |
-
-on hyprland for example:
-
-```ini
-bind = SUPER SHIFT, M, exec, swiftify --immersive
-bind = , XF86AudioPlay, exec, swiftify --play-pause
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\build-windows.ps1
 ```
+
+the setup executable is built with inno setup 6 through [the installer packager](tools/package-installer.py). the github actions workflow handles that step for releases.
+
+</details>
+
+### tests
+
+for a manual cmake build, configure with testing enabled, then build and run:
+
+```sh
+cmake -S . -B build -DBUILD_TESTING=ON
+cmake --build build --parallel
+ctest --test-dir build --output-on-failure
+python3 tests/check_translations.py .
+python3 tests/check_update_tools.py
+```
+
+## command line
+
+only one instance runs at a time. launching another copy passes the command to the running player, which makes these useful for desktop shortcuts:
+
+| option | action |
+| --- | --- |
+| `--immersive` | open the fullscreen player |
+| `--play-pause` | toggle playback |
+| `--next` | next track |
+| `--previous` | previous track |
+| `--stats` | open listening stats |
+
+## problems and project notes
+
+- **login does not return to the app:** check the redirect uri above and make sure port `8898` is not occupied.
+- **spotify refuses the audio key:** configure soloist rather than repeatedly reconnecting librespot.
+- **soloist is not listed in spotify:** check that both devices are on the same network and that a firewall is not blocking discovery. pairing from the desktop app on the same computer can help.
+- **the vault asks again after migration:** secure storage was unavailable or access was denied. on macos, changing the build's signing identity can also break keychain trust.
+- **personalized playlists are missing:** that feed uses an internal spotify interface and can change or be unavailable for an account. the ordinary library and dj mix's library fallback do not require it.
+
+report fork-specific problems in [this repository's issues](https://github.com/ceoweb20/swiftify/issues), with your os, app version and playback backend. leave api keys and tokens out of logs and screenshots.
+
+this is a personal fork, so features and fixes follow what i use. if you want to propose a larger change, open an issue before writing it. upstream remains the source of the original player and most of its interface; please don't send fork-specific bug reports there.
+
+thanks to [the original swiftify project](https://github.com/swiftify-org/swiftify), [librespot](https://github.com/librespot-org/librespot), [spotify soloist](https://developer.spotify.com/documentation/soloist) and the libraries behind the app. the material 3 expressive direction comes from upstream, with inspiration from [end-4](https://github.com/end-4).
