@@ -231,6 +231,32 @@ private slots:
         QTest::newRow("unlock") << true;
     }
 
+    void automaticVaultUnlockDoesNotOpenThePasswordDialog()
+    {
+        class UnlockStore final : public VaultUnlockStore {
+        public:
+            QByteArray load() override { return {}; }
+            bool save(const QByteArray &) override { return true; }
+        };
+        QTemporaryDir directory;
+        Rig rig;
+        CredentialVault vault(directory.filePath(QStringLiteral("logins.vault")), nullptr,
+                              std::make_shared<UnlockStore>());
+        vault.restore();
+        QQmlComponent component(&rig.engine);
+        component.setData("import QtQuick\nimport Swiftify\n"
+                          "Item { id: host; width: 526; height: 410; property alias dialog: gate;"
+                          " VaultDialog { id: gate; parent: host } }", QUrl());
+        std::unique_ptr<QObject> object(component.create());
+        QVERIFY2(object, qPrintable(component.errorString()));
+        auto *dialog = object->property("dialog").value<QObject *>();
+        QVERIFY(dialog);
+        QVERIFY(!dialog->property("visible").toBool());
+        QTRY_VERIFY_WITH_TIMEOUT(vault.unlocked(), 15000);
+        Rig::settle();
+        QVERIFY(!dialog->property("visible").toBool());
+    }
+
     void vaultPasswordDialog()
     {
         QFETCH(bool, existing);

@@ -22,9 +22,55 @@ def load(name):
 
 
 packager = load("package-portable")
+installer = load("package-installer")
 
 
 class UpdateToolsTest(unittest.TestCase):
+    def test_windows_installer_uses_deployed_tree_and_inno_setup(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "application with spaces"
+            (root / "bin").mkdir(parents=True)
+            (root / "bin/swiftify.exe").write_bytes(b"fixture")
+            output = Path(temporary) / "dist"
+            def compile_installer(command, check):
+                self.assertTrue(check)
+                self.assertEqual(command[0], "fixture-ISCC.exe")
+                self.assertIn(f"/DSourceRoot={root.resolve()}", command)
+                (output / f"swiftify-{installer.version()}-windows-x86_64-setup.exe").write_bytes(b"installer")
+            with patch.object(installer.subprocess, "run", side_effect=compile_installer):
+                result = installer.package(root, "windows-x86_64", output, iscc="fixture-ISCC.exe")
+            self.assertTrue(result.is_file())
+            script = (SOURCE / "packaging/windows/installer.iss").read_text()
+            self.assertIn("PrivilegesRequired=lowest", script)
+            self.assertIn("Swiftify-uninstall", script)
+            self.assertIn("recursesubdirs", script)
+
+    @unittest.skipIf(os.name == "nt", "DMG staging requires Unix symlink support")
+    def test_macos_dmg_has_an_applications_shortcut(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "swiftify.app"
+            (root / "Contents/MacOS").mkdir(parents=True)
+            (root / "Contents/MacOS/swiftify").write_bytes(b"fixture")
+            output = Path(temporary) / "dist"
+            calls = []
+            def create_image(command, check):
+                calls.append(command)
+                if command[0] == "hdiutil":
+                    stage = Path(command[command.index("-srcfolder") + 1])
+                    self.assertEqual(os.readlink(stage / "Applications"), "/Applications")
+                    Path(command[-1]).write_bytes(b"dmg")
+            with patch.object(installer.subprocess, "run", side_effect=create_image):
+                result = installer.package(root, "macos-aarch64", output)
+            self.assertEqual([call[0] for call in calls], ["ditto", "hdiutil"])
+            self.assertEqual(result.suffix, ".dmg")
+
+    def test_installers_require_a_deployed_application(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for target in ("windows-x86_64", "macos-aarch64", "linux-x86_64"):
+                with self.assertRaises(ValueError):
+                    installer.package(root, target, root / "out")
+
     def test_portable_root_marker_and_executable_are_packaged(self):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary)

@@ -112,13 +112,15 @@ The release workflow produces Windows/Linux x86_64 and macOS Apple Silicon/Intel
 packages. A pushed version tag publishes them under
 [releases](https://github.com/ceoweb20/swiftify/releases).
 
-- **windows.** unzip it anywhere and run `bin\swiftify.exe`.
+- **windows.** run `swiftify-<version>-windows-x86_64-setup.exe`. It installs for
+  your user, adds shortcuts and registers an uninstaller; administrator access is not required.
 - **linux.** unpack it anywhere and run `bin/swiftify`. it brings its own Qt, but needs
   the system audio libraries described below.
-- **macOS.** choose your architecture, unzip and move `Swiftify.app` to a writable
-  application directory. Ad-hoc builds are not notarized; macOS may require approval.
+- **macOS.** open the `.dmg` for your architecture and drag `Swiftify.app` to
+  Applications. Ad-hoc builds are not notarized; macOS may require approval.
 
-Keep the extracted portable tree together. In-app installation is only available
+ZIP archives are also published for the signed updater and portable installations.
+Keep an extracted portable tree together. In-app installation is only available
 in updater-enabled builds, in a user-writable installation; system installations
 should use their package manager.
 
@@ -225,16 +227,17 @@ of the player-bar and track-list meters. The same switch is available at the top
 of the full-screen Sound panel. The global visualizer switch still takes priority.
 Decorative progress-bar shapes and the live background have their own settings.
 
-### Saved logins without Keychain
+### Saved logins and automatic unlock
 
-From 0.17.0, Spotify logins are stored in an **encrypted file**, not Keychain or
-another OS credential backend. Create a separate vault password (at least 12
-characters) and sign in to Spotify once again. Old Keychain entries are left
-untouched; the app never attempts to read them. Each launch asks for the vault
-password once; reopening the window and refreshing tokens do not ask again.
+Spotify logins stay in an **encrypted file**. On macOS, its unlock password is
+remembered in Keychain; Windows stores it with user-scoped DPAPI encryption.
+New installations create a random vault password automatically. Existing
+password-protected vaults need the old password once, then unlock on subsequent
+launches without asking again. Linux keeps the manual vault-password flow.
 
-The key stays only in memory. There is no plaintext fallback or forgotten-password
-recovery. OTA updates preserve the encrypted file. See [credential vault details,
+No password is stored in plaintext preferences. If OS secure storage is
+unavailable, the app falls back to manual unlock instead of weakening encryption.
+OTA updates preserve the encrypted file. See [credential vault details,
 migration, limitations and recovery](docs/credential-vault.md).
 
 ### Portable builds and updates

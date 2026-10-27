@@ -1,5 +1,6 @@
 #include "spotify/CredentialVault.h"
 #include "spotify/SpotifyError.h"
+#include "app/ErrorCenter.h"
 #include <swiftify_core.h>
 
 #include <QDir>
@@ -11,6 +12,7 @@
 #include <QPointer>
 #include <QQmlEngine>
 #include <QSaveFile>
+#include <QRandomGenerator>
 #include <QtConcurrent>
 #include <QCoroSignal>
 
@@ -34,7 +36,8 @@ SpotifyError vaultError()
 }
 }
 
-CredentialVault::CredentialVault(QString path, QObject *parent) : QObject(parent), m_path(std::move(path))
+CredentialVault::CredentialVault(QString path, QObject *parent, std::shared_ptr<VaultUnlockStore> unlockStore)
+    : QObject(parent), m_path(std::move(path)), m_unlockStore(std::move(unlockStore))
 {
     if (inUse()) {
         Q_ASSERT(!s_instance);
@@ -60,9 +63,49 @@ CredentialVault *CredentialVault::create(QQmlEngine *engine, QJSEngine *)
 
 bool CredentialVault::exists() const { return inUse() && QFileInfo::exists(m_path); }
 
+void CredentialVault::restore()
+{
+    if (!inUse() || !m_unlockStore || m_busy || unlocked()) return;
+    QByteArray password = m_unlockStore->load();
+    if (password.isEmpty() && !exists()) {
+        const QString directory = QFileInfo(m_path).absolutePath();
+        if (!QDir().mkpath(directory)) {
+            fail(tr("Could not open the credential vault directory."));
+            return;
+        }
+        QFile::setPermissions(directory, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+        m_lock = std::make_unique<QLockFile>(m_path + QStringLiteral(".lock"));
+        if (!m_lock->tryLock(0)) {
+            fail(tr("Another Swiftify instance is using this vault."));
+            return;
+        }
+        // Another process may have created the vault before we acquired the lock.
+        // Never replace its remembered password with a freshly generated one.
+        if (exists()) {
+            m_lock.reset();
+            return;
+        }
+        QByteArray random(32, Qt::Uninitialized);
+        for (auto &byte : random) byte = char(QRandomGenerator::system()->generate() & 0xff);
+        password = random.toBase64();
+        random.fill('\0');
+        // Never create a randomly keyed vault unless its password is recoverable.
+        if (!m_unlockStore->save(password)) {
+            password.fill('\0');
+            fail(tr("Secure automatic unlock is unavailable. Create a vault password to continue."));
+            return;
+        }
+    }
+    if (password.isEmpty()) return; // An old vault needs its password once for migration.
+    m_restoring = true;
+    unlock(QString::fromUtf8(password));
+    password.fill('\0');
+}
+
 void CredentialVault::fail(const QString &message)
 {
     m_busy = false;
+    m_restoring = false;
     m_error = message;
     if (!unlocked()) m_lock.reset();
     emit changed();
@@ -77,8 +120,10 @@ void CredentialVault::unlock(const QString &password)
     const QString directory = QFileInfo(m_path).absolutePath();
     if (!QDir().mkpath(directory)) { fail(tr("Could not open the credential vault directory.")); return; }
     QFile::setPermissions(directory, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
-    m_lock = std::make_unique<QLockFile>(m_path + QStringLiteral(".lock"));
-    if (!m_lock->tryLock(0)) { fail(tr("Another Swiftify instance is using this vault.")); return; }
+    if (!m_lock) {
+        m_lock = std::make_unique<QLockFile>(m_path + QStringLiteral(".lock"));
+        if (!m_lock->tryLock(0)) { fail(tr("Another Swiftify instance is using this vault.")); return; }
+    }
     QByteArray encoded;
     const bool opening = exists();
     if (opening) {
@@ -94,7 +139,10 @@ void CredentialVault::unlock(const QString &password)
     }
     m_busy = true; m_error.clear(); emit changed();
     auto *watcher = new QFutureWatcher<OpenResult>(this);
-    connect(watcher, &QFutureWatcher<OpenResult>::finished, this, [this, watcher, opening] {
+    const bool remember = m_unlockStore && !m_restoring;
+    auto rememberedPassword = std::make_shared<SecretBytes>();
+    if (remember) rememberedPassword->bytes = password.toUtf8();
+    connect(watcher, &QFutureWatcher<OpenResult>::finished, this, [this, watcher, opening, remember, rememberedPassword] {
         const OpenResult result = watcher->result();
         watcher->deleteLater();
         if (!result.key || !result.plaintext) {
@@ -126,6 +174,13 @@ void CredentialVault::unlock(const QString &password)
         }
         m_items = items;
         m_key = result.key;
+        m_restoring = false;
+        if (remember && !m_unlockStore->save(rememberedPassword->bytes)) {
+            if (auto *errors = ErrorCenter::instance()) {
+                errors->show(tr("The vault is unlocked, but its password could not be remembered securely. You may be asked again next launch."));
+            }
+        }
+        rememberedPassword->bytes.fill('\0');
         m_busy = false; m_error.clear(); emit changed(); emit ready();
     });
     watcher->setFuture(QtConcurrent::run([passwordBytes = password.toUtf8(), encoded]() mutable {

@@ -12,7 +12,9 @@ StyledDialog {
     headline: CredentialVault.exists ? qsTr("Unlock saved logins") : qsTr("Protect your Spotify logins")
     symbol: "lock"
     readonly property string intro: CredentialVault.exists
-          ? qsTr("Enter your vault password. It stays in memory until Swiftify quits; no Keychain access is used.")
+          ? CredentialVault.automaticUnlock
+            ? qsTr("Enter your existing vault password once. Swiftify will remember it using this computer's secure storage and unlock automatically on later launches.")
+            : qsTr("Enter your vault password. It stays in memory until Swiftify quits; no Keychain access is used.")
           : qsTr("Choose a separate password, not your Spotify password (at least 12 characters). Saved logins are encrypted on disk. You will enter it once at launch.")
 
     function submit() {
@@ -24,14 +26,14 @@ StyledDialog {
     }
 
     Component.onCompleted: {
-        if (CredentialVault.inUse && !CredentialVault.unlocked) Qt.callLater(root.open)
+        if (CredentialVault.inUse && !CredentialVault.unlocked && !CredentialVault.busy) Qt.callLater(root.open)
     }
     onOpened: password.forceActiveFocus()
     Connections {
         target: CredentialVault
         function onChanged() {
             if (CredentialVault.unlocked) root.accept()
-            else if (CredentialVault.inUse && !root.visible) root.open()
+            else if (CredentialVault.inUse && !CredentialVault.busy && !root.visible) root.open()
         }
     }
 
@@ -112,7 +114,7 @@ StyledDialog {
             StyledText {
                 width: parent.width
                 visible: CredentialVault.busy || CredentialVault.error.length > 0
-                text: CredentialVault.busy ? qsTr("Unlocking encrypted logins…") : CredentialVault.error
+                text: CredentialVault.busy ? qsTr("Unlocking encrypted logins…") : qsTranslate("Errors", CredentialVault.error)
                 wrapMode: Text.Wrap
                 color: CredentialVault.busy ? Appearance.colors.onSurfaceVariant : Appearance.colors.error
             }

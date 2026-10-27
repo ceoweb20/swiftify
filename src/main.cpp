@@ -315,7 +315,9 @@ int main(int argc, char *argv[])
     QObject::connect(&settings, &Settings::streamingQualityChanged, &core, applyStreaming);
     QObject::connect(&settings, &Settings::normalizeVolumeChanged, &core, applyStreaming);
     QObject::connect(&settings, &Settings::songCacheMegabytesChanged, &core, applyStreaming);
-    CredentialVault vault(paths::dataDirectory() + QStringLiteral("/credentials/logins.vault"));
+    const QString vaultPath = paths::dataDirectory() + QStringLiteral("/credentials/logins.vault");
+    CredentialVault vault(vaultPath, nullptr, systemVaultUnlockStore(vaultPath));
+    vault.restore();
     CachedCredentialStore credentials(&vault);
     SpotifySession session(&core, &credentials, &network, &errors);
     PlaybackController player(&core, &session, &settings, &errors);

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "spotify/CredentialStore.h"
+#include "spotify/VaultUnlockStore.h"
 #include <QObject>
 #include <QJsonObject>
 #include <QLockFile>
@@ -12,8 +13,8 @@ struct SwiftifyVault;
 
 namespace swiftify {
 
-/// The user's two Spotify logins in an authenticated encrypted file. The key is
-/// derived once per launch from their password, never persisted or put in Keychain.
+/// Encrypted Spotify logins; an optional OS-protected password store permits
+/// unattended unlock without changing the existing encrypted vault format.
 class CredentialVault final : public QObject, public CredentialStore {
     Q_OBJECT
     QML_ELEMENT
@@ -23,9 +24,11 @@ class CredentialVault final : public QObject, public CredentialStore {
     Q_PROPERTY(bool unlocked READ unlocked NOTIFY changed FINAL)
     Q_PROPERTY(bool busy READ busy NOTIFY changed FINAL)
     Q_PROPERTY(QString error READ error NOTIFY changed FINAL)
+    Q_PROPERTY(bool automaticUnlock READ automaticUnlock CONSTANT FINAL)
 
 public:
-    explicit CredentialVault(QString path, QObject *parent = nullptr);
+    explicit CredentialVault(QString path, QObject *parent = nullptr,
+                             std::shared_ptr<VaultUnlockStore> unlockStore = {});
     ~CredentialVault() override;
     static CredentialVault *create(QQmlEngine *, QJSEngine *);
     bool inUse() const { return !m_path.isEmpty(); }
@@ -33,6 +36,8 @@ public:
     bool unlocked() const { return bool(m_key); }
     bool busy() const { return m_busy; }
     QString error() const { return m_error; }
+    bool automaticUnlock() const { return bool(m_unlockStore); }
+    void restore();
     Q_INVOKABLE void unlock(const QString &password);
 
     QCoro::Task<std::optional<StoredCredentials>> load(Account account) override;
@@ -52,5 +57,7 @@ private:
     std::shared_ptr<SwiftifyVault> m_key;
     QHash<Account, StoredCredentials> m_items;
     std::unique_ptr<QLockFile> m_lock;
+    std::shared_ptr<VaultUnlockStore> m_unlockStore;
+    bool m_restoring = false;
 };
 } // namespace swiftify

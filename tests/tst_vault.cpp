@@ -15,6 +15,17 @@
 using namespace swiftify;
 namespace {
 const QString password = QStringLiteral("fixture password only");
+class MemoryUnlockStore final : public VaultUnlockStore {
+public:
+    QByteArray secret;
+    bool writable = true;
+    QByteArray load() override { return secret; }
+    bool save(const QByteArray &value) override {
+        if (!writable) return false;
+        secret = value;
+        return true;
+    }
+};
 QByteArray bytes(const QString &path) {
     QFile file(path);
     return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();
@@ -28,6 +39,99 @@ QCoro::Task<> waitingLoad(CredentialVault &vault, bool &done) {
 class VaultTest : public QObject {
     Q_OBJECT
 private slots:
+    void newVaultUnlocksAutomaticallyAcrossLaunches()
+    {
+        QTemporaryDir directory;
+        const QString path = directory.filePath(QStringLiteral("credentials/logins.vault"));
+        auto store = std::make_shared<MemoryUnlockStore>();
+        {
+            CredentialVault vault(path, nullptr, store);
+            vault.restore();
+            QTRY_VERIFY_WITH_TIMEOUT(vault.unlocked(), 15000);
+            QVERIFY(store->secret.size() >= 32);
+            QCoro::waitFor(vault.save(CredentialStore::Account::Playback,
+                {QStringLiteral("client"), QStringLiteral("fixture-token"), 2}));
+            QVERIFY(!bytes(path).contains(store->secret));
+            QVERIFY(!bytes(path).contains("fixture-token"));
+        }
+        {
+            CredentialVault vault(path, nullptr, store);
+            vault.restore();
+            QTRY_VERIFY_WITH_TIMEOUT(vault.unlocked(), 15000);
+            const auto credentials = QCoro::waitFor(vault.load(CredentialStore::Account::Playback));
+            QVERIFY(credentials);
+            QCOMPARE(credentials->refreshToken, QStringLiteral("fixture-token"));
+        }
+    }
+
+    void oldVaultPasswordIsRememberedOnlyAfterSuccessfulUnlock()
+    {
+        QTemporaryDir directory;
+        const QString path = directory.filePath(QStringLiteral("logins.vault"));
+        {
+            CredentialVault vault(path);
+            vault.unlock(password);
+            QTRY_VERIFY_WITH_TIMEOUT(vault.unlocked(), 15000);
+        }
+        auto store = std::make_shared<MemoryUnlockStore>();
+        {
+            CredentialVault vault(path, nullptr, store);
+            vault.restore();
+            QVERIFY(!vault.unlocked());
+            vault.unlock(QStringLiteral("wrong password"));
+            QTRY_VERIFY_WITH_TIMEOUT(!vault.busy(), 15000);
+            QVERIFY(store->secret.isEmpty());
+            vault.unlock(password);
+            QTRY_VERIFY_WITH_TIMEOUT(vault.unlocked(), 15000);
+            QCOMPARE(store->secret, password.toUtf8());
+        }
+        {
+            CredentialVault vault(path, nullptr, store);
+            vault.restore();
+            QTRY_VERIFY_WITH_TIMEOUT(vault.unlocked(), 15000);
+        }
+    }
+
+    void failedSecureStorageNeverCreatesAnUnrecoverableVault()
+    {
+        QTemporaryDir directory;
+        const QString path = directory.filePath(QStringLiteral("logins.vault"));
+        auto store = std::make_shared<MemoryUnlockStore>();
+        store->writable = false;
+        CredentialVault vault(path, nullptr, store);
+        vault.restore();
+        QVERIFY(!vault.unlocked());
+        QVERIFY(!vault.exists());
+        QVERIFY(!vault.error().isEmpty());
+    }
+
+    void automaticCreationDoesNotReplaceThePasswordWhileAnotherInstanceOwnsTheLock()
+    {
+        QTemporaryDir directory;
+        const QString path = directory.filePath(QStringLiteral("logins.vault"));
+        QLockFile lock(path + QStringLiteral(".lock"));
+        QVERIFY(lock.tryLock(0));
+        auto store = std::make_shared<MemoryUnlockStore>();
+        CredentialVault vault(path, nullptr, store);
+        vault.restore();
+        QVERIFY(!vault.unlocked());
+        QVERIFY(!vault.exists());
+        QVERIFY(store->secret.isEmpty());
+    }
+
+#ifdef Q_OS_WIN
+    void windowsPasswordIsProtectedByDpapi()
+    {
+        QTemporaryDir directory;
+        const QString path = directory.filePath(QStringLiteral("logins.vault"));
+        auto store = systemVaultUnlockStore(path);
+        QVERIFY(store);
+        QVERIFY(store->save(password.toUtf8()));
+        QVERIFY(!bytes(path + QStringLiteral(".dpapi")).contains(password.toUtf8()));
+        QCOMPARE(store->load(), password.toUtf8());
+    }
+#endif
+
     void quittingBeforeUnlockDoesNotResumeADestroyedSession()
     {
         QTemporaryDir directory;

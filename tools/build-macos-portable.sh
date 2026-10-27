@@ -25,8 +25,8 @@ dependency() {
 dependency qcoro https://github.com/qcoro/qcoro.git v0.13.0 \
     -DUSE_QT_VERSION=6 -DQCORO_WITH_QTDBUS=OFF -DQCORO_WITH_QTWEBSOCKETS=OFF -DQCORO_WITH_QTQUICK=OFF \
     -DQCORO_WITH_QML=OFF -DQCORO_WITH_QTTEST=OFF -DQCORO_BUILD_EXAMPLES=OFF
-# Keep a consistent release identity. Spotify logins use the encrypted vault,
-# not the OS credential store, regardless of how this bundle is signed.
+# Keep a stable release identity so the Keychain auto-unlock item continues
+# trusting later versions of the application.
 IDENTITY="${SWIFTIFY_CODESIGN_IDENTITY:--}"
 cmake -S "$SOURCE" -B "$WORK/app" "${common[@]}" \
     ${SWIFTIFY_UPDATE_PUBLIC_KEY:+"-DSWIFTIFY_UPDATE_PUBLIC_KEY=$SWIFTIFY_UPDATE_PUBLIC_KEY"} -DSWIFTIFY_COMPILE_APP_ICON=OFF \
@@ -47,3 +47,4 @@ if [[ "$IDENTITY" != "-" && "$requirement" != *"certificate root"* ]]; then
     exit 1
 fi
 python3 "$SOURCE/tools/package-portable.py" --root "$APP" --target "$TARGET" --out "$SOURCE/dist"
+python3 "$SOURCE/tools/package-installer.py" --root "$APP" --target "$TARGET" --out "$SOURCE/dist"

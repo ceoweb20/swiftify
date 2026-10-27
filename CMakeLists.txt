@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.24)
 
 project(Swiftify
-    VERSION 0.23.0
+    VERSION 0.24.0
     DESCRIPTION "A native Spotify client"
     LANGUAGES C CXX)
 
@@ -485,7 +485,7 @@ if(APPLE)
     # icloud tags files with finder and file-provider attributes, which
     # codesign refuses to seal, so they go first.
     # Ad hoc by default; release builds may use a consistent signing identity.
-    # Credentials use the encrypted vault and do not depend on this identity.
+    # A stable identity preserves access to the vault's Keychain unlock item.
     set(SWIFTIFY_CODESIGN_IDENTITY "-" CACHE STRING "codesign identity for the app bundle; - signs ad hoc")
     if(SWIFTIFY_BUILD_UPDATER)
         add_custom_command(TARGET swiftify POST_BUILD

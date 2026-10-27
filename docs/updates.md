@@ -10,8 +10,10 @@ and stable version tags:
 | `windows-x86_64` | windows-2022 / MSVC | `Swiftify/bin/swiftify.exe` |
 | `linux-x86_64` | ubuntu-22.04 | `Swiftify/bin/swiftify` |
 
-Builds bundle Qt and the standalone Rust update helper. They produce ZIP files
-as Actions artifacts. A pushed `v<version>` tag builds all four targets, signs the
+Builds bundle Qt and the standalone Rust update helper. End-user artifacts are
+macOS `.dmg` images and a Windows `-setup.exe` installer; separate `*-update`
+Actions artifacts retain the ZIPs consumed by OTA. Linux continues using a ZIP.
+A pushed `v<version>` tag builds all four targets, signs the
 update manifests and publishes a GitHub release in the repository that ran the
 workflow. The tag must exactly match `v<version>` from `CMakeLists.txt`. Drafts,
 prereleases and Actions artifacts are never offered as OTA updates.
@@ -106,14 +108,17 @@ the backup path are kept in the app cache's `swiftify-update-*` directory.
    computer), not with an Apple identity. The certificate keeps the designated
    requirement stable, but is not Apple Developer ID/notarization and does not
    guarantee the absence of OS trust prompts. A DMG does not change that.
-   **From 0.17.0, Spotify credentials do not use Keychain at all**: see the
-   [password-protected credential vault](credential-vault.md). Updates preserve
-   that file and ask for the vault password on the next launch.
+   The encrypted [credential vault](credential-vault.md) is preserved. Its unlock
+   password can be retained in Keychain; the stable identity also matters for
+   access to that item. Old vaults require one manual unlock for migration.
    The certificate is self-signed: Gatekeeper warnings may remain on downloads.
   To get the same stable identity for builds made on your own Mac, import
   `signing.p12` into your login keychain and pass
   `-DSWIFTIFY_CODESIGN_IDENTITY=<its SHA-1>` to cmake.
-- **Windows:** use a portable per-user installation, e.g. under LocalAppData.
+- **Windows:** the Inno Setup installer installs under LocalAppData without UAC,
+   adds shortcuts and registers an uninstaller. Its uninstall metadata is outside
+   the replaceable app tree (`Programs/Swiftify-uninstall`), so OTA does not remove it.
+   Portable ZIP installations also remain supported.
   Authenticode signing is not configured; SmartScreen warnings can remain.
   The app exits before the helper replaces DLLs/executables. Locked files or a
   non-writable installation may prevent replacement; no UAC bypass is attempted.

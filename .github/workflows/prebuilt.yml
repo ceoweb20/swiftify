@@ -14,6 +14,8 @@ on:
       - tools/build-linux-tarball.sh
       - tools/build-macos-portable.sh
       - tools/package-portable.py
+      - tools/package-installer.py
+      - packaging/windows/**
       - tools/sign-updates.py
       - tools/update-helper/**
       - CMakeLists.txt
@@ -135,7 +137,16 @@ jobs:
 
       - name: package
         shell: pwsh
-        run: python tools/package-portable.py --root "$env:RUNNER_TEMP\${{ steps.version.outputs.name }}" --target windows-x86_64 --out dist
+        run: |
+          python tools/package-portable.py --root "$env:RUNNER_TEMP\${{ steps.version.outputs.name }}" --target windows-x86_64 --out dist
+          if ($LASTEXITCODE -ne 0) { throw 'Update package creation failed' }
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup --version=6.4.3 --yes --no-progress
+            if ($LASTEXITCODE -ne 0) { throw 'Inno Setup installation failed' }
+          }
+          python tools/package-installer.py --root "$env:RUNNER_TEMP\${{ steps.version.outputs.name }}" --target windows-x86_64 --out dist --iscc $iscc
+          if ($LASTEXITCODE -ne 0) { throw 'Windows installer creation failed' }
 
       - name: updater tests
         shell: bash
@@ -146,7 +157,13 @@ jobs:
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: windows
+          name: windows-installer
+          path: dist/*-setup.exe
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-update
           path: dist/*.zip
           if-no-files-found: error
 
@@ -233,8 +250,8 @@ jobs:
           arch: clang_64
           modules: qtshadertools qtwebsockets
           cache: true
-      # Keep the release identity consistent. Runtime credentials use the
-      # encrypted vault, not a keychain, regardless of this signing certificate.
+      # Keep the release identity consistent so automatic Keychain unlock keeps
+      # trusting later application versions.
       # without the secret the app is signed ad hoc, as a pull request's is
       - name: import the signing identity
         env:
@@ -272,7 +289,12 @@ jobs:
           python3 tests/check_update_tools.py
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: ${{ matrix.runner }}
+          name: ${{ matrix.runner }}-installer
+          path: dist/*.dmg
+          if-no-files-found: error
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ matrix.runner }}-update
           path: dist/*.zip
           if-no-files-found: error
 
