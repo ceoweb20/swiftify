@@ -15,6 +15,8 @@ Item {
     /// the panel is coming or going, so sizes ease rather than jump
     property bool animateLayout: false
     property MaterialScheme scheme: PlayerStyle.darkScheme
+    property real controlsOpacity: 1
+    readonly property real controlsShift: compactHorizontal ? 0 : Math.round((transport.implicitHeight + volume.implicitHeight + details.spacing * 2) / 2)
 
     readonly property bool showsRing: Settings.visualizersEnabled && Settings.immersiveVisualizer && Settings.circularVisualizer
     /// round inside the ring, or round on its own with visualizers off
@@ -221,12 +223,16 @@ Item {
                     animateChange: !metadataFade.running
                 }
 
-                Row {
+                Item {
+                    id: artistLine
                     anchors.horizontalCenter: parent.horizontalCenter
-                    spacing: 5
+                    width: parent.width
+                    implicitHeight: Math.max(artistText.implicitHeight, more.height, 28)
 
                     ArtistNames {
+                        id: artistText
                         objectName: "immersiveArtists"
+                        anchors.horizontalCenter: parent.horizontalCenter
                         anchors.verticalCenter: parent.verticalCenter
                         width: Math.max(0, Math.min(implicitWidth, metadata.width - more.width - (saveSong.visible ? saveSong.width + 5 : 0) - 5))
                         song: root.shownSong
@@ -246,8 +252,12 @@ Item {
                         iconColor: saved ? root.scheme.primary : Qt.rgba(1, 1, 1, 0.62)
                         colBackgroundHover: Qt.rgba(1, 1, 1, 0.1)
                     }
+
                     IconButton {
                         id: more
+                        objectName: "immersiveMoreButton"
+                        anchors.left: artistText.right
+                        anchors.leftMargin: 4
                         anchors.verticalCenter: parent.verticalCenter
                         scheme: root.scheme
                         symbol: "more_horiz"
@@ -257,6 +267,8 @@ Item {
                         colBackgroundHover: Qt.rgba(1, 1, 1, 0.1)
                         tooltip: qsTr("More")
                         onClicked: SongMenus.open(Player.currentSong, false)
+                        opacity: root.controlsOpacity
+                        enabled: root.controlsOpacity > 0
                     }
                 }
 
@@ -314,6 +326,8 @@ Item {
                 objectName: "immersiveTransport"
                 anchors.horizontalCenter: parent.horizontalCenter
                 spacing: root.compactHorizontal ? Math.max(8, Math.min(28, (details.width - 196) / 4)) : 28
+                opacity: root.controlsOpacity
+                enabled: root.controlsOpacity > 0
 
 
                 Control {
@@ -389,6 +403,8 @@ Item {
                 id: volume
                 anchors.horizontalCenter: parent.horizontalCenter
                 spacing: 10
+                opacity: root.controlsOpacity
+                enabled: root.controlsOpacity > 0
 
                 IconButton {
                     anchors.verticalCenter: parent.verticalCenter

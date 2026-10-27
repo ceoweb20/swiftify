@@ -26,7 +26,7 @@ QStringList socketCandidates(const QStringList &roots);
 }
 
 /// Local Discord IPC only. No token, SDK, external service, or background thread.
-/// Presence is opt-in; pauses keep a labeled track without a ticking timer.
+/// Presence is opt-in; pauses keep a labeled track and progress bar.
 /// Disabling clears it and closes the connection.
 class DiscordPresence : public QObject {
     Q_OBJECT
@@ -35,12 +35,19 @@ class DiscordPresence : public QObject {
     Q_PROPERTY(bool connected READ connected NOTIFY connectedChanged FINAL)
     Q_PROPERTY(QString status READ status NOTIFY statusChanged FINAL)
 public:
+    static constexpr int kDefaultInactivityTimeoutMs = 10 * 60 * 1000;
+
     DiscordPresence(PlaybackController *player, Settings *settings, QObject *parent = nullptr,
-                    std::function<QStringList()> socketLocator = {});
+                    std::function<QStringList()> socketLocator = {},
+                    int inactivityTimeoutMs = kDefaultInactivityTimeoutMs);
     ~DiscordPresence() override;
     static DiscordPresence *create(QQmlEngine *, QJSEngine *);
     bool connected() const { return m_ready; }
     QString status() const;
+    int inactivityTimeout() const { return m_inactivity.interval(); }
+    void setInactivityTimeout(int ms);
+    bool inactivityTimerActive() const { return m_inactivity.isActive(); }
+    bool idleTerminated() const { return m_idleTerminated; }
 
 signals:
     void connectedChanged();
@@ -56,6 +63,8 @@ private:
     void update();
     void clear();
     void setReady(bool ready);
+    void handlePlaybackStateChanged();
+    void onInactivityTimeout();
     enum class Failure { None, Unavailable, AccessDenied, TimedOut, InvalidFrame, RejectedConnection, RejectedActivity };
     void fail(Failure failure, int code = -1);
 
@@ -68,11 +77,13 @@ private:
     QTimer m_retry;
     QTimer m_deadline;
     QTimer m_update;
+    QTimer m_inactivity;
     QStringList m_endpoints;
     qsizetype m_endpoint = 0;
     QByteArray m_buffer;
     bool m_ready = false;
     bool m_published = false;
+    bool m_idleTerminated = false;
     QJsonObject m_lastMetadata;
     qint64 m_lastPosition = 0;
     qint64 m_lastUpdate = 0;

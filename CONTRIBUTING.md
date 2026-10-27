@@ -130,6 +130,6 @@ crossfade between songs with a configurable length in playback settings, version
 
 ## Pull requests
 
-- keep one change per pull request
+- keep one change per pull request. do NOT submit bulk pull request as this makes reviewing really hard and complex
 - say what changed, how you tested it and on which platform
 - add a screenshot for ui changes

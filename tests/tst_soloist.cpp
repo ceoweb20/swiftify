@@ -1,5 +1,6 @@
 #include "FakeCore.h"
 #include "soloist/SoloistCore.h"
+#include "soloist/SoloistSetup.h"
 
 #include <QCoroTask>
 #include <QDateTime>
@@ -9,6 +10,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSignalSpy>
+#include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QWebSocket>
@@ -171,6 +173,24 @@ private slots:
         QVERIFY(m_dir->isValid());
         // stands in for the soloist binary: writes the port the fake listens
         // on where soloist would, and waits to be stopped
+#ifdef Q_OS_WIN
+        m_program = m_dir->filePath(QStringLiteral("soloist.cmd"));
+        QFile script(m_program);
+        QVERIFY(script.open(QIODevice::WriteOnly));
+        script.write("@echo off\r\n"
+                     ":loop\r\n"
+                     "if \"%~1\"==\"\" goto done\r\n"
+                     "if \"%~1\"==\"--data-dir\" (\r\n"
+                     "  set \"d=%~2\"\r\n"
+                     "  shift\r\n"
+                     ")\r\n"
+                     "shift\r\n"
+                     "goto loop\r\n"
+                     ":done\r\n"
+                     "<nul set /p=\"%FAKE_SOLOIST_PORT%\" > \"%d%\\ws.port\"\r\n"
+                     "ping -n 600 127.0.0.1 >nul\r\n");
+        script.close();
+#else
         m_program = m_dir->filePath(QStringLiteral("soloist"));
         QFile script(m_program);
         QVERIFY(script.open(QIODevice::WriteOnly));
@@ -180,6 +200,7 @@ private slots:
                      "exec sleep 600\n");
         script.close();
         script.setPermissions(script.permissions() | QFile::ExeOwner);
+#endif
         m_soloist = std::make_unique<FakeSoloist>();
         qputenv("FAKE_SOLOIST_PORT", QByteArray::number(m_soloist->port()));
         // no sink in the real sound server for a test
@@ -203,7 +224,7 @@ private slots:
         const QStringList names = m_soloist->commandNames();
         const qsizetype play = names.indexOf(QStringLiteral("play"));
         QVERIFY(names.indexOf(QStringLiteral("activate")) >= 0 && names.indexOf(QStringLiteral("activate")) < play);
-        QCOMPARE(names.at(play - 1), QStringLiteral("set_volume"));
+        QVERIFY(names.indexOf(QStringLiteral("set_volume")) >= 0 && names.indexOf(QStringLiteral("set_volume")) < play);
         QCOMPARE(m_soloist->commands.at(play).value(QStringLiteral("uri")).toString(), QStringLiteral("spotify:track:a"));
         // swiftify's queue decides what follows, so soloist's repeat goes off
         const qsizetype repeat = m_soloist->commandNames().indexOf(QStringLiteral("set_repeat_track"));
@@ -214,6 +235,11 @@ private slots:
         QVERIFY(!m_core->takeEndOfTrack());
         // nothing reached librespot
         QVERIFY(m_fallback->pending.isEmpty());
+
+        // playing a new song does not reset soloist's volume
+        m_soloist->commands.clear();
+        QCoro::waitFor(m_core->playTrack(QStringLiteral("spotify:track:b")));
+        QVERIFY(!m_soloist->commandNames().contains(QStringLiteral("set_volume")));
     }
 
     void anUnpairedSoloistSaysHowToPair()
@@ -393,6 +419,94 @@ private slots:
         m_soloist->commands.clear();
         QCoro::waitFor(m_core->playTrack(QStringLiteral("spotify:track:b")));
         QVERIFY(m_soloist->commandNames().contains(QStringLiteral("play")));
+    }
+
+    void detectsSoloistAndApiKey()
+    {
+        qputenv("SWIFTIFY_SOLOIST", m_program.toUtf8());
+        qputenv("SOLOIST_API_KEY", "test-api-key");
+        // there is no librespot fallback anymore: the config is always there,
+        // and an unset program or key is explained when something plays
+        const auto detected = SoloistCore::configured();
+        QCOMPARE(detected.program, m_program);
+        QCOMPARE(detected.apiKey, QStringLiteral("test-api-key"));
+        qunsetenv("SWIFTIFY_SOLOIST");
+        qunsetenv("SOLOIST_API_KEY");
+    }
+
+    void soloistArchivesMatchEachPlatform()
+    {
+        using soloist::archiveUrl;
+        const QString base = QStringLiteral("https://soloist-builds.spotifycdn.com/");
+        QCOMPARE(archiveUrl(u"linux", u"x86_64"), base + QStringLiteral("soloist_release_x86_64.tar.gz"));
+        QCOMPARE(archiveUrl(u"linux", u"aarch64"), base + QStringLiteral("soloist_release_arm64.tar.gz"));
+        QCOMPARE(archiveUrl(u"linux", u"armv7l"), base + QStringLiteral("soloist_release_arm32.tar.gz"));
+        QCOMPARE(archiveUrl(u"macos", u"arm64"), base + QStringLiteral("soloist_release_osx_arm64.tar.gz"));
+        QCOMPARE(archiveUrl(u"windows", u"x86_64"), base + QStringLiteral("soloist_release_windows_x86_64.zip"));
+        QCOMPARE(archiveUrl(u"windows", u"AMD64"), base + QStringLiteral("soloist_release_windows_x86_64.zip"));
+        // spotify has no intel mac or windows arm build
+        QVERIFY(archiveUrl(u"macos", u"x86_64").isEmpty());
+        QVERIFY(archiveUrl(u"windows", u"arm64").isEmpty());
+        QVERIFY(archiveUrl(u"freebsd", u"x86_64").isEmpty());
+    }
+
+    void apiKeyIsWrittenAndReadBack()
+    {
+        QStandardPaths::setTestModeEnabled(true);
+        qunsetenv("SOLOIST_API_KEY");
+        QString error;
+        QVERIFY2(soloist::writeApiKey(QStringLiteral(" secret-key \n"), &error), qPrintable(error));
+        QCOMPARE(soloist::readApiKey(), QStringLiteral("secret-key"));
+#ifndef Q_OS_WIN
+        const auto others = QFileDevice::ReadGroup | QFileDevice::WriteGroup | QFileDevice::ExeGroup
+            | QFileDevice::ReadOther | QFileDevice::WriteOther | QFileDevice::ExeOther;
+        QVERIFY(!(QFile::permissions(soloist::apiKeyPath()) & others));
+#endif
+        QFile::remove(soloist::apiKeyPath());
+        QStandardPaths::setTestModeEnabled(false);
+    }
+
+    void refreshIsDueBeforeTheBuildExpires()
+    {
+        const QDateTime now = QDateTime::currentDateTime();
+        soloist::InstallMetadata metadata;
+        metadata.valid = true;
+        metadata.installedAt = now.addDays(-81);
+        QVERIFY(soloist::needsRefresh(metadata, now));
+        metadata.installedAt = now.addDays(-10);
+        QVERIFY(!soloist::needsRefresh(metadata, now));
+        // a soloist installed by hand has no metadata, and is left alone
+        QVERIFY(!soloist::needsRefresh({}, now));
+    }
+
+    void settingVolumeSendsSetVolumeToSoloist()
+    {
+        QCoro::waitFor(m_core->playTrack(QStringLiteral("spotify:track:a")));
+        m_soloist->commands.clear();
+        m_core->setVolume(0.42f);
+        QTRY_VERIFY(m_soloist->commandNames().contains(QStringLiteral("set_volume")));
+        QCOMPARE(m_soloist->commands.last().value(QStringLiteral("volume")).toInt(), 42);
+
+        m_core->setVolume(0.85f);
+        QTRY_COMPARE(m_soloist->commands.last().value(QStringLiteral("volume")).toInt(), 85);
+    }
+
+    void remoteVolumeChangeUpdatesCoreVolume()
+    {
+        QCoro::waitFor(m_core->playTrack(QStringLiteral("spotify:track:a")));
+        QSignalSpy spy(m_core.get(), &PlaybackCore::remoteVolumeChanged);
+        m_soloist->send({{QStringLiteral("type"), QStringLiteral("volume_changed")},
+                         {QStringLiteral("volume"), 63}});
+        QTRY_COMPARE(spy.count(), 1);
+        QCOMPARE(m_core->volume(), 0.63f);
+    }
+
+    void spectrumLevelsNeedARoute()
+    {
+        // without a pipewire route the analyser never hears soloist's audio
+        m_fallback->musicLevels = true;
+        float levels[48]{};
+        QCOMPARE(m_core->spectrumLevels(levels, 48), 0);
     }
 
 private:

@@ -9,5 +9,9 @@ namespace swiftify::paths {
 QString dataDirectory();
 /// $XDG_CACHE_HOME/Swiftify, for artwork and other things safe to delete.
 QString cacheDirectory();
+/// $XDG_DATA_HOME/Swiftify/logs, for diagnostic output.
+QString logDirectory();
+/// $XDG_DATA_HOME/Swiftify/logs/swiftify.log
+QString logFilePath();
 
 } // namespace swiftify::paths

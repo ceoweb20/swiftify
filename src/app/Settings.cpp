@@ -1,7 +1,13 @@
 #include "app/Settings.h"
+#include "app/ErrorCenter.h"
+#include "app/Logging.h"
+#include "app/Paths.h"
+#include "app/Translations.h"
 
+#include <QDesktopServices>
 #include <QQmlEngine>
 #include <QRegularExpression>
+#include <QUrl>
 
 #include <algorithm>
 #include <initializer_list>
@@ -120,6 +126,7 @@ void Settings::load()
         const int cache = stored<int>(m_store, "songCacheMegabytes", m_songCacheMegabytes);
         m_songCacheMegabytes = cache == 500 || cache == 2000 ? cache : 1000;
     }
+    m_normalizeVolume = stored<bool>(m_store, "normalizeVolume", m_normalizeVolume);
     m_crossfadeEnabled = stored<bool>(m_store, "crossfadeEnabled", m_crossfadeEnabled);
     m_spotifyConnect = stored<bool>(m_store, "reportToSpotify", m_spotifyConnect);
     m_connectDeviceName = stored<QString>(m_store, "connectDeviceName", m_connectDeviceName).trimmed().left(64);
@@ -138,6 +145,7 @@ void Settings::load()
         m_backdropReactivity = std::clamp(raw, 0.0, 3.0);
     }
     m_debuggingEnabled = stored<bool>(m_store, "debuggingEnabled", m_debuggingEnabled);
+    m_loggingEnabled = stored<bool>(m_store, "loggingEnabled", m_loggingEnabled);
     m_pinnedPlaylistsExpanded = stored<bool>(m_store, "pinnedPlaylistsExpanded", m_pinnedPlaylistsExpanded);
     m_allPlaylistsExpanded = stored<bool>(m_store, "allPlaylistsExpanded", m_allPlaylistsExpanded);
     {
@@ -168,6 +176,12 @@ void Settings::load()
     }
     m_showWindowControls = stored<bool>(m_store, "showWindowControls", m_showWindowControls);
     m_windowControlsOnRight = stored<bool>(m_store, "windowControlsOnRight", m_windowControlsOnRight);
+    if (const QString source = stored<QString>(m_store, "statsSource", m_statsSource);
+        source == QLatin1StringView("statsfm") || source == QLatin1StringView("local")) {
+        m_statsSource = source;
+    }
+    m_statsFmUsername = stored<QString>(m_store, "statsFmUsername", m_statsFmUsername).trimmed();
+    m_trackListening = stored<bool>(m_store, "trackListening", m_trackListening);
     m_nativeTitleBar = stored<bool>(m_store, "nativeTitleBar", m_nativeTitleBar);
     m_trayIcon = stored<bool>(m_store, "trayIcon", m_trayIcon);
     m_zoom = std::clamp(stored<double>(m_store, "zoom", m_zoom), 0.5, 2.0);
@@ -176,8 +190,21 @@ void Settings::load()
     if (QRegularExpression(QStringLiteral("^[0-9]{17,20}$")).match(id).hasMatch()) {
         m_discordApplicationId = id;
     }
-    m_language = oneOf(stored<QString>(m_store, "language", m_language),
-                      {QStringLiteral("system"), QStringLiteral("en"), QStringLiteral("ru")}, QStringLiteral("system"));
+    const QString configuredLanguage = oneOf(
+        stored<QString>(m_store, "language", m_language),
+        {QStringLiteral("system"), QStringLiteral("en"), QStringLiteral("ru")},
+        QStringLiteral("system"));
+    if (!Translations::isLanguageEnabled(configuredLanguage)) {
+        m_language = QStringLiteral("en");
+        m_store.setValue(QStringLiteral("language"), m_language);
+        m_revertedDisabledLanguage = true;
+        if (auto *errors = ErrorCenter::instance()) {
+            errors->show(Translations::disabledLanguageErrorMessage());
+            m_revertedDisabledLanguage = false;
+        }
+    } else {
+        m_language = configuredLanguage;
+    }
 
 }
 
@@ -282,6 +309,16 @@ void Settings::setStreamingQuality(int raw)
     m_streamingQuality = value;
     m_store.setValue(QStringLiteral("streamingQuality"), value);
     emit streamingQualityChanged();
+}
+
+void Settings::setNormalizeVolume(bool value)
+{
+    if (m_normalizeVolume == value) {
+        return;
+    }
+    m_normalizeVolume = value;
+    m_store.setValue(QStringLiteral("normalizeVolume"), value);
+    emit normalizeVolumeChanged();
 }
 
 void Settings::setSongCacheMegabytes(int megabytes)
@@ -504,6 +541,37 @@ void Settings::setWindowControlsOnRight(bool value)
     emit windowControlsOnRightChanged();
 }
 
+void Settings::setStatsSource(const QString &value)
+{
+    if (m_statsSource == value || (value != QLatin1StringView("statsfm") && value != QLatin1StringView("local"))) {
+        return;
+    }
+    m_statsSource = value;
+    m_store.setValue(QStringLiteral("statsSource"), value);
+    emit statsSourceChanged();
+}
+
+void Settings::setStatsFmUsername(const QString &value)
+{
+    const QString trimmed = value.trimmed();
+    if (m_statsFmUsername == trimmed) {
+        return;
+    }
+    m_statsFmUsername = trimmed;
+    m_store.setValue(QStringLiteral("statsFmUsername"), trimmed);
+    emit statsFmUsernameChanged();
+}
+
+void Settings::setTrackListening(bool value)
+{
+    if (m_trackListening == value) {
+        return;
+    }
+    m_trackListening = value;
+    m_store.setValue(QStringLiteral("trackListening"), value);
+    emit trackListeningChanged();
+}
+
 void Settings::setNativeTitleBar(bool value)
 {
     if (m_nativeTitleBar == value) {
@@ -555,13 +623,92 @@ void Settings::setDiscordApplicationId(const QString &raw)
 }
 void Settings::setLanguage(const QString &raw)
 {
-    const QString value = oneOf(raw, {QStringLiteral("system"), QStringLiteral("en"), QStringLiteral("ru")}, QStringLiteral("system"));
+    QString value = oneOf(raw, {QStringLiteral("system"), QStringLiteral("en"), QStringLiteral("ru")}, QStringLiteral("system"));
+    if (!Translations::isLanguageEnabled(value)) {
+        value = QStringLiteral("en");
+    }
     if (m_language == value) return;
     m_language = value;
     m_store.setValue(QStringLiteral("language"), value);
     emit languageChanged();
 }
 
+bool Settings::isRussianEnabled() const
+{
+    return Translations::isLanguageEnabled(QStringLiteral("ru"));
+}
 
+QString Settings::disabledLanguageMessage() const
+{
+    return Translations::disabledLanguageMessage();
+}
+
+bool Settings::isLanguageEnabled(const QString &language) const
+{
+    return Translations::isLanguageEnabled(language);
+}
+
+void Settings::enforceEnabledLanguage()
+{
+    const bool reverted = !Translations::isLanguageEnabled(m_language);
+    if (reverted) {
+        m_language = QStringLiteral("en");
+        m_store.setValue(QStringLiteral("language"), m_language);
+        m_revertedDisabledLanguage = true;
+        if (auto *errors = ErrorCenter::instance()) {
+            errors->show(Translations::disabledLanguageErrorMessage());
+            m_revertedDisabledLanguage = false;
+        }
+    }
+    emit languageAvailabilityChanged();
+    if (reverted) {
+        emit languageChanged();
+    }
+}
+
+bool Settings::takeRevertedDisabledLanguage()
+{
+    const bool reverted = m_revertedDisabledLanguage;
+    m_revertedDisabledLanguage = false;
+    return reverted;
+}
+
+void Settings::setLoggingEnabled(bool value)
+{
+    if (m_loggingEnabled == value) {
+        return;
+    }
+    m_loggingEnabled = value;
+    m_store.setValue(QStringLiteral("loggingEnabled"), value);
+    if (value) {
+        logging::applyEnvironmentVariables();
+    }
+    emit loggingEnabledChanged();
+}
+
+bool Settings::isLoggingActive() const
+{
+    return logging::isActive();
+}
+
+QString Settings::logDirectory() const
+{
+    return paths::logDirectory();
+}
+
+QString Settings::logFilePath() const
+{
+    return paths::logFilePath();
+}
+
+void Settings::openLogsFolder() const
+{
+    QDesktopServices::openUrl(QUrl::fromLocalFile(paths::logDirectory()));
+}
+
+void Settings::openLogFile() const
+{
+    QDesktopServices::openUrl(QUrl::fromLocalFile(paths::logFilePath()));
+}
 
 } // namespace swiftify

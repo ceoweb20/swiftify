@@ -194,29 +194,27 @@ impl HttpClient {
                 .body(body_as_bytes.clone())?;
             *req.headers_mut() = parts.headers.clone();
 
-            let request = self.request_fut(req)?;
-            let response = request.await;
+            let response = match self.request_fut(req)?.await {
+                Ok(response) => response,
+                Err(e) => return Err(e.into()),
+            };
+            let code = response.status();
 
-            if let Ok(response) = &response {
-                let code = response.status();
-
-                if code == StatusCode::TOO_MANY_REQUESTS {
-                    if let Some(duration) = Self::get_retry_after(response.headers()) {
-                        warn!(
-                            "Rate limited by service, retrying in {} seconds...",
-                            duration.as_secs()
-                        );
-                        tokio::time::sleep(duration).await;
-                        continue;
-                    }
-                }
-
-                if !code.is_success() {
-                    return Err(HttpClientError::StatusCode(code).into());
+            if code == StatusCode::TOO_MANY_REQUESTS {
+                if let Some(duration) = Self::get_retry_after(response.headers()) {
+                    warn!(
+                        "Rate limited by service, retrying in {} seconds...",
+                        duration.as_secs()
+                    );
+                    tokio::time::sleep(duration).await;
+                    continue;
                 }
             }
 
-            let response = response?;
+            if !code.is_success() {
+                return Err(HttpClientError::StatusCode(code).into());
+            }
+
             return Ok(response);
         }
     }
@@ -232,7 +230,11 @@ impl HttpClient {
 
     pub fn request_fut(&self, mut req: Request<Bytes>) -> Result<ResponseFuture, Error> {
         let headers_mut = req.headers_mut();
-        headers_mut.insert(USER_AGENT, self.user_agent.clone());
+        // a request may carry its own user agent (the playplay license
+        // endpoint refuses ours); only fill the default when absent
+        if !headers_mut.contains_key(USER_AGENT) {
+            headers_mut.insert(USER_AGENT, self.user_agent.clone());
+        }
 
         // For rate limiting we cannot *just* depend on Spotify sending us HTTP/429
         // Retry-After headers. For example, when there is a service interruption

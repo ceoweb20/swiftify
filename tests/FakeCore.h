@@ -56,6 +56,7 @@ public:
     quint32 position = 0;
     quint32 duration = 0;
     float volumeValue = 0.75f;
+    float preamp = 0.0f;
     bool spectrumEnabled = false;
     /// levels that move as music's would, for measuring what moving bars
     /// cost; still by default
@@ -115,6 +116,7 @@ public:
     }
     QCoro::Task<QString> lyricsJson(QString uri) override { co_return co_await await(QStringLiteral("lyrics"), uri); }
     QCoro::Task<QString> playlistJson(QString uri) override { co_return co_await await(QStringLiteral("playlist"), uri); }
+    QCoro::Task<QString> discoveryJson(QString locale) override { co_return co_await await(QStringLiteral("discovery"), locale); }
     QCoro::Task<QString> artistTopTracksJson(QString uri) override { co_return co_await await(QStringLiteral("topTracks"), uri); }
 
     void play() override
@@ -135,6 +137,7 @@ public:
     void setVolume(float volume) override { volumeValue = volume; }
     float volume() const override { return volumeValue; }
     void setStreamQuality(int) override {}
+    void setVolumeNormalization(bool) override {}
     bool connectEnabled = false;
     QString connectName;
     void setConnectDevice(bool enabled, const QString &name) override
@@ -144,6 +147,7 @@ public:
     }
     void setAudioCache(const QString &, qint64) override {}
     void setPlaybackShaping(float, float, bool) override {}
+    void setPreampGain(float gain) override { preamp = gain; }
     void setEqualizer(const QList<float> &) override {}
 
     bool sessionIsValid() const override { return sessionValid; }

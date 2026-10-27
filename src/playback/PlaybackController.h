@@ -146,6 +146,8 @@ public:
     Q_INVOKABLE void playFromModel(swiftify::SongListModel *model, int index, bool fromSearch = false);
     /// plays the list from a random song with shuffle on
     Q_INVOKABLE void shufflePlay(swiftify::SongListModel *model);
+    /// plays the list from its first song with shuffle off
+    Q_INVOKABLE void playInOrder(swiftify::SongListModel *model);
     Q_INVOKABLE void playSong(const swiftify::Song &song);
     /// debugging: plays a song whose load never finishes, so the loading
     /// animation of every visualizer can be watched for as long as wanted.
@@ -258,6 +260,8 @@ private:
     void adoptRemoteSong(const Song &song);
     /// play or pause pressed elsewhere
     void followRemotePlaying(bool playing);
+    /// volume changed elsewhere (e.g. on a phone via Spotify Connect)
+    void followRemoteVolume(float volume);
 
     PlaybackCore *m_core;
     SpotifySession *m_session;

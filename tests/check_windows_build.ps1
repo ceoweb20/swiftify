@@ -105,7 +105,7 @@ try {
     $buildRoot = Join-Path $fixture 'build'
     $installPrefix = Join-Path $fixture 'installed'
     New-FixtureFile "$qtPath\mkspecs\qconfig.pri" "QT_VERSION = 6.12.0`nQT_ARCH = x86_64`nQT_GCC_MAJOR_VERSION = 15`nQT_GCC_MINOR_VERSION = 1`nQT_GCC_PATCH_VERSION = 0"
-    foreach ($module in @('Qt6Core', 'Qt6Widgets', 'Qt6Quick', 'Qt6QuickControls2', 'Qt6ShaderTools')) {
+    foreach ($module in @('Qt6Core', 'Qt6Widgets', 'Qt6Quick', 'Qt6QuickControls2', 'Qt6ShaderTools', 'Qt6WebSockets')) {
         New-FixtureFile "$qtPath\lib\cmake\$module\${module}Config.cmake"
     }
     foreach ($file in @('gcc.exe', 'g++.exe', 'libstdc++-6.dll', 'libgcc_s_seh-1.dll', 'libwinpthread-1.dll')) {

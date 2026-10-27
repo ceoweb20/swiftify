@@ -280,7 +280,7 @@ private slots:
         QCOMPARE(activity.value(QStringLiteral("name")).toString(), QStringLiteral("Swiftify"));
         QCOMPARE(activity.value(QStringLiteral("details")).toString(), QStringLiteral("Я\u00a0"));
         QCOMPARE(activity.value(QStringLiteral("state")).toString(), QStringLiteral("Paused · Исполнитель"));
-        QVERIFY(!activity.contains(QStringLiteral("timestamps")));
+        QVERIFY(activity.contains(QStringLiteral("timestamps")));
 
         // Pause doesn't keep sending an activity as wall-clock time advances.
         message = {};
@@ -321,7 +321,7 @@ private slots:
         QTRY_VERIFY(read());
         activity = message.value(QStringLiteral("args")).toObject().value(QStringLiteral("activity")).toObject();
         QCOMPARE(activity.value(QStringLiteral("state")).toString(), QStringLiteral("Paused · Исполнитель"));
-        QVERIFY(!activity.contains(QStringLiteral("timestamps")));
+        QVERIFY(activity.contains(QStringLiteral("timestamps")));
         // Ping payload is opaque, not necessarily JSON.
         peer->write(discord::frame(3, QByteArrayLiteral("ping")));
         peer->flush();
@@ -332,6 +332,205 @@ private slots:
         QCOMPARE(discord::takeFrame(buffer, opcode, payload), discord::FrameResult::Complete);
         QCOMPARE(opcode, 4u);
         QCOMPARE(payload, QByteArrayLiteral("ping"));
+        settings.setDiscordEnabled(false);
+    }
+
+    void inactivityTimerOnlyStartsWhenDiscordEnabled()
+    {
+        Rig rig;
+        QCOMPARE(rig.presence.inactivityTimeout(), DiscordPresence::kDefaultInactivityTimeoutMs);
+        QCOMPARE(rig.presence.inactivityTimeout(), 10 * 60 * 1000);
+        QVERIFY(!rig.settings.discordEnabled());
+        QVERIFY(!rig.presence.inactivityTimerActive());
+
+        Song song;
+        song.name = QStringLiteral("Test Song");
+        song.artists = QStringLiteral("Artist");
+        song.uri = QStringLiteral("spotify:track:test");
+        song.durationMs = 120000;
+        rig.core.duration = song.durationMs;
+
+        rig.player.play(song, {song});
+        if (!rig.core.pending.isEmpty()) {
+            if (const auto call = rig.core.take(QStringLiteral("playTrack"))) call->succeed();
+        }
+        QVERIFY(!rig.presence.inactivityTimerActive());
+
+        rig.player.pause();
+        QVERIFY(!rig.presence.inactivityTimerActive());
+    }
+
+    void inactivityTimerTerminatesConnectionAndResumesOnStart()
+    {
+        QTemporaryDir directory;
+        QLocalServer server;
+        QVERIFY2(server.listen(serverName(directory.path(), 0)), qPrintable(server.errorString()));
+        Settings settings(directory.filePath(QStringLiteral("settings.ini")));
+        ErrorCenter errors(nullptr);
+        MemoryCredentialStore credentials;
+        QNetworkAccessManager network;
+        FakeCore core;
+        SpotifySession session(&core, &credentials, &network, &errors);
+        PlaybackController player(&core, &session, &settings, &errors);
+        DiscordPresence presence(&player, &settings, nullptr, [&] { return QStringList {server.fullServerName()}; });
+
+        settings.setDiscordApplicationId(QStringLiteral("123456789012345678"));
+        settings.setDiscordEnabled(true);
+        QTRY_VERIFY(server.hasPendingConnections());
+        std::unique_ptr<QLocalSocket> peer(server.nextPendingConnection());
+        QByteArray buffer;
+        QJsonObject message;
+        auto read = [&]() -> bool {
+            if (!message.isEmpty()) return true;
+            buffer += peer->readAll();
+            quint32 opcode;
+            QByteArray payload;
+            if (discord::takeFrame(buffer, opcode, payload) != discord::FrameResult::Complete) return false;
+            message = QJsonDocument::fromJson(payload).object();
+            return !message.isEmpty();
+        };
+        QTRY_VERIFY(read());
+        peer->write(discord::frame(1, QByteArrayLiteral("{\"evt\":\"READY\"}")));
+        peer->flush();
+        QTRY_VERIFY(presence.connected());
+        message = {};
+
+        // Inactivity timeout set to 1000 ms for testing (must be > m_update 250 ms debounce)
+        presence.setInactivityTimeout(1000);
+
+        Song song;
+        song.name = QStringLiteral("Track A");
+        song.artists = QStringLiteral("Artist A");
+        song.uri = QStringLiteral("spotify:track:a");
+        song.durationMs = 200000;
+        core.duration = song.durationMs;
+
+        // a spotify song needs a connected playback session, as at launch
+        credentials.items.insert(CredentialStore::Account::Playback,
+                                 {QString::fromLatin1(OAuthFlow::kPlaybackClientId), QStringLiteral("refresh"),
+                                  OAuthFlow::kPlaybackAuthorizationVersion, QStringLiteral("stored-login"), {}, {}});
+        session.setInitialLibraryLoader({});
+        session.restoreSavedSessions();
+        QTRY_VERIFY(std::any_of(core.pending.cbegin(), core.pending.cend(),
+                                [](const auto &call) { return call->name == QLatin1StringView("connectStored"); }));
+        core.take(QStringLiteral("connectStored"))->succeed(QStringLiteral("stored-login"));
+        QTRY_VERIFY(session.isConnected());
+
+        // Start playback
+        player.play(song, {song});
+        QTRY_VERIFY(!core.pending.isEmpty());
+        const auto call = core.take(QStringLiteral("playTrack"));
+        QVERIFY(call);
+        call->succeed();
+        QTRY_VERIFY(player.isPlaying());
+        QVERIFY(!presence.inactivityTimerActive());
+        QTRY_VERIFY(read());
+        message = {};
+
+        // Pause playback: inactivity timer should start
+        player.pause();
+        QTRY_VERIFY(!player.isPlaying());
+        QVERIFY(presence.inactivityTimerActive());
+        QTRY_VERIFY(read());
+        auto activity = message.value(QStringLiteral("args")).toObject().value(QStringLiteral("activity")).toObject();
+        QVERIFY(activity.value(QStringLiteral("state")).toString().contains(QStringLiteral("Paused")));
+        QVERIFY(activity.contains(QStringLiteral("timestamps")));
+        message = {};
+
+        // Seeking while paused updates timestamps
+        player.seek(50000);
+        QTRY_VERIFY(read());
+        activity = message.value(QStringLiteral("args")).toObject().value(QStringLiteral("activity")).toObject();
+        QVERIFY(activity.contains(QStringLiteral("timestamps")));
+        message = {};
+
+        // Click start (resume) BEFORE the timer runs out: activity should resume
+        player.resume();
+        QTRY_VERIFY(player.isPlaying());
+        QVERIFY(!presence.inactivityTimerActive());
+        QTRY_VERIFY(read());
+        activity = message.value(QStringLiteral("args")).toObject().value(QStringLiteral("activity")).toObject();
+        QCOMPARE(activity.value(QStringLiteral("state")).toString(), song.artists);
+        QVERIFY(presence.connected());
+        QVERIFY(!presence.idleTerminated());
+        message = {};
+
+        // Set short timeout to test termination
+        presence.setInactivityTimeout(100);
+
+        // Pause again: this time let the timer run out
+        player.pause();
+        QTRY_VERIFY(!player.isPlaying());
+        QVERIFY(presence.inactivityTimerActive());
+        message = {};
+
+        // Wait for inactivity timer to expire: connection should be terminated
+        QTRY_VERIFY(!presence.connected());
+        QVERIFY(presence.idleTerminated());
+        QTRY_COMPARE(peer->state(), QLocalSocket::UnconnectedState);
+
+        // Click start after connection was terminated: presence should reconnect and resume activity
+        player.resume();
+        QTRY_VERIFY(player.isPlaying());
+        QTRY_VERIFY(server.hasPendingConnections());
+        peer.reset(server.nextPendingConnection());
+        buffer.clear();
+        message = {};
+        QTRY_VERIFY(read());
+        peer->write(discord::frame(1, QByteArrayLiteral("{\"evt\":\"READY\"}")));
+        peer->flush();
+        QTRY_VERIFY(presence.connected());
+        QVERIFY(!presence.idleTerminated());
+        message = {};
+        QTRY_VERIFY(read());
+        activity = message.value(QStringLiteral("args")).toObject().value(QStringLiteral("activity")).toObject();
+        QCOMPARE(activity.value(QStringLiteral("state")).toString(), song.artists);
+        QVERIFY(activity.contains(QStringLiteral("timestamps")));
+
+        settings.setDiscordEnabled(false);
+    }
+
+    void inactivityTimerTimesOutOnStartupWithoutPlayback()
+    {
+        QTemporaryDir directory;
+        QLocalServer server;
+        QVERIFY2(server.listen(serverName(directory.path(), 0)), qPrintable(server.errorString()));
+        Settings settings(directory.filePath(QStringLiteral("settings.ini")));
+        ErrorCenter errors(nullptr);
+        MemoryCredentialStore credentials;
+        QNetworkAccessManager network;
+        FakeCore core;
+        SpotifySession session(&core, &credentials, &network, &errors);
+        PlaybackController player(&core, &session, &settings, &errors);
+        DiscordPresence presence(&player, &settings, nullptr, [&] { return QStringList {server.fullServerName()}; }, 100);
+
+        settings.setDiscordApplicationId(QStringLiteral("123456789012345678"));
+        settings.setDiscordEnabled(true);
+        QTRY_VERIFY(server.hasPendingConnections());
+        std::unique_ptr<QLocalSocket> peer(server.nextPendingConnection());
+        QByteArray buffer;
+        QJsonObject message;
+        auto read = [&]() -> bool {
+            if (!message.isEmpty()) return true;
+            buffer += peer->readAll();
+            quint32 opcode;
+            QByteArray payload;
+            if (discord::takeFrame(buffer, opcode, payload) != discord::FrameResult::Complete) return false;
+            message = QJsonDocument::fromJson(payload).object();
+            return !message.isEmpty();
+        };
+        QTRY_VERIFY(read());
+        peer->write(discord::frame(1, QByteArrayLiteral("{\"evt\":\"READY\"}")));
+        peer->flush();
+        QTRY_VERIFY(presence.connected());
+
+        // Inactivity timer started because there is no listening activity on startup
+        QVERIFY(presence.inactivityTimerActive());
+
+        // When timeout elapses without playback, connection is terminated
+        QTRY_VERIFY(!presence.connected());
+        QVERIFY(presence.idleTerminated());
+        QTRY_COMPARE(peer->state(), QLocalSocket::UnconnectedState);
         settings.setDiscordEnabled(false);
     }
 };

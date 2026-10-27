@@ -30,15 +30,126 @@ FocusScope {
     /// snapping; resizing the window still snaps
     property bool layoutMoving: false
 
+    /// distraction-free fullscreen mode: hides controls after 5 seconds of mouse inactivity
+    property bool distractionFree: false
+    property bool controlsHidden: false
+    property int savedVisibility: Window.Windowed
+    property real lastMouseX: -1
+    property real lastMouseY: -1
+    property real controlsOpacity: 1
+    readonly property bool panelRetainedInDistractionFree: shownPanel === "lyrics" || shownPanel === "queue"
+    readonly property real panelDistractionFreeOpacity: panelRetainedInDistractionFree ? 1 : controlsOpacity
+
+    NumberAnimation {
+        id: hideControlsAnimation
+        objectName: "hideControlsAnimation"
+        target: root
+        property: "controlsOpacity"
+        to: 0
+        duration: Appearance.duration(400)
+        easing.type: Easing.OutCubic
+    }
+
+    NumberAnimation {
+        id: showControlsAnimation
+        objectName: "showControlsAnimation"
+        target: root
+        property: "controlsOpacity"
+        to: 1
+        duration: Appearance.duration(200)
+        easing.type: Easing.OutCubic
+    }
+
+    onControlsHiddenChanged: {
+        if (distractionFree && controlsHidden) {
+            showControlsAnimation.stop()
+            hideControlsAnimation.restart()
+            if (!panelRetainedInDistractionFree && usesPanelLayout) {
+                layoutMoving = true
+                settle.restart()
+            }
+        } else {
+            hideControlsAnimation.stop()
+            showControlsAnimation.restart()
+            if (!panelRetainedInDistractionFree && usesPanelLayout) {
+                layoutMoving = true
+                settle.restart()
+            }
+        }
+    }
+
+    Timer {
+        id: inactivityTimer
+        objectName: "inactivityTimer"
+        interval: 5000
+        running: root.distractionFree && !root.controlsHidden
+        onTriggered: root.controlsHidden = true
+    }
+
+    function registerActivity() {
+        if (!distractionFree) {
+            return
+        }
+        controlsHidden = false
+        inactivityTimer.restart()
+    }
+
+    function toggleDistractionFree() {
+        setDistractionFree(!distractionFree)
+    }
+
+    function setDistractionFree(enable: bool) {
+        if (distractionFree === enable) {
+            return
+        }
+        distractionFree = enable
+        const win = root.Window.window
+        if (enable) {
+            if (win) {
+                if (win.visibility !== Window.FullScreen) {
+                    savedVisibility = win.visibility
+                }
+                win.showFullScreen()
+            }
+            lastMouseX = -1
+            lastMouseY = -1
+            controlsHidden = false
+            hideControlsAnimation.stop()
+            showControlsAnimation.stop()
+            controlsOpacity = 1
+            inactivityTimer.restart()
+        } else {
+            inactivityTimer.stop()
+            controlsHidden = false
+            hideControlsAnimation.stop()
+            showControlsAnimation.stop()
+            controlsOpacity = 1
+            if (win && win.visibility === Window.FullScreen) {
+                if (savedVisibility === Window.Maximized) {
+                    win.showMaximized()
+                } else {
+                    win.showNormal()
+                }
+            }
+        }
+    }
+
+    Component.onDestruction: {
+        if (root.distractionFree) {
+            root.setDistractionFree(false)
+        }
+    }
+
     readonly property bool usesPanelLayout: panel.length > 0
     readonly property bool showsSpectrum: Settings.visualizersEnabled && Settings.immersiveVisualizer && !Settings.circularVisualizer
+    readonly property bool effectiveUsesPanelLayout: distractionFree && controlsHidden ? panelRetainedInDistractionFree : usesPanelLayout
 
     readonly property real metadataWidth: Math.max(300, Math.min(400, width * 0.32))
     readonly property real horizontalPadding: Math.max(28, Math.min(64, width * 0.05))
     readonly property real rowSpace: Math.min(1250, width - 2 * horizontalPadding)
     readonly property real gap: Math.max(32, Math.min(72, width * 0.055))
-    readonly property bool sideBySide: usesPanelLayout && rowSpace >= 900
-    readonly property bool panelOnly: usesPanelLayout && !sideBySide
+    readonly property bool sideBySide: effectiveUsesPanelLayout && rowSpace >= 900
+    readonly property bool panelOnly: effectiveUsesPanelLayout && !sideBySide
     readonly property real panelWidth: sideBySide ? Math.min(540, (rowSpace - gap) / 2) : rowSpace
     readonly property real nowPlayingWidth: sideBySide ? Math.min(500, rowSpace - gap - panelWidth) : Math.min(620, rowSpace)
     readonly property real rowWidth: sideBySide ? nowPlayingWidth + gap + panelWidth : nowPlayingWidth
@@ -172,12 +283,17 @@ FocusScope {
     }
 
     Keys.onPressed: (event) => {
+        root.registerActivity()
         switch (event.key) {
         case Qt.Key_Space:
             Player.togglePlayback()
             break
         case Qt.Key_Escape:
-            root.closeRequested()
+            if (root.distractionFree) {
+                root.setDistractionFree(false)
+            } else {
+                root.closeRequested()
+            }
             break
         case Qt.Key_Left:
             Player.seekBy(-10000)
@@ -212,9 +328,43 @@ FocusScope {
         shown: root.visible
     }
 
+    HoverHandler {
+        id: activityTracker
+        objectName: "activityTracker"
+        cursorShape: (root.distractionFree && root.controlsHidden) ? Qt.BlankCursor : Qt.ArrowCursor
+        onPointChanged: {
+            const px = point.position.x
+            const py = point.position.y
+            if (root.lastMouseX < 0 && root.lastMouseY < 0) {
+                root.lastMouseX = px
+                root.lastMouseY = py
+                return
+            }
+            if (Math.abs(px - root.lastMouseX) > 2 || Math.abs(py - root.lastMouseY) > 2) {
+                root.lastMouseX = px
+                root.lastMouseY = py
+                root.registerActivity()
+            }
+        }
+    }
+
+    Item {
+        id: blankCursorOverlay
+        objectName: "blankCursorOverlay"
+        anchors.fill: parent
+        z: 9999
+        visible: root.distractionFree && root.controlsHidden
+        HoverHandler {
+            cursorShape: Qt.BlankCursor
+        }
+    }
+
     // a click anywhere empty takes the keys back from whatever had them
     TapHandler {
-        onTapped: root.forceActiveFocus()
+        onTapped: {
+            root.forceActiveFocus()
+            root.registerActivity()
+        }
     }
 
     // --- top bar -------------------------------------------------------------------
@@ -223,6 +373,9 @@ FocusScope {
         id: topBar
         width: parent.width
         height: Math.max(immersiveLayout.topBarHeight, immersiveClose.y + immersiveClose.height + 2)
+        opacity: root.controlsOpacity
+        visible: opacity > 0
+        enabled: opacity > 0
 
         DragHandler {
             target: null
@@ -232,8 +385,12 @@ FocusScope {
         TapHandler {
             acceptedButtons: Qt.LeftButton
             onDoubleTapped: {
-                const window = root.Window.window
-                window.visibility === Window.Maximized ? window.showNormal() : window.showMaximized()
+                if (root.distractionFree) {
+                    root.setDistractionFree(false)
+                } else {
+                    const window = root.Window.window
+                    window.visibility === Window.Maximized ? window.showNormal() : window.showMaximized()
+                }
             }
         }
 
@@ -254,7 +411,32 @@ FocusScope {
             backgroundItem.border.width: 1
             backgroundItem.border.color: Qt.rgba(1, 1, 1, 0.14)
             tooltip: qsTr("Close Immersive Player")
-            onClicked: root.closeRequested()
+            onClicked: {
+                if (root.distractionFree) {
+                    root.setDistractionFree(false)
+                }
+                root.closeRequested()
+            }
+        }
+
+        IconButton {
+            id: immersiveDistractionFree
+            objectName: "immersiveDistractionFreeButton"
+            anchors.left: immersiveClose.right
+            anchors.leftMargin: 8
+            y: immersiveClose.y
+            scheme: root.scheme
+            symbol: root.distractionFree ? "fullscreen_exit" : "fullscreen"
+            size: 34
+            iconSize: 18
+            iconColor: "white"
+            colBackground: root.distractionFree ? Qt.rgba(1, 1, 1, 0.24) : Qt.rgba(1, 1, 1, 0.12)
+            colBackgroundHover: Qt.rgba(1, 1, 1, 0.2)
+            colRipple: Qt.rgba(1, 1, 1, 0.24)
+            backgroundItem.border.width: 1
+            backgroundItem.border.color: Qt.rgba(1, 1, 1, 0.14)
+            tooltip: root.distractionFree ? qsTr("Exit Fullscreen") : qsTr("Fullscreen")
+            onClicked: root.toggleDistractionFree()
         }
 
         SegmentedControl {
@@ -316,12 +498,18 @@ FocusScope {
             metadataWidth: Math.min(root.metadataWidth, root.nowPlayingWidth)
             animateLayout: root.layoutMoving
             scheme: root.scheme
+            controlsOpacity: root.controlsOpacity
             width: root.nowPlayingWidth
             x: (content.width - root.rowWidth) / 2
             anchors.verticalCenter: parent.verticalCenter
+            anchors.verticalCenterOffset: root.distractionFree ? (1.0 - root.controlsOpacity) * nowPlaying.controlsShift : 0
 
             Behavior on x {
-                enabled: root.layoutMoving
+                enabled: root.layoutMoving || root.distractionFree
+                LayoutMotion {}
+            }
+            Behavior on width {
+                enabled: root.layoutMoving || root.distractionFree
                 LayoutMotion {}
             }
         }
@@ -334,7 +522,7 @@ FocusScope {
             width: root.panelWidth
             height: root.panelHeight
             anchors.verticalCenter: parent.verticalCenter
-            opacity: root.panelOpacity
+            opacity: root.panelOpacity * root.panelDistractionFreeOpacity
             active: Player.hasSong && root.shownPanel.length > 0
             sourceComponent: {
                 switch (root.shownPanel) {

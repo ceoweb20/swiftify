@@ -277,6 +277,11 @@ Item {
                     ]
                     onActivated: (index) => Settings.songCacheMegabytes = root.cacheSizes[index]
                 }
+                ConfigSwitch {
+                    text: qsTr("Normalize volume")
+                    checked: Settings.normalizeVolume
+                    onToggledTo: (checked) => Settings.normalizeVolume = checked
+                }
                 NoteText {
                     text: qsTr("both cache and quality apply the next time playback connects")
                 }
@@ -297,7 +302,11 @@ Item {
                     segments: [
                         Segment { text: qsTr("System") },
                         Segment { text: "English" },
-                        Segment { text: "Русский" }
+                        Segment {
+                            text: "Русский"
+                            enabled: Settings.russianEnabled
+                            tooltip: Settings.russianEnabled ? "" : Settings.disabledLanguageMessage
+                        }
                     ]
                     onActivated: (index) => Settings.language = ["system", "en", "ru"][index]
                 }
@@ -472,45 +481,6 @@ Item {
         Page {
             visible: root.page === 5
 
-
-            ContentSection {
-                title: "Discord Rich Presence"
-                symbol: "share"
-
-                ConfigSwitch {
-                    text: qsTr("Share listening activity")
-                    checked: Settings.discordEnabled
-                    onToggledTo: (checked) => Settings.discordEnabled = checked
-                }
-                OutlinedTextField {
-                    id: discordId
-                    x: 8
-                    width: Math.min(460, parent.width - 16)
-                    placeholder: qsTr("Discord Application ID")
-                    text: Settings.discordApplicationId
-                    onAccepted: Settings.discordApplicationId = text
-                    Connections {
-                        target: discordId.inputItem
-                        function onActiveFocusChanged() {
-                            if (!discordId.inputItem.activeFocus) Settings.discordApplicationId = discordId.text
-                        }
-                    }
-                }
-                NoteText {
-                    text: discordId.text.length > 0 && !/^[0-9]{17,20}$/.test(discordId.text.trim())
-                        ? qsTr("Enter a valid numeric Application ID (17–20 digits).")
-                        : !Settings.discordEnabled ? qsTr("Listening activity is private. Enable to share track, artist and progress with Discord.")
-                        : Settings.discordApplicationId.length === 0 ? qsTr("Create an application in the Discord Developer Portal and paste its Application ID above. No token or secret is needed.")
-                        : Discord.status
-                }
-                TextButton {
-                    x: 8
-                    text: qsTr("Open Discord Developer Portal")
-                    variant: TextButton.Text
-                    onClicked: Qt.openUrlExternally("https://discord.com/developers/applications")
-                }
-            }
-
             ContentSection {
                 title: qsTr("Account")
                 symbol: "account_circle"
@@ -615,6 +585,34 @@ Item {
             }
 
             ContentSection {
+                title: qsTr("Playback")
+                symbol: "play_circle"
+
+                StatusRow {
+                    label: qsTr("Status")
+                    value: Session.connected ? qsTr("Connected") : qsTr("Not connected")
+                    good: Session.connected
+                }
+                Flow {
+                    x: 8
+                    width: parent.width - 16
+                    spacing: 8
+                    topPadding: 4
+
+                    TextButton {
+                        variant: TextButton.Tonal
+                        symbol: "play_circle"
+                        text: Session.connected ? qsTr("Reconnect Playback") : qsTr("Connect Playback")
+                        enabled: !Session.loginInProgress
+                        onClicked: Session.beginPlaybackLogin()
+                    }
+                }
+                NoteText {
+                    text: qsTr("playing music needs a Spotify Premium login of its own, separate from the librarys")
+                }
+            }
+
+            ContentSection {
                 title: qsTr("Library")
                 symbol: "library_music"
 
@@ -652,13 +650,131 @@ Item {
             }
 
             ContentSection {
-                title: qsTr("Playback")
-                symbol: "play_circle"
+                title: "Spotify Soloist"
+                symbol: "speaker"
 
                 StatusRow {
-                    label: qsTr("Status")
-                    value: Session.connected ? qsTr("Connected") : qsTr("Not connected")
-                    good: Session.connected
+                    label: qsTr("Soloist")
+                    value: !Soloist.installed ? qsTr("not installed")
+                           : Soloist.version.length > 0 ? Soloist.version : qsTr("installed")
+                    good: Soloist.installed
+                }
+                StatusRow {
+                    label: qsTr("Soloist API key")
+                    value: Soloist.apiKeyConfigured ? qsTr("saved") : qsTr("missing")
+                    good: Soloist.apiKeyConfigured
+                }
+                OutlinedTextField {
+                    id: soloistKey
+                    x: 8
+                    width: Math.min(460, parent.width - 16)
+                    placeholder: qsTr("Soloist API key")
+                    onAccepted: Soloist.saveApiKey(text)
+                }
+                Flow {
+                    x: 8
+                    width: parent.width - 16
+                    spacing: 8
+
+                    TextButton {
+                        variant: TextButton.Tonal
+                        symbol: "download"
+                        text: Soloist.busy ? qsTr("Installing…")
+                              : Soloist.installed ? qsTr("Reinstall Soloist") : qsTr("Install Soloist")
+                        enabled: Soloist.supported && !Soloist.busy
+                        onClicked: Soloist.install()
+                    }
+                    TextButton {
+                        variant: TextButton.Text
+                        text: qsTr("Get an API key")
+                        onClicked: Qt.openUrlExternally("https://developer.spotify.com/dashboard/soloist")
+                    }
+                }
+                NoteText {
+                    text: !Soloist.supported
+                          ? qsTr("Spotify Soloist only runs on Linux, Apple Silicon Macs and 64-bit Windows, so Spotify cannot play on this computer. Your own music files still play.")
+                          : Soloist.busy && Soloist.progress >= 0
+                            ? qsTr("Downloading from Spotify: ") + Math.round(Soloist.progress * 100) + "%"
+                            : Soloist.status.length > 0 ? Soloist.status
+                            : Soloist.updateRecommended
+                              ? qsTr("This Soloist build is close to its 90-day expiry. Reinstall it to keep playback working.")
+                              : qsTr("Spotify plays through Soloist, downloaded from Spotify itself. The key is yours alone: generate it in the developer dashboard. Then pick “Swiftify” in Spotify's devices once to pair.")
+                }
+            }
+
+            ContentSection {
+                title: "Discord Rich Presence"
+                symbol: "share"
+
+                ConfigSwitch {
+                    text: qsTr("Share listening activity")
+                    checked: Settings.discordEnabled
+                    onToggledTo: (checked) => Settings.discordEnabled = checked
+                }
+                OutlinedTextField {
+                    id: discordId
+                    x: 8
+                    width: Math.min(460, parent.width - 16)
+                    placeholder: qsTr("Discord Application ID")
+                    text: Settings.discordApplicationId
+                    onAccepted: Settings.discordApplicationId = text
+                    Connections {
+                        target: discordId.inputItem
+                        function onActiveFocusChanged() {
+                            if (!discordId.inputItem.activeFocus) Settings.discordApplicationId = discordId.text
+                        }
+                    }
+                }
+                NoteText {
+                    text: discordId.text.length > 0 && !/^[0-9]{17,20}$/.test(discordId.text.trim())
+                        ? qsTr("Enter a valid numeric Application ID (17–20 digits).")
+                        : !Settings.discordEnabled ? qsTr("Listening activity is private. Enable to share track, artist and progress with Discord.")
+                            : Settings.discordApplicationId.length === 0 ? qsTr("Create an application in the Discord Developer Portal and paste its Application ID above. No token or secret is needed.")
+                                : Discord.status
+                }
+                TextButton {
+                    x: 8
+                    text: qsTr("Open Discord Developer Portal")
+                    variant: TextButton.Text
+                    onClicked: Qt.openUrlExternally("https://discord.com/developers/applications")
+                }
+            }
+
+            ContentSection {
+                title: qsTr("Listening Stats")
+                symbol: "insights"
+
+                ConfigSelection {
+                    text: qsTr("Stats from")
+                    currentIndex: Stats.source === "statsfm" ? 0 : 1
+                    segments: [
+                        Segment { text: "stats.fm" },
+                        Segment { text: qsTr("This computer") }
+                    ]
+                    onActivated: (index) => Stats.source = index === 0 ? "statsfm" : "local"
+                }
+                OutlinedTextField {
+                    id: statsFmUsername
+                    x: 8
+                    width: Math.min(460, parent.width - 16)
+                    placeholder: qsTr("stats.fm username")
+                    text: Stats.username
+                    onAccepted: Stats.username = text
+
+                    // kept on leaving the field too, not on every key
+                    Connections {
+                        target: statsFmUsername.inputItem
+                        function onActiveFocusChanged() {
+                            if (!statsFmUsername.inputItem.activeFocus) {
+                                Stats.username = statsFmUsername.text
+                            }
+                        }
+                    }
+                }
+                ConfigSwitch {
+                    text: qsTr("Keep track of what I listen to")
+                    checked: Stats.tracking
+                    onToggledTo: (checked) => Stats.tracking = checked
                 }
                 Flow {
                     x: 8
@@ -668,14 +784,17 @@ Item {
 
                     TextButton {
                         variant: TextButton.Tonal
-                        symbol: "play_circle"
-                        text: Session.connected ? qsTr("Reconnect Playback") : qsTr("Connect Playback")
-                        enabled: !Session.loginInProgress
-                        onClicked: Session.beginPlaybackLogin()
+                        symbol: "download"
+                        text: qsTr("Export History")
+                        enabled: Stats.historyCount > 0
+                        onClicked: {
+                            const path = Stats.exportHistory()
+                            UiState.toastRequested(path.length > 0 ? qsTr("Saved to %1").arg(path) : qsTr("Could not export the history"))
+                        }
                     }
                 }
                 NoteText {
-                    text: qsTr("playing music needs a Spotify Premium login of its own, separate from the librarys")
+                    text: qsTr("stats.fm only needs a public username. songs count here after 30 seconds (%1 so far) and are local only").arg(Stats.historyCount)
                 }
             }
         }
@@ -765,11 +884,29 @@ Item {
                     text: qsTr("Adds a seconds dial to the sleep timer, so a fade can be watched without waiting out a long ass timer")
                 }
 
+                ConfigSwitch {
+                    text: qsTr("Enable logging for next launch")
+                    checked: Settings.loggingEnabled
+                    onToggledTo: (checked) => Settings.loggingEnabled = checked
+                }
+                NoteText {
+                    text: Settings.loggingActive
+                        ? qsTr("Logging is active for this session. Logs are saved to %1").arg(Settings.logFilePath)
+                        : qsTr("Sets the OS logging variables and writes logs to %1 on the next launch").arg(Settings.logFilePath)
+                }
+
                 Flow {
                     x: 8
                     width: parent.width - 16
                     spacing: 8
                     topPadding: 4
+
+                    TextButton {
+                        variant: TextButton.Tonal
+                        symbol: "folder_open"
+                        text: qsTr("Open Logs Folder")
+                        onClicked: Settings.openLogsFolder()
+                    }
 
                     TextButton {
                         variant: TextButton.Tonal

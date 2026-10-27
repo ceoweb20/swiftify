@@ -1,4 +1,6 @@
 #include "app/ErrorCenter.h"
+#include "app/Settings.h"
+#include "app/Translations.h"
 
 #include <QQmlEngine>
 
@@ -13,6 +15,9 @@ ErrorCenter::ErrorCenter(QObject *parent)
 {
     if (!s_instance) {
         s_instance = this;
+    }
+    if (auto *settings = Settings::instance(); settings && settings->takeRevertedDisabledLanguage()) {
+        show(Translations::disabledLanguageErrorMessage());
     }
 }
 

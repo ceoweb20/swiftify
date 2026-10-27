@@ -1,4 +1,5 @@
 #include "app/Translations.h"
+#include "app/ErrorCenter.h"
 #include "app/Settings.h"
 
 #include <QCoreApplication>
@@ -9,6 +10,46 @@
 
 namespace swiftify {
 
+namespace {
+bool s_russianEnabled = kRussianTranslationEnabled;
+} // namespace
+
+bool Translations::isLanguageEnabled(QStringView language)
+{
+    if (language == QLatin1StringView("ru")) {
+        return s_russianEnabled;
+    }
+    return true;
+}
+
+void Translations::setLanguageEnabled(QStringView language, bool enabled)
+{
+    if (language == QLatin1StringView("ru")) {
+        if (s_russianEnabled == enabled) {
+            return;
+        }
+        s_russianEnabled = enabled;
+        if (auto *settings = Settings::instance()) {
+            settings->enforceEnabledLanguage();
+        }
+    }
+}
+
+void Translations::resetLanguageEnabled()
+{
+    setLanguageEnabled(QStringLiteral("ru"), kRussianTranslationEnabled);
+}
+
+QString Translations::disabledLanguageMessage()
+{
+    return QStringLiteral("this language is currently disabled due to missing language maintainers");
+}
+
+QString Translations::disabledLanguageErrorMessage()
+{
+    return QStringLiteral("this language is currently disabled due to missing language maintainers. your app language has been switched back to english.");
+}
+
 Translations::Translations(Settings *settings, QObject *parent)
     : QTranslator(parent), m_settings(settings)
 {
@@ -17,6 +58,7 @@ Translations::Translations(Settings *settings, QObject *parent)
         m_catalog = QJsonDocument::fromJson(file.readAll()).object();
     }
     connect(settings, &Settings::languageChanged, this, &Translations::apply);
+    connect(settings, &Settings::languageAvailabilityChanged, this, &Translations::apply);
     apply();
 }
 
@@ -28,9 +70,18 @@ Translations::~Translations()
 void Translations::apply()
 {
     QCoreApplication::removeTranslator(this);
+    if (!isLanguageEnabled(m_settings->language())) {
+        m_settings->enforceEnabledLanguage();
+    }
+    if (m_settings->takeRevertedDisabledLanguage()) {
+        if (auto *errors = ErrorCenter::instance()) {
+            errors->show(disabledLanguageErrorMessage());
+        }
+    }
     const QString language = m_settings->language();
-    m_russian = language == QLatin1StringView("ru")
-        || (language == QLatin1StringView("system") && QLocale::system().language() == QLocale::Russian);
+    m_russian = isLanguageEnabled(QStringLiteral("ru"))
+        && (language == QLatin1StringView("ru")
+            || (language == QLatin1StringView("system") && QLocale::system().language() == QLocale::Russian));
     if (m_russian) QCoreApplication::installTranslator(this);
     emit languageChanged();
 }

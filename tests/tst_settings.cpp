@@ -1,4 +1,5 @@
 #include "app/Settings.h"
+#include "app/Translations.h"
 
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -37,6 +38,9 @@ private slots:
 
     void languagePreferencePersists()
     {
+        if (!swiftify::kRussianTranslationEnabled) {
+            QSKIP("Russian translation is disabled.");
+        }
         QTemporaryDir directory;
         const QString path = directory.filePath(QStringLiteral("swiftify.conf"));
         {
@@ -53,10 +57,30 @@ private slots:
         QCOMPARE(reopened.language(), QStringLiteral("system"));
     }
 
+    void loggingPreferencePersists()
+    {
+        QTemporaryDir directory;
+        const QString path = directory.filePath(QStringLiteral("swiftify.conf"));
+        {
+            Settings settings(path);
+            QVERIFY(!settings.isLoggingEnabled());
+            QSignalSpy loggingSpy(&settings, &Settings::loggingEnabledChanged);
+            settings.setLoggingEnabled(true);
+            settings.setLoggingEnabled(true);
+            QCOMPARE(loggingSpy.count(), 1);
+            QVERIFY(settings.isLoggingEnabled());
+        }
+        Settings reopened(path);
+        QVERIFY(reopened.isLoggingEnabled());
+        reopened.setLoggingEnabled(false);
+        QVERIFY(!reopened.isLoggingEnabled());
+    }
+
     void defaultsMatchTheMacApp()
     {
         QTemporaryDir directory;
         Settings settings(directory.filePath(QStringLiteral("swiftify.conf")));
+        QCOMPARE(settings.isLoggingEnabled(), false);
         QCOMPARE(settings.visualizersEnabled(), true);
         QCOMPARE(settings.playerBarVisualizer(), true);
         QCOMPARE(settings.trackListVisualizer(), true);
@@ -66,6 +90,7 @@ private slots:
         QCOMPARE(settings.visualizerShape(), QStringLiteral("bars"));
         QCOMPARE(settings.visualizerSensitivity(), 1.0);
         QCOMPARE(settings.streamingQuality(), 160);
+        QCOMPARE(settings.normalizeVolume(), false);
         QCOMPARE(settings.songCacheMegabytes(), 1000);
         QCOMPARE(settings.livingBackdrop(), true);
         QCOMPARE(settings.backdropBlur(), 16.0);
@@ -171,6 +196,10 @@ private slots:
             settings.setContinuousVisualizer(true);
             QCOMPARE(continuousSpy.count(), 1);
             settings.setStreamingQuality(96);
+            QSignalSpy normalizeSpy(&settings, &Settings::normalizeVolumeChanged);
+            settings.setNormalizeVolume(true);
+            settings.setNormalizeVolume(true);
+            QCOMPARE(normalizeSpy.count(), 1);
             settings.setSongCacheMegabytes(2000);
             settings.setPerformanceMode(true);
             settings.setNoShapes(true);
@@ -189,6 +218,7 @@ private slots:
         QCOMPARE(reopened.immersiveVisualizer(), false);
         QCOMPARE(reopened.continuousVisualizer(), true);
         QCOMPARE(reopened.streamingQuality(), 96);
+        QCOMPARE(reopened.normalizeVolume(), true);
         QCOMPARE(reopened.songCacheMegabytes(), 2000);
         QVERIFY(reopened.performanceMode());
         QVERIFY(reopened.noShapes());

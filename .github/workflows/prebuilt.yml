@@ -70,7 +70,7 @@ jobs:
           # (aqt cannot list it), and the QML needs 6.10 or newer
           version: 6.10.3
           arch: win64_msvc2022_64
-          modules: qtshadertools
+          modules: qtshadertools qtwebsockets
           cache: true
 
       - name: build
@@ -183,7 +183,7 @@ jobs:
         with:
           version: ${{ env.QT_VERSION }}
           arch: linux_gcc_64
-          # soloist, which is only built for linux, talks to spotify's soloist over websockets
+          # soloist talks to spotify's soloist over websockets
           modules: qtshadertools qtwebsockets
           cache: true
 
@@ -231,7 +231,7 @@ jobs:
         with:
           version: ${{ env.QT_VERSION }}
           arch: clang_64
-          modules: qtshadertools
+          modules: qtshadertools qtwebsockets
           cache: true
       # Keep the release identity consistent. Runtime credentials use the
       # encrypted vault, not a keychain, regardless of this signing certificate.

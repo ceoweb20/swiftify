@@ -26,6 +26,7 @@ mod ffi {
         fn session_is_valid(&self) -> bool;
         fn audio_output_stalled(&self) -> bool;
 
+        fn set_preamp_gain(&self, gain_db: f32) -> Result<(), String>;
         fn set_equalizer(&self, gains_db: Vec<f32>) -> Result<(), String>;
         fn set_playback_shaping(
             &self,
@@ -41,6 +42,7 @@ mod ffi {
         fn take_end_of_track(&self) -> bool;
 
         fn set_stream_quality(&self, kbps: u32) -> Result<(), String>;
+        fn set_volume_normalization(&self, enabled: bool) -> Result<(), String>;
 
         fn set_volume(&self, volume: f32) -> Result<(), String>;
         fn volume(&self) -> f32;

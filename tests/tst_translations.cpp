@@ -1,3 +1,4 @@
+#include "app/ErrorCenter.h"
 #include "app/Settings.h"
 #include "app/Translations.h"
 
@@ -7,6 +8,7 @@
 #include <QJsonDocument>
 #include <QQmlComponent>
 #include <QQmlEngine>
+#include <QScopeGuard>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -17,6 +19,9 @@ class TranslationsTest : public QObject {
 private slots:
     void catalogIsEmbeddedAndValid()
     {
+        if (!kRussianTranslationEnabled) {
+            QSKIP("Russian translation is disabled.");
+        }
         QFile file(QStringLiteral(":/translations/ru.json"));
         QVERIFY(file.open(QIODevice::ReadOnly));
         QJsonParseError error;
@@ -36,6 +41,9 @@ private slots:
 
     void switchesLiveAndFallsBackToEnglish()
     {
+        if (!kRussianTranslationEnabled) {
+            QSKIP("Russian translation is disabled.");
+        }
         QTemporaryDir directory;
         Settings settings(directory.filePath(QStringLiteral("settings.ini")));
         settings.setLanguage(QStringLiteral("en"));
@@ -70,6 +78,9 @@ private slots:
 
     void russianPluralForms()
     {
+        if (!kRussianTranslationEnabled) {
+            QSKIP("Russian translation is disabled.");
+        }
         QFETCH(int, count);
         QFETCH(QString, expected);
         QTemporaryDir directory;
@@ -77,6 +88,30 @@ private slots:
         settings.setLanguage(QStringLiteral("ru"));
         Translations translations(&settings);
         QCOMPARE(QCoreApplication::translate("Format", "%n songs", nullptr, count), expected);
+    }
+
+    void disabledLanguageFallsBackToEnglishAndShowsError()
+    {
+        const auto restore = qScopeGuard([] { Translations::resetLanguageEnabled(); });
+        QTemporaryDir directory;
+        const QString path = directory.filePath(QStringLiteral("settings.ini"));
+        {
+            QSettings raw(path, QSettings::IniFormat);
+            raw.setValue(QStringLiteral("language"), QStringLiteral("ru"));
+        }
+        Translations::setLanguageEnabled(QStringLiteral("ru"), false);
+        ErrorCenter errors(nullptr);
+        Settings settings(path);
+        Translations translations(&settings);
+        QCOMPARE(settings.language(), QStringLiteral("en"));
+        QCOMPARE(errors.message(),
+                 QStringLiteral("this language is currently disabled due to missing language maintainers. your app language has been switched back to english."));
+        QCOMPARE(QCoreApplication::translate("test", "Settings"), QStringLiteral("Settings"));
+
+        errors.clear();
+        Settings reopened(path);
+        QCOMPARE(reopened.language(), QStringLiteral("en"));
+        QVERIFY(errors.message().isEmpty());
     }
 };
 

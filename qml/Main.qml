@@ -603,7 +603,7 @@ ApplicationWindow {
         objectName: "appWindowControls"
         x: Settings.windowControlsOnRight ? parent.width - width - 12 : 12
         y: 8
-        visible: window.inAppWindowControls
+        visible: window.inAppWindowControls && window.visibility !== Window.FullScreen
         compact: true
         scheme: window.immersiveReveal > 0 ? PlayerStyle.darkScheme : Appearance.colors
         window: window

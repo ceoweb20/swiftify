@@ -45,8 +45,7 @@ Item {
             title: root.playlist.name
             description: root.playlist.description
             facts: Format.joined([root.playlist.ownerDisplayName,
-                Library.playlistSongs.count > 0 ? Format.songCount(Library.playlistSongs.count)
-                    : root.playlist.songCount > 0 ? Format.songCount(root.playlist.songCount) : "",
+                Library.loadingSongs && root.playlist.songCount === 0 ? "" : Format.songCount(Library.loadingSongs ? root.playlist.songCount : Library.playlistSongs.count),
                 Format.totalDuration(Library.playlistSongs.totalDurationMs)], "  •  ")
 
             actions: [
@@ -64,7 +63,7 @@ Item {
                     burst: "play"
                     text: qsTr("Play")
                     enabled: Library.displayedPlaylistSongs.count > 0
-                    onClicked: Player.playFromModel(Library.displayedPlaylistSongs, 0)
+                    onClicked: Player.playInOrder(Library.displayedPlaylistSongs)
                 },
                 // play's twin in the primary's softer tone
                 TextButton {

@@ -1,6 +1,7 @@
 #include "app/AppController.h"
 #include "app/ErrorCenter.h"
 #include "app/Fonts.h"
+#include "app/Logging.h"
 #include "app/Paths.h"
 #include "app/Settings.h"
 #include "system/DiscordPresence.h"
@@ -12,6 +13,8 @@
 #include "library/PlaylistCollections.h"
 #include "playback/PlaybackController.h"
 #include "render/SpectrumSource.h"
+#include "stats/PlayHistory.h"
+#include "stats/StatsStore.h"
 #include "spotify/CredentialStore.h"
 #include "spotify/CredentialVault.h"
 #include "spotify/SpotifySession.h"
@@ -20,9 +23,8 @@
 #include "theme/PlayerStyle.h"
 #include "theme/Theme.h"
 
-#ifdef SWIFTIFY_HAS_SOLOIST
 #include "soloist/SoloistCore.h"
-#endif
+#include "soloist/SoloistInstaller.h"
 #if defined(SWIFTIFY_HAS_DBUS) && defined(Q_OS_LINUX)
 #include "system/dbus/Mpris.h"
 #include "system/dbus/SleepMonitor.h"
@@ -226,14 +228,15 @@ void setupAudioEnvironment()
 
 int main(int argc, char *argv[])
 {
+#ifdef Q_OS_MACOS
+    startCompact(argv);
+#endif
+    logging::setupLogging();
 #ifdef Q_OS_WIN
     WindowsIntegration::initializeProcess();
 #endif
 #ifdef Q_OS_LINUX
     setupAudioEnvironment();
-#endif
-#ifdef Q_OS_MACOS
-    startCompact(argv);
 #endif
     tuneSceneGraph();
     QGuiApplication::setApplicationName(QStringLiteral("Swiftify"));
@@ -271,32 +274,45 @@ int main(int argc, char *argv[])
     fonts::loadIconFont();
     fonts::loadInterfaceFont();
 
+    ErrorCenter errors(nullptr);
     Settings settings(nullptr);
     Translations translations(&settings);
     Theme theme(&settings);
-    ErrorCenter errors(nullptr);
     QNetworkAccessManager network;
     RustCore rustCore;
-#ifdef SWIFTIFY_HAS_SOLOIST
-    // spotify's songs through soloist when it is installed and has a key, with
-    // the rust core keeping the login and lyrics
-    std::unique_ptr<SoloistCore> soloistCore;
-    if (auto soloist = SoloistCore::detect()) {
-        soloistCore = std::make_unique<SoloistCore>(&rustCore, std::move(*soloist));
+    // spotify's songs always play through soloist; the rust core keeps the
+    // login, lyrics and playlists. when soloist or its key is missing,
+    // playing explains how to set it up in settings
+    SoloistCore soloistCore(&rustCore, SoloistCore::configured());
+    PlaybackCore &core = soloistCore;
+    // soloist's binaries may not be redistributed, so the app downloads the
+    // build for this platform from spotify when asked, and replaces it before
+    // the 90 days a soloist build lives run out
+    SoloistInstaller soloistInstaller;
+    QObject::connect(&soloistInstaller, &SoloistInstaller::configurationChanged,
+                     &soloistCore, &SoloistCore::reloadConfiguration);
+    QObject::connect(&soloistInstaller, &SoloistInstaller::busyChanged, &soloistCore, [&] {
+        // a running soloist holds its executable, above all on windows
+        if (soloistInstaller.busy()) {
+            soloistCore.stopDaemon();
+        }
+    });
+    QObject::connect(&soloistCore, &SoloistCore::buildExpired, &soloistInstaller,
+                     &SoloistInstaller::install);
+    if (soloistInstaller.updateRecommended()) {
+        soloistInstaller.install();
     }
-    PlaybackCore &core = soloistCore ? static_cast<PlaybackCore &>(*soloistCore) : rustCore;
-#else
-    PlaybackCore &core = rustCore;
-#endif
     // what playback connects with: the streaming quality, and how much of
     // what it streams is kept so a song played again needs no download
     const auto applyStreaming = [&] {
         core.setStreamQuality(settings.streamingQuality());
+        core.setVolumeNormalization(settings.normalizeVolume());
         core.setAudioCache(paths::cacheDirectory() + QStringLiteral("/songs"),
                            qint64(settings.songCacheMegabytes()) * 1000 * 1000);
     };
     applyStreaming();
     QObject::connect(&settings, &Settings::streamingQualityChanged, &core, applyStreaming);
+    QObject::connect(&settings, &Settings::normalizeVolumeChanged, &core, applyStreaming);
     QObject::connect(&settings, &Settings::songCacheMegabytesChanged, &core, applyStreaming);
     CredentialVault vault(paths::dataDirectory() + QStringLiteral("/credentials/logins.vault"));
     CachedCredentialStore credentials(&vault);
@@ -335,6 +351,9 @@ int main(int argc, char *argv[])
     ArtworkCache artwork(&network);
     PlayerStyle playerStyle(&player, &theme, &artwork);
     SpectrumSource spectrum(&core, &player);
+    PlayHistory listeningHistory(PlayHistory::defaultPath());
+    PlayTracker listeningTracker(&player, &listeningHistory);
+    StatsStore stats(&settings, &session, &network, &listeningHistory, &listeningTracker);
 
     QObject::connect(&instance, &SingleInstance::commandReceived, &app, &AppController::handleCommand);
     instance.listen();

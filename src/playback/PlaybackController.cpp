@@ -129,6 +129,7 @@ PlaybackController::PlaybackController(PlaybackCore *core, SpotifySession *sessi
     connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit, this, &PlaybackController::savePlaybackState);
     connect(m_core, &PlaybackCore::remoteTrackStarted, this, &PlaybackController::adoptRemoteSong);
     connect(m_core, &PlaybackCore::remotePlayingChanged, this, &PlaybackController::followRemotePlaying);
+    connect(m_core, &PlaybackCore::remoteVolumeChanged, this, &PlaybackController::followRemoteVolume);
 }
 
 PlaybackController::~PlaybackController()
@@ -242,6 +243,21 @@ void PlaybackController::followRemotePlaying(bool playing)
     setStatus(playing ? QStringLiteral("Playing") : QStringLiteral("Paused"));
     setPlaying(playing);
     syncMediaSession();
+}
+
+void PlaybackController::followRemoteVolume(float volume)
+{
+    const double clamped = std::clamp(double(volume), 0.0, 1.0);
+    if (std::abs(clamped - m_volume) < 0.005) {
+        return;
+    }
+    m_volume = clamped;
+    m_settings->setValue(kVolumeKey, clamped);
+    if (clamped > 0.01) {
+        m_volumeBeforeMute = clamped;
+        m_settings->setValue(kVolumeBeforeMuteKey, clamped);
+    }
+    emit volumeChanged();
 }
 
 // --- state ---------------------------------------------------------------------------
@@ -493,6 +509,18 @@ void PlaybackController::shufflePlay(SongListModel *model)
     }
     const int index = int(QRandomGenerator::global()->bounded(model->count()));
     beginPlayback(model->songs().at(index), model->songs(), false);
+}
+
+void PlaybackController::playInOrder(SongListModel *model)
+{
+    if (!model || model->count() == 0) {
+        return;
+    }
+    if (m_shuffle) {
+        m_shuffle = false;
+        emit shuffleChanged();
+    }
+    beginPlayback(model->songs().at(0), model->songs(), false);
 }
 
 void PlaybackController::playSong(const Song &song)

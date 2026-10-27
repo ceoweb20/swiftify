@@ -27,4 +27,14 @@ QString cacheDirectory()
                    + QStringLiteral("/Swiftify"));
 }
 
+QString logDirectory()
+{
+    return ensured(dataDirectory() + QStringLiteral("/logs"));
+}
+
+QString logFilePath()
+{
+    return logDirectory() + QStringLiteral("/swiftify.log");
+}
+
 } // namespace swiftify::paths

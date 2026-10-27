@@ -275,6 +275,17 @@ QCoro::Task<> fetchLibraryToken(SpotifySession &session, QStringList &tokens)
     }
 }
 
+template<typename T>
+QString failureOf(QCoro::Task<T> task)
+{
+    try {
+        QCoro::waitFor(std::move(task));
+    } catch (const SpotifyError &error) {
+        return error.message();
+    }
+    return {};
+}
+
 void settle()
 {
     for (int pass = 0; pass < 10; ++pass) {
@@ -320,6 +331,34 @@ private:
         }
         StoredCredentials stored(CredentialStore::Account account) const { return store.items.value(account); }
     };
+
+    struct LibraryRig : Rig {
+        QTemporaryDir directory;
+        Settings settings {directory.filePath(QStringLiteral("swiftify.conf"))};
+        LibraryStore library {&session, &settings, &errors};
+    };
+
+    void signIn(LibraryRig &rig)
+    {
+        rig.accounts.api.insert(QStringLiteral("/v1/me"), R"({"id":"me","display_name":"Me"})");
+        rig.storeLibrary(rig.accounts.login(), QStringLiteral("access"), 60);
+        rig.session.restoreSavedSessions();
+        QTRY_COMPARE(rig.library.profileId(), QStringLiteral("me"));
+        QTRY_VERIFY(rig.accounts.apiCalls.join(u'\n').contains(QStringLiteral("/v1/me/player/recently-played")));
+        settle();
+        rig.errors.clear();
+        rig.accounts.apiCalls.clear();
+    }
+
+    static QByteArray albumJson()
+    {
+        return R"({"id":"6eUW0wxWtzkFdaEFsTJto6","uri":"spotify:album:6eUW0wxWtzkFdaEFsTJto6","name":"Whenever You Need Somebody"})";
+    }
+
+    static QString linkTo(const char *kind, const char *id)
+    {
+        return QStringLiteral("https://open.spotify.com/%1/%2").arg(QLatin1StringView(kind), QLatin1StringView(id));
+    }
 
 private slots:
     void secureStoreCacheSkipsRepeatedReadsAndIdenticalWrites()
@@ -889,6 +928,328 @@ private slots:
         QTRY_COMPARE(loggedOut.count(), 1);
         settle();
         QVERIFY(rig.store.items.isEmpty());
+    }
+
+    void anAlbumIsReadByItsId()
+    {
+        // Given
+        Rig rig;
+        rig.accounts.api.insert(QStringLiteral("/v1/albums/4aawyAB9vmqN3uQ7FjRGTy"),
+                                R"({"id":"4aawyAB9vmqN3uQ7FjRGTy","uri":"spotify:album:4aawyAB9vmqN3uQ7FjRGTy",)"
+                                R"("name":"Global Warming","artists":[{"name":"Pitbull"}],)"
+                                R"("images":[{"url":"https:\/\/img.test/cover","width":640}]})");
+
+        // When
+        const Album album = QCoro::waitFor(rig.session.webApi().album(QStringLiteral("4aawyAB9vmqN3uQ7FjRGTy"), QStringLiteral("access")));
+
+        // Then
+        QCOMPARE(album.id, QStringLiteral("4aawyAB9vmqN3uQ7FjRGTy"));
+        QCOMPARE(album.name, QStringLiteral("Global Warming"));
+        QCOMPARE(album.artists, QStringLiteral("Pitbull"));
+        QCOMPARE(album.artworkUrl, QUrl(QStringLiteral("https://img.test/cover")));
+        QCOMPARE(rig.accounts.apiCalls.size(), 1);
+        QVERIFY(rig.accounts.apiCalls.first().startsWith(QStringLiteral("GET /v1/albums/4aawyAB9vmqN3uQ7FjRGTy")));
+    }
+
+    void anAlbumWithoutAnIdIsUnsupported()
+    {
+        // Given
+        Rig rig;
+        rig.accounts.api.insert(QStringLiteral("/v1/albums/4aawyAB9vmqN3uQ7FjRGTy"), "{}");
+
+        // When
+        const QString failure = failureOf(rig.session.webApi().album(QStringLiteral("4aawyAB9vmqN3uQ7FjRGTy"), QStringLiteral("access")));
+
+        // Then
+        QVERIFY2(failure.contains(QStringLiteral("unsupported album")), qPrintable(failure));
+    }
+
+    void aPlaylistIsReadByItsIdWithoutItsTracks()
+    {
+        // Given
+        Rig rig;
+        rig.accounts.api.insert(QStringLiteral("/v1/playlists/37i9dQZF1DXcBWIGoYBM5M"),
+                                R"({"id":"37i9dQZF1DXcBWIGoYBM5M","name":"Todays Top Hits",)"
+                                R"("owner":{"id":"spotify","display_name":"Spotify"},)"
+                                R"("images":[{"url":"https:\/\/img.test/playlist","width":640}]})");
+
+        // When
+        const Playlist playlist = QCoro::waitFor(rig.session.webApi().playlist(QStringLiteral("37i9dQZF1DXcBWIGoYBM5M"), QStringLiteral("access")));
+
+        // Then
+        QCOMPARE(playlist.name, QStringLiteral("Todays Top Hits"));
+        QCOMPARE(playlist.ownerId, QStringLiteral("spotify"));
+        QCOMPARE(playlist.ownerName, QStringLiteral("Spotify"));
+        QCOMPARE(playlist.artworkUrl, QUrl(QStringLiteral("https://img.test/playlist")));
+        QCOMPARE(playlist.uri, QStringLiteral("spotify:playlist:37i9dQZF1DXcBWIGoYBM5M"));
+        QCOMPARE(rig.accounts.apiCalls.size(), 1);
+        QVERIFY(rig.accounts.apiCalls.first().contains(QStringLiteral("fields=")));
+        QVERIFY(!rig.accounts.apiCalls.join(u'\n').contains(QStringLiteral("/items")));
+    }
+
+    void aPlaylistWithoutAnIdIsUnsupported()
+    {
+        // Given
+        Rig rig;
+        rig.accounts.api.insert(QStringLiteral("/v1/playlists/37i9dQZF1DXcBWIGoYBM5M"), "{}");
+
+        // When
+        const QString failure = failureOf(rig.session.webApi().playlist(QStringLiteral("37i9dQZF1DXcBWIGoYBM5M"), QStringLiteral("access")));
+
+        // Then
+        QVERIFY2(failure.contains(QStringLiteral("unsupported playlist")), qPrintable(failure));
+    }
+
+    void anArtistIsReadByItsId()
+    {
+        // Given
+        Rig rig;
+        rig.accounts.api.insert(QStringLiteral("/v1/artists/4Z8W4fKeB5YxbusRsdQVPb"),
+                                R"({"id":"4Z8W4fKeB5YxbusRsdQVPb","uri":"spotify:artist:4Z8W4fKeB5YxbusRsdQVPb",)"
+                                R"("name":"Radiohead","images":[{"url":"https:\/\/img.test/artist","width":640}]})");
+
+        // When
+        const Artist artist = QCoro::waitFor(rig.session.webApi().artist(QStringLiteral("4Z8W4fKeB5YxbusRsdQVPb"), QStringLiteral("access")));
+
+        // Then
+        QCOMPARE(artist.id, QStringLiteral("4Z8W4fKeB5YxbusRsdQVPb"));
+        QCOMPARE(artist.name, QStringLiteral("Radiohead"));
+        QCOMPARE(artist.artworkUrl, QUrl(QStringLiteral("https://img.test/artist")));
+        QCOMPARE(rig.accounts.apiCalls.size(), 1);
+    }
+
+    void anArtistWithoutAnIdIsUnsupported()
+    {
+        // Given
+        Rig rig;
+        rig.accounts.api.insert(QStringLiteral("/v1/artists/4Z8W4fKeB5YxbusRsdQVPb"), "{}");
+
+        // When
+        const QString failure = failureOf(rig.session.webApi().artist(QStringLiteral("4Z8W4fKeB5YxbusRsdQVPb"), QStringLiteral("access")));
+
+        // Then
+        QVERIFY2(failure.contains(QStringLiteral("unsupported artist")), qPrintable(failure));
+    }
+
+    void aMissingAlbumPlaylistOrArtistResultsInTheNotFound()
+    {
+        // Given
+        Rig rig;
+        const QString id = QStringLiteral("4aawyAB9vmqN3uQ7FjRGTy");
+
+        // When
+        const QString album = failureOf(rig.session.webApi().album(id, QStringLiteral("access")));
+        const QString playlist = failureOf(rig.session.webApi().playlist(id, QStringLiteral("access")));
+        const QString artist = failureOf(rig.session.webApi().artist(id, QStringLiteral("access")));
+
+        // Then
+        QVERIFY(!album.isEmpty());
+        QVERIFY(!playlist.isEmpty());
+        QVERIFY(!artist.isEmpty());
+    }
+
+    void aPastedTrackLinkOpensItsAlbum()
+    {
+        // Given
+        LibraryRig rig;
+        signIn(rig);
+        rig.accounts.api.insert(QStringLiteral("/v1/tracks/4uLU6hMCjMI75M1A2tKUQC"),
+                                R"({"type":"track","uri":"spotify:track:4uLU6hMCjMI75M1A2tKUQC","name":"Never Gonna Give You Up",)"
+                                R"("album":)" + albumJson() + '}');
+        rig.library.showSearch();
+
+        // When
+        rig.library.setSearchQuery(linkTo("track", "4uLU6hMCjMI75M1A2tKUQC"));
+
+        // Then
+        QTRY_COMPARE(rig.library.page(), LibraryStore::Page::Album);
+        QCOMPARE(rig.library.currentAlbum().id, QStringLiteral("6eUW0wxWtzkFdaEFsTJto6"));
+        QVERIFY(!rig.accounts.apiCalls.join(u'\n').contains(QStringLiteral("/v1/search")));
+    }
+
+    void aPastedAlbumLinkOpensTheAlbum()
+    {
+        // Given
+        LibraryRig rig;
+        signIn(rig);
+        rig.accounts.api.insert(QStringLiteral("/v1/albums/6eUW0wxWtzkFdaEFsTJto6"), albumJson());
+        rig.library.showSearch();
+
+        // When
+        rig.library.setSearchQuery(linkTo("album", "6eUW0wxWtzkFdaEFsTJto6"));
+
+        // Then
+        QTRY_COMPARE(rig.library.page(), LibraryStore::Page::Album);
+        QCOMPARE(rig.library.currentAlbum().id, QStringLiteral("6eUW0wxWtzkFdaEFsTJto6"));
+    }
+
+    void aPastedPlaylistLinkOpensThePlaylist()
+    {
+        // Given
+        LibraryRig rig;
+        signIn(rig);
+        rig.accounts.api.insert(QStringLiteral("/v1/playlists/37i9dQZF1DXcBWIGoYBM5M"),
+                                R"({"id":"37i9dQZF1DXcBWIGoYBM5M","name":"Todays Top Hits","owner":{"id":"spotify"}})");
+        rig.library.showSearch();
+
+        // When
+        rig.library.setSearchQuery(linkTo("playlist", "37i9dQZF1DXcBWIGoYBM5M"));
+
+        // Then
+        QTRY_COMPARE(rig.library.page(), LibraryStore::Page::Playlist);
+        QCOMPARE(rig.library.selectedPlaylist().id, QStringLiteral("37i9dQZF1DXcBWIGoYBM5M"));
+    }
+
+    void aPastedArtistLinkOpensTheArtist()
+    {
+        // Given
+        LibraryRig rig;
+        signIn(rig);
+        rig.accounts.api.insert(QStringLiteral("/v1/artists/4Z8W4fKeB5YxbusRsdQVPb"),
+                                R"({"id":"4Z8W4fKeB5YxbusRsdQVPb","uri":"spotify:artist:4Z8W4fKeB5YxbusRsdQVPb","name":"Radiohead"})");
+        rig.library.showSearch();
+
+        // When
+        rig.library.setSearchQuery(linkTo("artist", "4Z8W4fKeB5YxbusRsdQVPb"));
+
+        // Then
+        QTRY_COMPARE(rig.library.page(), LibraryStore::Page::Artist);
+        QCOMPARE(rig.library.currentArtist().id, QStringLiteral("4Z8W4fKeB5YxbusRsdQVPb"));
+    }
+
+    void aPastedLinkClearsTheSearchField()
+    {
+        // Given
+        LibraryRig rig;
+        signIn(rig);
+        rig.accounts.api.insert(QStringLiteral("/v1/albums/6eUW0wxWtzkFdaEFsTJto6"), albumJson());
+        rig.library.showSearch();
+
+        // When
+        rig.library.setSearchQuery(linkTo("album", "6eUW0wxWtzkFdaEFsTJto6"));
+
+        // Then
+        QTRY_COMPARE(rig.library.page(), LibraryStore::Page::Album);
+        QCOMPARE(rig.library.searchQuery(), QString());
+        QVERIFY(!rig.library.isSearching());
+    }
+
+    void aPastedLinkIsNotDebounced()
+    {
+        // Given
+        LibraryRig rig;
+        signIn(rig);
+        rig.library.showSearch();
+
+        // When
+        rig.library.setSearchQuery(linkTo("album", "6eUW0wxWtzkFdaEFsTJto6"));
+
+        // Then
+        QTRY_VERIFY_WITH_TIMEOUT(rig.accounts.apiCalls.join(u'\n').contains(QStringLiteral("/v1/albums/6eUW0wxWtzkFdaEFsTJto6")), 150);
+    }
+
+    void aTrackWithoutAnAlbumShowsAnError()
+    {
+        // Given
+        LibraryRig rig;
+        signIn(rig);
+        rig.accounts.api.insert(QStringLiteral("/v1/tracks/4uLU6hMCjMI75M1A2tKUQC"),
+                                R"({"type":"track","uri":"spotify:track:4uLU6hMCjMI75M1A2tKUQC","name":"Never Gonna Give You Up"})");
+        rig.library.showSearch();
+
+        // When
+        rig.library.setSearchQuery(linkTo("track", "4uLU6hMCjMI75M1A2tKUQC"));
+
+        // Then
+        QTRY_VERIFY(rig.errors.message().contains(QStringLiteral("did not return an album")));
+        QCOMPARE(rig.library.page(), LibraryStore::Page::Search);
+    }
+
+    void aLinkSpotifyDoesNotKnowShowsAnError()
+    {
+        // Given
+        LibraryRig rig;
+        signIn(rig);
+        rig.library.showSearch();
+        const QString link = linkTo("album", "6eUW0wxWtzkFdaEFsTJto6");
+
+        // When
+        rig.library.setSearchQuery(link);
+
+        // Then
+        QTRY_COMPARE(rig.errors.message(), QStringLiteral("Spotify API request failed: Not found"));
+        QCOMPARE(rig.library.page(), LibraryStore::Page::Search);
+        QVERIFY(!rig.library.isSearching());
+        QCOMPARE(rig.library.searchQuery(), link);
+    }
+
+    void aLinkIsNotSearchedWithoutALibraryLogin()
+    {
+        // Given
+        LibraryRig rig;
+        rig.library.showSearch();
+
+        // When
+        rig.library.setSearchQuery(linkTo("album", "6eUW0wxWtzkFdaEFsTJto6"));
+        settle();
+
+        // Then
+        QVERIFY(rig.errors.message().contains(QStringLiteral("Connect your Spotify library")));
+        QVERIFY(rig.accounts.apiCalls.isEmpty());
+    }
+
+    void aNewQueryCancelsALinkStillLoading()
+    {
+        // Given
+        LibraryRig rig;
+        signIn(rig);
+        rig.accounts.api.insert(QStringLiteral("/v1/albums/6eUW0wxWtzkFdaEFsTJto6"), albumJson());
+        rig.library.showSearch();
+        rig.accounts.holding = true;
+        rig.library.setSearchQuery(linkTo("album", "6eUW0wxWtzkFdaEFsTJto6"));
+        QTRY_VERIFY(!rig.accounts.apiCalls.isEmpty());
+
+        // When
+        rig.library.setSearchQuery(QString());
+        rig.accounts.release();
+        settle();
+
+        // Then
+        QCOMPARE(rig.library.page(), LibraryStore::Page::Search);
+        QVERIFY(!rig.library.isSearching());
+    }
+
+    void plainTextStillSearches()
+    {
+        // Given
+        LibraryRig rig;
+        signIn(rig);
+        rig.library.showSearch();
+
+        // When
+        rig.library.setSearchQuery(QStringLiteral("radiohead"));
+
+        // Then
+        QTRY_VERIFY(rig.accounts.apiCalls.join(u'\n').contains(QStringLiteral("/v1/search")));
+        QCOMPARE(rig.library.page(), LibraryStore::Page::Search);
+    }
+
+    void backAfterALinkReturnsToACleanSearchPage()
+    {
+        // Given
+        LibraryRig rig;
+        signIn(rig);
+        rig.accounts.api.insert(QStringLiteral("/v1/albums/6eUW0wxWtzkFdaEFsTJto6"), albumJson());
+        rig.library.showSearch();
+        rig.library.setSearchQuery(linkTo("album", "6eUW0wxWtzkFdaEFsTJto6"));
+        QTRY_COMPARE(rig.library.page(), LibraryStore::Page::Album);
+
+        // When
+        rig.library.goBack();
+
+        // Then
+        QCOMPARE(rig.library.page(), LibraryStore::Page::Search);
+        QCOMPARE(rig.library.searchQuery(), QString());
     }
 };
 

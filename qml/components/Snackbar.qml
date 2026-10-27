@@ -26,11 +26,12 @@ Item {
         ElementMoveSmall {}
     }
 
-    onSerialChanged: if (shown) timer.restart()
+    onSerialChanged: if (shown && visible) timer.restart()
 
     Timer {
         id: timer
         interval: 8000
+        running: root.shown && root.visible && !Session.evaluatingStoredLogin
         onTriggered: root.dismissed()
     }
 

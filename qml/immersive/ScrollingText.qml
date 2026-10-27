@@ -22,7 +22,9 @@ Item {
 
     clip: true
 
-    implicitWidth: sample.implicitWidth
+    implicitWidth: (root.animateChange && !Appearance.performanceMode && label1.implicitWidth > 0)
+        ? Math.ceil(label1.implicitWidth)
+        : sample.implicitWidth
     implicitHeight: sample.implicitHeight
 
     readonly property real textWidth: Math.ceil(sample.implicitWidth)
@@ -74,6 +76,11 @@ Item {
             animateChange: root.animateChange
             width: (!root.shouldScroll && root.overflows) ? root.width : implicitWidth
             elide: (!root.shouldScroll && root.overflows) ? Text.ElideRight : Text.ElideNone
+            onTextChanged: {
+                if (root.animateChange && !Appearance.performanceMode) {
+                    root.resetPosition()
+                }
+            }
         }
 
         StyledText {
@@ -127,7 +134,12 @@ Item {
         }
     }
 
-    onTextChanged: resetPosition()
+    onTextChanged: {
+        scrollAnimation.stop()
+        if (!root.animateChange || Appearance.performanceMode) {
+            resetPosition()
+        }
+    }
     onWidthChanged: resetPosition()
     onShouldScrollChanged: resetPosition()
     onHorizontalAlignmentChanged: resetPosition()

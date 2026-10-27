@@ -39,10 +39,15 @@ public:
     QCoro::Task<QList<Song>> recentlyPlayed(QString accessToken);
     QCoro::Task<SearchResults> search(QString query, QString accessToken);
     QCoro::Task<Song> song(QString trackId, QString accessToken);
+    QCoro::Task<Album> album(QString albumId, QString accessToken);
     /// Full artist profile (including images), unlike the credits inside a track.
     QCoro::Task<Artist> artist(QString artistId, QString accessToken);
     QCoro::Task<QList<Song>> albumSongs(Album album, QString accessToken);
     QCoro::Task<QList<Album>> artistAlbums(Artist artist, QString accessToken);
+    /// the genres spotify gives each artist, by id, and their pictures; an
+    /// artist it gives none for is still there, with an empty list
+    QCoro::Task<QHash<QString, QStringList>> artistGenres(QStringList artistIds, QString accessToken,
+                                                         QHash<QString, QUrl> *artwork = nullptr);
 
     QCoro::Task<Playlist> createPlaylist(QString name, QString description, bool isPublic, QString accessToken);
     QCoro::Task<> updatePlaylist(QString id, QString name, QString description, bool isPublic, QString accessToken);

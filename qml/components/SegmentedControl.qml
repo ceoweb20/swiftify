@@ -96,6 +96,23 @@ Item {
                     ripple.release()
                 }
             }
+
+            MouseArea {
+                id: disabledHover
+                anchors.fill: parent
+                enabled: tint.segment !== null && !tint.segment.enabled && tint.segment.tooltip.length > 0
+                hoverEnabled: enabled
+                acceptedButtons: Qt.NoButton
+            }
+
+            Loader {
+                anchors.fill: parent
+                active: disabledHover.containsMouse && disabledHover.enabled
+                sourceComponent: StyledToolTip {
+                    visible: true
+                    text: tint.segment ? tint.segment.tooltip : ""
+                }
+            }
         }
     }
 

@@ -203,6 +203,7 @@ private:
     void setEvaluatingStoredLogin(bool evaluating);
     void setLoginPurpose(std::optional<LoginPurpose> purpose, const QUrl &url = {});
     void reportError(const QString &message);
+    void clearReportedError();
 
     PlaybackCore *m_core;
     CredentialStore *m_credentials;
@@ -249,6 +250,7 @@ private:
 
     std::function<void(const QUrl &)> m_openInBackground;
     std::optional<LoginPurpose> m_repairing;
+    QString m_reportedError;
     QList<LoginPurpose> m_repairQueue;
     QDateTime m_lastRepair[2];
     /// the login under way was started by a repair, and has not yet asked

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.24)
 
 project(Swiftify
-    VERSION 0.17.1
+    VERSION 0.23.0
     DESCRIPTION "A native Spotify client"
     LANGUAGES C CXX)
 
@@ -39,9 +39,8 @@ endif()
 # the wayland, d-bus and pipewire pieces. off elsewhere so the portable parts
 # can be built and tested on a development machine without them.
 option(SWIFTIFY_DESKTOP_INTEGRATION "Build the Linux desktop integration" ${SWIFTIFY_IS_LINUX})
-# spotify soloist plays spotify's songs for accounts spotify no longer gives
-# librespot the keys for. it is only built for linux.
-option(SWIFTIFY_SOLOIST "Play Spotify songs through Spotify Soloist when it is installed" ${SWIFTIFY_IS_LINUX})
+# spotify soloist plays spotify's songs; it is not optional, and its binary is
+# downloaded at runtime rather than shipped, as spotify's terms require.
 option(SWIFTIFY_BUILD_UPDATER "Build the standalone signed-update installer" ON)
 set(SWIFTIFY_UPDATE_REPOSITORY "ceoweb20/swiftify" CACHE STRING "GitHub owner/name whose published releases are offered by in-app updates")
 if(NOT SWIFTIFY_UPDATE_REPOSITORY MATCHES "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
@@ -71,9 +70,7 @@ if(SWIFTIFY_DESKTOP_INTEGRATION)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(PULSE REQUIRED IMPORTED_TARGET libpulse)
 endif()
-if(SWIFTIFY_SOLOIST)
-    find_package(Qt6 6.10 REQUIRED COMPONENTS WebSockets)
-endif()
+find_package(Qt6 6.10 REQUIRED COMPONENTS WebSockets)
 if(WIN32)
     find_package(Qt6 6.10 REQUIRED COMPONENTS Widgets)
 endif()
@@ -204,9 +201,7 @@ endif()
 if(NOT TARGET Qt6::DBus)
     list(FILTER SWIFTIFY_SOURCES EXCLUDE REGEX "^src/system/dbus/")
 endif()
-if(NOT SWIFTIFY_SOLOIST)
-    list(FILTER SWIFTIFY_SOURCES EXCLUDE REGEX "^src/soloist/")
-elseif(NOT SWIFTIFY_DESKTOP_INTEGRATION)
+if(NOT SWIFTIFY_DESKTOP_INTEGRATION)
     # routing soloist through swiftify records it with libpulse
     list(FILTER SWIFTIFY_SOURCES EXCLUDE REGEX "^src/soloist/SoloistAudioRoute")
 endif()
@@ -293,13 +288,9 @@ target_compile_definitions(swiftify_app PRIVATE
     SWIFTIFY_BUILD_FONT_DIRECTORY="${SWIFTIFY_FONT_DIRECTORY}"
     SWIFTIFY_UPDATE_PUBLIC_KEY="${SWIFTIFY_UPDATE_PUBLIC_KEY}"
     SWIFTIFY_UPDATE_REPOSITORY="${SWIFTIFY_UPDATE_REPOSITORY}")
-# main.cpp picks the core, and is built outside swiftify_app
-target_compile_definitions(swiftify_app PUBLIC $<$<BOOL:${SWIFTIFY_SOLOIST}>:SWIFTIFY_HAS_SOLOIST>)
+target_link_libraries(swiftify_app PUBLIC Qt6::WebSockets)
 if(TARGET Qt6::DBus)
     target_link_libraries(swiftify_app PUBLIC Qt6::DBus)
-endif()
-if(SWIFTIFY_SOLOIST)
-    target_link_libraries(swiftify_app PUBLIC Qt6::WebSockets)
 endif()
 if(SWIFTIFY_DESKTOP_INTEGRATION)
     target_link_libraries(swiftify_app PUBLIC PkgConfig::PULSE)
@@ -407,8 +398,14 @@ endif()
 if(SWIFTIFY_IS_LINUX)
     target_link_libraries(swiftify PRIVATE Qt6::Widgets)
 endif()
-# a windowed app on windows, with no console window of its own
+# a windowed app on windows, with no console window of its own, and the icon
+# in its resources so explorer and a pinned taskbar button show it
 set_target_properties(swiftify PROPERTIES WIN32_EXECUTABLE ON)
+if(WIN32)
+    set_source_files_properties(packaging/icons/swiftify.rc
+        PROPERTIES OBJECT_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/packaging/icons/swiftify.ico)
+    target_sources(swiftify PRIVATE packaging/icons/swiftify.rc)
+endif()
 if(MINGW)
     # qt's WinMain shim reads msvcrt's __argc, which a mingw on ucrt (as
     # homebrew's is) lacks; mingw's own start-up calls main() just as well

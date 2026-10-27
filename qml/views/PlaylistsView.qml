@@ -9,9 +9,11 @@ GridView {
     id: root
 
     property bool pinnedOnly: false
-    readonly property PlaylistListModel source: pinnedOnly ? Library.pinnedPlaylists : Library.playlists
+    property bool personalized: false
+    readonly property PlaylistListModel source: personalized ? Library.personalizedPlaylists
+                                                : pinnedOnly ? Library.pinnedPlaylists : Library.playlists
     /// the tiles ahead of the playlists: a new playlist's
-    readonly property int leading: pinnedOnly ? 0 : 1
+    readonly property int leading: pinnedOnly || personalized ? 0 : 1
     readonly property real margin: Appearance.sizes.pageMargin
     // whole columns at least 200 px wide that fill the width exactly: the
     // grid lays columns out by cellWidth, so tile plus gap has to divide it.
@@ -59,13 +61,22 @@ GridView {
             font.pixelSize: Appearance.fontSize.display
             font.weight: Font.Bold
         }
+        IconButton {
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            visible: root.personalized
+            symbol: "refresh"
+            tooltip: qsTr("Refresh collections")
+            enabled: !Library.loadingDiscovery
+            onClicked: Library.refreshDiscovery()
+        }
     }
 
     delegate: Item {
         id: cell
 
         required property int index
-        readonly property bool isNewTile: !root.pinnedOnly && index === 0
+        readonly property bool isNewTile: !root.pinnedOnly && !root.personalized && index === 0
         readonly property playlist playlist: root.source.at(index - root.leading)
 
         width: root.cellWidth
@@ -79,7 +90,7 @@ GridView {
             fallbackKey: cell.playlist.id.length > 0 ? cell.playlist.id : cell.playlist.name
             placeholderSymbol: "queue_music"
             title: cell.playlist.name
-            subtitle: Format.songCount(cell.playlist.songCount)
+            subtitle: cell.playlist.songCount > 0 ? Format.songCount(cell.playlist.songCount) : cell.playlist.ownerDisplayName
             onClicked: Library.selectPlaylist(cell.playlist)
             onSecondaryClicked: {
                 root.menuPlaylist = cell.playlist
@@ -144,6 +155,17 @@ GridView {
         }
     }
 
+
+    EmptyState {
+        objectName: "personalizedEmptyState"
+        anchors.centerIn: parent
+        width: Math.max(0, parent.width - 2 * root.margin)
+        Reveal.shown: root.personalized && Library.personalizedPlaylists.count === 0
+        symbol: "auto_awesome"
+        title: Library.loadingDiscovery ? qsTr("Loading your mixes…") : qsTr("No personalized playlists yet")
+        description: Library.discoveryStatus.length > 0 ? qsTranslate("Discovery", Library.discoveryStatus)
+            : qsTr("Your mixes, blends and Spotify collections appear here when available for your account.")
+    }
 
     EmptyState {
         anchors.centerIn: parent

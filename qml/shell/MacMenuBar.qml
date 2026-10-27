@@ -93,6 +93,13 @@ Platform.MenuBar {
             checked: Library.page === Library.Page.Playlists
             onTriggered: Library.showPlaylists()
         }
+        Platform.MenuItem {
+            text: qsTr("Stats")
+            shortcut: "Ctrl+6"
+            checkable: true
+            checked: Library.page === Library.Page.Stats
+            onTriggered: Library.showStats()
+        }
         Platform.MenuSeparator {}
         Platform.MenuItem {
             text: qsTr("Back")

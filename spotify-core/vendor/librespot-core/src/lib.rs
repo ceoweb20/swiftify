@@ -27,6 +27,7 @@ pub mod login5;
 pub mod mercury;
 pub mod packet;
 mod proxytunnel;
+pub mod playplay;
 pub mod session;
 mod socket;
 #[allow(dead_code)]

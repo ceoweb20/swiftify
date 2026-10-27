@@ -73,6 +73,14 @@ Item {
                 selected: root.isSelected(Library.Page.Collections)
                 onClicked: Library.showCollections()
             }
+            NavigationItem {
+                width: parent.width
+                text: qsTr("Stats")
+                iconShape: "softBurst"
+                symbol: "insights"
+                selected: root.isSelected(Library.Page.Stats)
+                onClicked: Library.showStats()
+            }
 
             SectionLabel {
                 width: parent.width

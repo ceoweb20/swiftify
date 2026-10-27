@@ -2,6 +2,7 @@
 
 #include "app/ErrorCenter.h"
 #include "app/Settings.h"
+#include "library/SongListModel.h"
 #include "playback/InteractionState.h"
 #include "playback/PlaybackController.h"
 #include "playback/PlaybackState.h"
@@ -600,6 +601,23 @@ private slots:
         QVERIFY(rig.player.activeQueue().first().isSameInstance(queue[3]));
         QCOMPARE(rig.player.activeQueue().size(), 5);
         QVERIFY(rig.player.previouslyPlayedSongs().isEmpty());
+    }
+
+    void playInOrderTurnsShuffleOff()
+    {
+        // Given
+        Rig rig;
+        const QList<Song> queue = makeQueue(4);
+        SongListModel model;
+        model.setSongs(queue);
+        rig.player.toggleShuffle();
+
+        // When
+        rig.player.playInOrder(&model);
+
+        // Then
+        QVERIFY(!rig.player.isShuffleEnabled());
+        QVERIFY(rig.player.activeQueue().first().isSameInstance(queue[0]));
     }
 
     void playingFromHistoryTrimsIt()

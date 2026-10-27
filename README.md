@@ -23,8 +23,13 @@ first image shows equalizer, tempo and pitch settings. second picture shows how 
   </tr>
 </table>
 
-> ### Note
-> i will probably not be maintaining it, if you are interested in taking over this project you can send me an email
+## download
+
+you can download swiftify for your operating system at [https://shredos.dev](https://shredos.dev/#download)
+
+<br/>
+
+## Contents
 
 - [Before you start](#before-you-start)
 - [Prebuilt builds](#prebuilt-builds)
@@ -33,6 +38,7 @@ first image shows equalizer, tempo and pitch settings. second picture shows how 
   - [macOS](#macos)
   - [Linux](#linux)
   - [Windows](#windows)
+- [Stats](#stats)
 - [Command line](#command-line)
 
 ## Before you start
@@ -46,31 +52,40 @@ first image shows equalizer, tempo and pitch settings. second picture shows how 
 
 ## Tutorials
 
-### "spotify could not load this track" / "spotify refuses this account the audio key" (soloist)
+### spotify playback (soloist)
 
 spotify refuses librespot the keys to decrypt songs on newer accounts (librespot's
-logs say `error audio key 0 1`), so every song fails — swiftify then stops and says
-"Spotify refuses this account the audio key to play tracks with" instead of skipping
-through the queue. on linux swiftify can play
-spotify's songs through [spotify soloist](https://developer.spotify.com/documentation/soloist)
-instead, spotify's own connect client, which isnt affected.
+logs say `error audio key 0 1`), so every song fails. swiftify therefore plays
+spotify's songs only through [spotify soloist](https://developer.spotify.com/documentation/soloist),
+spotify's own connect client, and keeps librespot for the login, lyrics, playlists
+and your own music files. there is no librespot playback fallback.
 
-1. install soloist from its [getting started guide](https://developer.spotify.com/documentation/soloist/tutorials/getting-started)
-   (`~/.local/bin/soloist` is fine)
+soloist runs on linux (x86_64, aarch64, armv7), apple silicon macs and 64-bit
+windows. there is no intel mac build. its binaries may not be redistributed, so
+swiftify does not ship one: it downloads the build for your platform from
+spotify when you ask it to.
+
+1. open settings → spotify soloist and press "install soloist". it lands in
+   swiftify's data directory; a soloist you installed yourself also works
+   (`~/.local/bin/soloist`, `/opt/homebrew/bin/soloist`, on your `PATH`, or
+   beside `swiftify.exe` on windows)
 2. make a soloist api key in the [developer dashboard](https://developer.spotify.com/dashboard/soloist)
-   and put it in `~/.config/soloist/api-key` (or `SOLOIST_API_KEY`)
-3. start swiftify. it starts soloist itself, as a connect device called "Swiftify".
+   and paste it in the same settings page. every user needs their own key;
+   it is kept in `~/.config/soloist/api-key` (or `%LOCALAPPDATA%\soloist\api-key`
+   on windows, or `SOLOIST_API_KEY`)
+3. press play in swiftify. it starts soloist itself, as a connect device called "Swiftify".
    the first time, pick "Swiftify" once in the devices list of the spotify desktop app on
    the same computer (or the phone app), so soloist is signed in
-4. press play in swiftify
 
-with soloist, swiftify makes a sink called "Swiftify (Soloist)" for soloist to play into,
+for a shell, or a build agent, `tools/install-soloist.sh` (linux and macos) and
+`tools/install-soloist.ps1` (windows) install the right build for the machine.
+
+on linux with pipewire, swiftify makes a sink called "Swiftify (Soloist)" for soloist to play into,
 and plays that on through its own output, so the equalizer and the visualizers still work.
-this needs pipewire, under pulseaudio alone soloist plays straight to the speakers.
-`SWIFTIFY_SOLOIST_ROUTE=off` does that on purpose. tempo and pitch don't apply to soloist's
-audio, and crossfade waits for each song to end. soloist builds expire after 90 days,
-download a new one when it says so.
-`SWIFTIFY_PLAYBACK=librespot swiftify` goes back to librespot alone.
+under pulseaudio alone, or on macos and windows, soloist plays straight to the speakers.
+`SWIFTIFY_SOLOIST_ROUTE=off` does that on purpose. tempo and pitch only work on your own
+music files, and crossfade waits for each song to end. soloist builds expire after 90 days;
+swiftify replaces its own download before that, and again if one ever expires.
 
 if spotify on your phone doesnt list "Swiftify" for step 3, a firewall (ufw) is probably
 dropping the pairing connection; pair from the spotify desktop app on the same computer.
@@ -106,6 +121,35 @@ should use their package manager.
 
 ## Building from source
 
+### Language and Discord activity
+
+In **Settings → Appearance → Language**, choose **System**, **English**, or
+**Русский**. The choice is saved and takes effect immediately, without restarting.
+Track metadata, playlist names, search queries and custom preset names are not translated.
+
+**Settings → Account → Discord Rich Presence** optionally shares the current track,
+artist, public Spotify cover and progress with the running Discord **desktop** app.
+It is off by default. Activity requests use the listening type and the name
+**Spotify**. A pause keeps the track visible with **Paused / На паузе**, without
+running timestamps; resuming restores progress. Disabling RPC clears the activity.
+This is Rich Presence, not Spotify's official linked-account activity; it does not
+enable Listen Along. Some Discord versions may prefer the application's registered
+name over the requested activity name; in that case, rename your application in the
+Developer Portal. Discord's own
+activity privacy settings must also allow displaying activity.
+
+This build has no shared Discord application registered for Swiftify yet. Create
+an application named Swiftify at <https://discord.com/developers/applications> and
+paste its numeric **Application ID** into the field, then press Enter or leave the
+field. This is a public identifier, **not** a bot token, client secret, or Spotify
+Client ID. Applications such as Sonora ship their developer's shared Application ID,
+which is why their users don't need this step; do not reuse another app's ID.
+
+RPC uses local IPC and automatically reconnects when Discord starts again. There
+is no additional SDK or dependency. Local file paths and private cover URLs are
+never included. The RPC protocol has automated tests against a fake local Discord
+server; testing the real Discord status requires a valid application ID and Discord.
+
 ### Spotify Connect (scrobbling)
 
 By default swiftify shows up in Spotify as a connect device called "Swiftify" and
@@ -118,15 +162,53 @@ and the equalizer work as before, and other Spotify apps can not control swiftif
 or move playback to it. a song shows up once it starts to play. if spotify refuses
 the connection, playback carries on without it.
 
-### Interface language
-
-In **Settings → Appearance → Language**, choose **System**, **English**, or
-**Русский**. The preference is saved and applies immediately, without restarting.
-Track metadata, playlist names, search queries and custom preset names are not translated.
-
 Translations use Qt `qsTr` / `qsTranslate` and an embedded UTF-8 catalog at
 `translations/ru.json`; no additional Linguist tools are required. Russian plural
 entries contain three forms (one, few, many).
+
+### Personalized Spotify playlists
+
+**Made for You / Для тебя** in the sidebar opens all personalized playlists
+returned for the signed-in playback account. Home also shows Spotify's own
+playlist shelves and the Made For You page (Daily Mixes, Blends, On Repeat,
+Discover Weekly, etc., when Spotify provides them). Shelves scroll horizontally;
+the full grid is not limited to the home page's eight-card previews.
+
+Saved playlists are also read from the session rootlist, including playlists
+inside folders, and merged by ID with the existing Web API library. Personalized
+recommendations remain separate from saved playlists and cannot be edited unless
+the account actually owns or collaborates on a saved copy. They can be pinned in
+Swiftify without following or modifying them on Spotify.
+
+This uses the existing playback login: no cookies, new scopes, or developer app
+are needed. A refresh button reloads collections; failures preserve existing
+collections and do not block playback or the ordinary library. The playback and
+library logins must belong to the same account. Section names follow the selected
+interface language (refresh if changed during an in-flight load).
+
+The discovery API is **internal and unsupported by Spotify**, so availability
+and response formats can change. Query definitions are read only from Spotify's
+public web-player assets, cached in memory for 24 hours, and never executed. No
+external hash registry is used, and tokens remain in the Rust core.
+
+**Jam is a live collaborative session, not a playlist. Spotify AI DJ also is not
+a normal playlist and has no documented public API for its generated commentary
+and program control. Neither native Jam sessions nor AI DJ are implemented here.**
+Use the official Spotify client for those features. A playlist named DJ is not a
+replacement for Spotify AI DJ.
+
+### Continue after restarting
+
+Swiftify remembers the current track, its position, queue, shuffle order, and
+repeat mode. After restarting, the track is shown **paused**; only pressing Play
+loads it into the audio core and resumes from the saved position. Startup never
+starts music automatically. A restored position can also be changed before Play.
+
+State is kept locally alongside preferences, checkpointed during playback and
+flushed on orderly quit. Logging out clears it. Missing local files and unavailable
+Spotify tracks are not silently replaced with another song; Play reports the usual
+loading error. Invalid snapshots are ignored. Extremely large queues keep up to
+2,000 entries around the current occurrence and up to 100 history entries.
 
 ### Playlist collections (Web API experiment)
 
@@ -203,7 +285,7 @@ is still required.
 
 ### Build requirements
 
-- Qt 6.10 or newer: Qt Base, Qt Declarative and Qt Shader Tools, and on linux Qt WebSockets (for soloist)
+- Qt 6.10 or newer: Qt Base, Qt Declarative, Qt Shader Tools and Qt WebSockets
 - QCoro 0.10 or newer, built for Qt 6
 - CMake 3.24 or newer, Ninja, and a C++20 compiler
 - Rust (stable, from [rustup](https://rustup.rs))
@@ -220,7 +302,7 @@ build, drop that and run `ctest --test-dir build` if u want them.
 u need [homebrew](https://brew.sh) and apple's command line tools (`xcode-select --install`, or full xcode). then:
 
 ```sh
-brew install qtbase qtdeclarative qtshadertools qcoro6 cmake ninja
+brew install qtbase qtdeclarative qtshadertools qtwebsockets qcoro6 cmake ninja
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 source "$HOME/.cargo/env"
 
@@ -297,7 +379,7 @@ the tray. `-DSWIFTIFY_DESKTOP_INTEGRATION=OFF` turns those off.
 
 **because most Windows users cant even use their own OS, i made a script that handles building so it's as simple as possible :)**
 
-first install Qt 6.10+ with *Qt Shader Tools*, CMake and Ninja from the Qt online installer,
+first install Qt 6.10+ with *Qt Shader Tools* and *Qt WebSockets*, CMake and Ninja from the Qt online installer,
 Rust from [rustup](https://rustup.rs), and Git. choose either Qt for *MSVC 2022 64-bit*
 with Visual Studio 2022 17.1+ (or Build Tools) and its *Desktop development with C++*
 workload, or Qt for *MinGW 64-bit* with its matching MinGW toolchain.
@@ -349,6 +431,23 @@ start the installed app with:
 font downloads are hash-checked on every configure; on Windows, a failed CMake
 download is retried with `curl.exe` using the system certificate store.
 
+
+## Stats
+
+the Stats page (in the sidebar, or `swiftify --stats`) shows what you've been listening to,
+like the [listening-stats](https://github.com/HeadshotInteractive/listening-stats) spicetify app:
+listening time, plays, top songs, artists, albums and genres, when in the day and the week you
+listen, a calendar of the last year, and your recent plays. pick a period (today, 4 weeks,
+6 months, all time) and rank by plays or by time.
+
+it reads from either:
+
+- **stats.fm**, by username. your profile's stats have to be public; nothing else is needed.
+- **this computer**: every song you listen to for 30 seconds or more (or half of a shorter one)
+  gets kept in `listening-history.jsonl` in swiftify's data folder, and never leaves it. genres
+  come from spotify through your library login. you can export the history as csv, or turn
+  tracking off, under Settings → Listening Stats.
+
 ## Command line
 
 only one swiftify runs at a time. launching it again just passes the command to the one
@@ -360,6 +459,7 @@ that's already running, so these work great as keybinds:
 | `--play-pause` | play or pause |
 | `--next` | next song |
 | `--previous` | previous song |
+| `--stats` | open the stats page |
 
 on hyprland for example:
 

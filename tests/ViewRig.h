@@ -11,6 +11,8 @@
 #include "library/PlaylistCollections.h"
 #include "playback/PlaybackController.h"
 #include "render/SpectrumSource.h"
+#include "stats/PlayHistory.h"
+#include "stats/StatsStore.h"
 #include "spotify/CredentialStore.h"
 #include "spotify/OAuthFlow.h"
 #include "spotify/SpotifySession.h"
@@ -56,6 +58,10 @@ struct ViewRig {
     ArtworkCache artwork {&network};
     PlayerStyle style {&player, &theme, &artwork};
     SpectrumSource spectrum {&core, &player};
+    // the plays are kept in memory only, so a run leaves nothing behind
+    PlayHistory listeningHistory {QString {}};
+    PlayTracker listeningTracker {&player, &listeningHistory};
+    StatsStore stats {&settings, &session, &network, &listeningHistory, &listeningTracker};
     QQmlEngine engine;
 
     static constexpr QSize kSize {1280, 780};

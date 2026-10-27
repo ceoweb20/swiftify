@@ -12,6 +12,7 @@ QString SingleInstance::commandFrom(const QStringList &arguments)
         if (argument == QLatin1StringView("--play-pause")) return QStringLiteral("play-pause");
         if (argument == QLatin1StringView("--next")) return QStringLiteral("next");
         if (argument == QLatin1StringView("--previous")) return QStringLiteral("previous");
+        if (argument == QLatin1StringView("--stats")) return QStringLiteral("stats");
     }
     return QStringLiteral("raise");
 }

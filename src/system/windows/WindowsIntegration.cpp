@@ -251,6 +251,13 @@ struct WindowsIntegration::Native {
 void WindowsIntegration::initializeProcess()
 {
     SetCurrentProcessExplicitAppUserModelID(L"dev.addenator.Swiftify.Qt");
+    const HANDLE err = GetStdHandle(STD_ERROR_HANDLE);
+    if ((err && err != INVALID_HANDLE_VALUE && GetFileType(err) != FILE_TYPE_UNKNOWN)
+        || AttachConsole(ATTACH_PARENT_PROCESS)) {
+        if (!qEnvironmentVariableIsSet("QT_FORCE_STDERR_LOGGING")) {
+            qputenv("QT_FORCE_STDERR_LOGGING", "1");
+        }
+    }
 }
 
 void WindowsIntegration::setNativeTitleBar(QWindow *window, bool enabled)

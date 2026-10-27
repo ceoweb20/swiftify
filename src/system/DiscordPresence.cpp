@@ -110,7 +110,8 @@ discord::FrameResult discord::takeFrame(QByteArray &buffer, quint32 &opcode, QBy
 }
 
 DiscordPresence::DiscordPresence(PlaybackController *player, Settings *settings, QObject *parent,
-                                 std::function<QStringList()> socketLocator)
+                                 std::function<QStringList()> socketLocator,
+                                 int inactivityTimeoutMs)
     : QObject(parent), m_player(player), m_settings(settings),
       m_socketLocator(socketLocator ? std::move(socketLocator) : endpoints)
 {
@@ -120,6 +121,8 @@ DiscordPresence::DiscordPresence(PlaybackController *player, Settings *settings,
     m_deadline.setInterval(5000);
     m_update.setSingleShot(true);
     m_update.setInterval(250);
+    m_inactivity.setSingleShot(true);
+    m_inactivity.setInterval(inactivityTimeoutMs);
     m_socket.setReadBufferSize(discord::maxFrameSize + 8);
     connect(&m_retry, &QTimer::timeout, this, [this] {
         m_endpoints = m_socketLocator();
@@ -131,6 +134,7 @@ DiscordPresence::DiscordPresence(PlaybackController *player, Settings *settings,
         fail(Failure::TimedOut);
     });
     connect(&m_update, &QTimer::timeout, this, &DiscordPresence::update);
+    connect(&m_inactivity, &QTimer::timeout, this, &DiscordPresence::onInactivityTimeout);
     connect(&m_socket, &QLocalSocket::connected, this, [this] {
         send(0, QJsonDocument(QJsonObject {{QStringLiteral("v"), 1},
             {QStringLiteral("client_id"), m_settings->discordApplicationId()}}).toJson(QJsonDocument::Compact));
@@ -148,9 +152,9 @@ DiscordPresence::DiscordPresence(PlaybackController *player, Settings *settings,
         scheduleUpdate();
     });
     connect(player, &PlaybackController::mediaStateChanged, this, &DiscordPresence::scheduleUpdate);
-    connect(player, &PlaybackController::currentSongChanged, this, &DiscordPresence::scheduleUpdate);
-    connect(player, &PlaybackController::playingChanged, this, &DiscordPresence::scheduleUpdate);
-    connect(player, &PlaybackController::loadingChanged, this, &DiscordPresence::scheduleUpdate);
+    connect(player, &PlaybackController::currentSongChanged, this, &DiscordPresence::handlePlaybackStateChanged);
+    connect(player, &PlaybackController::playingChanged, this, &DiscordPresence::handlePlaybackStateChanged);
+    connect(player, &PlaybackController::loadingChanged, this, &DiscordPresence::handlePlaybackStateChanged);
     connect(player, &PlaybackController::positionChanged, this, &DiscordPresence::scheduleUpdate);
     connect(player, &PlaybackController::durationChanged, this, &DiscordPresence::scheduleUpdate);
     configure();
@@ -176,6 +180,13 @@ void DiscordPresence::setReady(bool ready)
     m_ready = ready;
     emit connectedChanged();
     emit statusChanged();
+}
+
+void DiscordPresence::setInactivityTimeout(int ms)
+{
+    const bool active = m_inactivity.isActive();
+    m_inactivity.setInterval(ms);
+    if (active) m_inactivity.start();
 }
 
 QString DiscordPresence::status() const
@@ -211,6 +222,8 @@ void DiscordPresence::fail(Failure failure, int code)
 
 void DiscordPresence::configure()
 {
+    m_inactivity.stop();
+    m_idleTerminated = false;
     m_retry.stop();
     m_deadline.stop();
     m_update.stop();
@@ -231,6 +244,11 @@ void DiscordPresence::configure()
     m_endpoint = 0;
     m_retry.start();
     QTimer::singleShot(0, this, &DiscordPresence::connectNext);
+    const bool hasListeningActivity = m_player->isPlaying()
+        || (m_player->isLoading() && m_player->currentSong().uri != QLatin1StringView(PlaybackController::kLoadingTestUri));
+    if (!hasListeningActivity) {
+        m_inactivity.start();
+    }
 }
 
 void DiscordPresence::connectNext()
@@ -252,8 +270,57 @@ void DiscordPresence::disconnected()
     setReady(false);
     m_published = false;
     m_buffer.clear();
-    if (m_settings->discordEnabled() && !m_settings->discordApplicationId().isEmpty() && !m_retry.isActive()) m_retry.start();
-    QTimer::singleShot(0, this, &DiscordPresence::connectNext);
+    if (!m_idleTerminated && m_settings->discordEnabled() && !m_settings->discordApplicationId().isEmpty() && !m_retry.isActive()) m_retry.start();
+    if (!m_idleTerminated) QTimer::singleShot(0, this, &DiscordPresence::connectNext);
+}
+
+void DiscordPresence::handlePlaybackStateChanged()
+{
+    const bool hasListeningActivity = m_player->isPlaying()
+        || (m_player->isLoading() && m_player->currentSong().uri != QLatin1StringView(PlaybackController::kLoadingTestUri));
+    if (hasListeningActivity) {
+        m_inactivity.stop();
+        if (m_idleTerminated) {
+            m_idleTerminated = false;
+            if (m_settings->discordEnabled() && !m_settings->discordApplicationId().isEmpty()) {
+                m_endpoints = m_socketLocator();
+                m_endpoint = 0;
+                if (m_endpoints.isEmpty()) {
+                    fail(Failure::Unavailable);
+                } else {
+                    m_retry.start();
+                    connectNext();
+                }
+            }
+        }
+    } else {
+        if (m_settings->discordEnabled() && !m_settings->discordApplicationId().isEmpty()) {
+            if (!m_idleTerminated && !m_inactivity.isActive()) {
+                m_inactivity.start();
+            }
+        } else {
+            m_inactivity.stop();
+        }
+    }
+    scheduleUpdate();
+}
+
+void DiscordPresence::onInactivityTimeout()
+{
+    m_inactivity.stop();
+    m_idleTerminated = true;
+    m_retry.stop();
+    m_deadline.stop();
+    m_update.stop();
+    clear();
+    if (m_socket.bytesToWrite() > 0) m_socket.waitForBytesWritten(100);
+    const QSignalBlocker blocker(&m_socket);
+    m_socket.abort();
+    setReady(false);
+    m_published = false;
+    m_buffer.clear();
+    m_endpoints.clear();
+    emit statusChanged();
 }
 
 void DiscordPresence::send(quint32 opcode, const QByteArray &payload)
@@ -349,8 +416,8 @@ void DiscordPresence::update()
     metadata.insert(QStringLiteral("duration"), duration);
     metadata.insert(QStringLiteral("playing"), playing);
     if (m_published && metadata == m_lastMetadata
-        && (!playing || qAbs(position - (m_lastPosition + now - m_lastUpdate)) < 2000)) return;
-    if (playing && duration > position) {
+        && (!playing ? position == m_lastPosition : qAbs(position - (m_lastPosition + now - m_lastUpdate)) < 2000)) return;
+    if (duration > position) {
         activity.insert(QStringLiteral("timestamps"), QJsonObject {
             {QStringLiteral("start"), (now - position) / 1000},
             {QStringLiteral("end"), (now + duration - position) / 1000}});

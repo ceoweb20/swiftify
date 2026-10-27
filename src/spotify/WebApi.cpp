@@ -249,21 +249,6 @@ QCoro::Task<QList<Song>> WebApi::playlistSongs(QString playlistId, QString acces
     co_return result;
 }
 
-QCoro::Task<Playlist> WebApi::playlist(QString playlistId, QString accessToken)
-{
-    if (!playlistlinks::validId(playlistId)) {
-        throw SpotifyError(SpotifyError::Kind::InvalidUrl, QStringLiteral("Invalid Spotify playlist ID."));
-    }
-    const auto object = (co_await requestJson(apiUrl(QStringLiteral("/v1/playlists/%1").arg(playlistId)),
-                                            "GET", accessToken)).object();
-    Playlist result = json::playlist(object);
-    if (result.id != playlistId || result.name.trimmed().isEmpty()
-        || object.value(QStringLiteral("type")).toString() != QLatin1StringView("playlist")) {
-        throw SpotifyError::invalidData(QStringLiteral("Spotify returned invalid playlist details."));
-    }
-    result.uri = QStringLiteral("spotify:playlist:") + playlistId;
-    co_return result;
-}
 
 QCoro::Task<QList<Song>> WebApi::savedSongs(QString accessToken)
 {
@@ -343,6 +328,37 @@ QCoro::Task<Song> WebApi::song(QString trackId, QString accessToken)
     co_return *song;
 }
 
+QCoro::Task<Album> WebApi::album(QString albumId, QString accessToken)
+{
+    const QJsonDocument document = co_await requestJson(apiUrl(QStringLiteral("/v1/albums/%1").arg(albumId), QUrlQuery {kMarket}), "GET", accessToken);
+    const auto album = json::album(document.object());
+    if (!album) {
+        throw SpotifyError::invalidData(QStringLiteral("Spotify returned an unsupported album."));
+    }
+    co_return *album;
+}
+
+
+QCoro::Task<Playlist> WebApi::playlist(QString playlistId, QString accessToken)
+{
+    if (!playlistlinks::validId(playlistId)) {
+        throw SpotifyError(SpotifyError::Kind::InvalidUrl, QStringLiteral("Invalid Spotify playlist ID."));
+    }
+    // json::playlist needs both "items" and "tracks"
+    const QUrlQuery query {{QStringLiteral("fields"),
+                            QStringLiteral("id,name,description,images,uri,public,collaborative,"
+                                           "owner(id,display_name),items(total),tracks(total)")},
+                           kMarket};
+    const auto object = (co_await requestJson(apiUrl(QStringLiteral("/v1/playlists/%1").arg(playlistId), query),
+                                            "GET", accessToken)).object();
+    Playlist result = json::playlist(object);
+    if (result.id != playlistId || result.name.trimmed().isEmpty()) {
+        throw SpotifyError::invalidData(QStringLiteral("Spotify returned an unsupported playlist."));
+    }
+    result.uri = QStringLiteral("spotify:playlist:") + playlistId;
+    co_return result;
+}
+
 QCoro::Task<QList<Song>> WebApi::albumSongs(Album album, QString accessToken)
 {
     QList<Song> result;
@@ -363,7 +379,7 @@ QCoro::Task<Artist> WebApi::artist(QString artistId, QString accessToken)
                                             "GET", accessToken)).object();
     const auto result = json::artist(object);
     if (!result || result->id != artistId || result->name.trimmed().isEmpty()) {
-        throw SpotifyError::invalidData(QStringLiteral("Spotify returned invalid artist details."));
+        throw SpotifyError::invalidData(QStringLiteral("Spotify returned an unsupported artist."));
     }
     co_return *result;
 }
@@ -384,6 +400,36 @@ QCoro::Task<QList<Album>> WebApi::artistAlbums(Artist artist, QString accessToke
             }
         }
     });
+    co_return result;
+}
+
+QCoro::Task<QHash<QString, QStringList>> WebApi::artistGenres(QStringList artistIds, QString accessToken,
+                                                              QHash<QString, QUrl> *artwork)
+{
+    QHash<QString, QStringList> result;
+    // fifty at a time is as many as spotify takes
+    for (qsizetype start = 0; start < artistIds.size(); start += 50) {
+        const QUrlQuery query {{QStringLiteral("ids"), artistIds.mid(start, 50).join(u',')}};
+        const QJsonDocument document = co_await requestJson(apiUrl(QStringLiteral("/v1/artists"), query), "GET", accessToken);
+        for (const QJsonValue &value : document.object().value(QStringLiteral("artists")).toArray()) {
+            const QJsonObject object = value.toObject();
+            const QString id = object.value(QStringLiteral("id")).toString();
+            if (id.isEmpty()) {
+                continue;
+            }
+            QStringList genres;
+            for (const QJsonValue &genre : object.value(QStringLiteral("genres")).toArray()) {
+                genres.append(genre.toString());
+            }
+            result.insert(id, genres);
+            if (artwork) {
+                const QUrl image = json::preferredArtworkUrl(object.value(QStringLiteral("images")).toArray(), 320);
+                if (image.isValid()) {
+                    artwork->insert(id, image);
+                }
+            }
+        }
+    }
     co_return result;
 }
 

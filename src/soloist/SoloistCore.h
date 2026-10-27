@@ -23,9 +23,10 @@ struct SoloistConfig {
     QString deviceName = QStringLiteral("Swiftify");
 };
 
-/// plays spotify songs through spotify soloist, spotify's own connect client,
-/// for accounts spotify no longer gives librespot the keys for. soloist runs
-/// as a child process and is driven over its local websocket api.
+/// plays spotify songs through spotify soloist, spotify's own connect client.
+/// soloist is the only way spotify plays: librespot is kept for the login,
+/// lyrics, playlists and the person's own music files, never for streaming.
+/// soloist runs as a child process and is driven over its local websocket api.
 ///
 /// what soloist can't do is left to `fallback`, the rust core: the login,
 /// lyrics, and the person's own music files. where the sound server allows,
@@ -41,10 +42,16 @@ public:
     SoloistCore(PlaybackCore *fallback, SoloistConfig config, QObject *parent = nullptr);
     ~SoloistCore() override;
 
-    /// soloist on the PATH (or SWIFTIFY_SOLOIST) and a key in SOLOIST_API_KEY
-    /// or ~/.config/soloist/api-key; nothing if either is missing, or if
-    /// SWIFTIFY_PLAYBACK=librespot asks for the rust core alone
-    static std::optional<SoloistConfig> detect();
+    /// soloist on the PATH, in swiftify's own install directory, or where
+    /// soloist's guide puts it (SWIFTIFY_SOLOIST overrides), and a key in
+    /// SOLOIST_API_KEY or ~/.config/soloist/api-key. the program or the key
+    /// is empty when it is not set up yet; playing then explains what to do
+    static SoloistConfig configured();
+    /// re-reads the program and the key after the installer provided them,
+    /// restarting soloist with what changed
+    void reloadConfiguration();
+    /// stops the child process, as an update of its binary needs
+    void stopDaemon();
 
     QCoro::Task<QString> connectSession(QString accessToken, QString clientId) override;
     QCoro::Task<QString> connectStoredSession(QString login, QString clientId) override;
@@ -58,6 +65,7 @@ public:
     QCoro::Task<> restartAudioOutput() override;
     QCoro::Task<QString> lyricsJson(QString spotifyUri) override;
     QCoro::Task<QString> playlistJson(QString playlistUri) override;
+    QCoro::Task<QString> discoveryJson(QString locale) override;
     QCoro::Task<QString> artistTopTracksJson(QString artistUri) override;
 
     void play() override;
@@ -66,8 +74,10 @@ public:
     void setVolume(float volume) override;
     float volume() const override { return m_volume; }
     void setStreamQuality(int kbps) override;
+    void setVolumeNormalization(bool enabled) override;
     void setAudioCache(const QString &path, qint64 limitBytes) override;
     void setPlaybackShaping(float tempo, float pitchSemitones, bool preservesPitch) override;
+    void setPreampGain(float gainDb) override;
     void setEqualizer(const QList<float> &gainsDb) override;
 
     bool sessionIsValid() const override;
@@ -84,6 +94,8 @@ public:
 signals:
     /// anything soloist reported, or a reset; what waiting calls wake on
     void stateChanged();
+    /// the build passed its 90 days and exited; a new one should be installed
+    void buildExpired();
 
 private:
     enum class Status { Idle, Playing, Paused, Buffering };
@@ -115,8 +127,7 @@ private:
     void followRemote();
     /// the song soloist is playing, from what it says of it
     Song songFromItem() const;
-    /// soloist's own volume: all the way up when swiftify plays it on, and
-    /// sets the volume itself
+    /// soloist's volume as 0-100 integer
     int soloistVolume() const;
     /// hands what soloist plays to the rust core, if it is routed through it
     void playRouted();
@@ -126,6 +137,9 @@ private:
     std::unique_ptr<SwiftifyLiveBuffer, void (*)(SwiftifyLiveBuffer *)> m_liveBuffer;
 #ifdef SWIFTIFY_DESKTOP_INTEGRATION
     std::unique_ptr<SoloistAudioRoute> m_route;
+#endif
+#ifdef Q_OS_WIN
+    void *m_job = nullptr;
 #endif
     /// soloist plays into m_route's sink
     bool m_routed = false;

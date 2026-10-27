@@ -90,6 +90,9 @@ void RustCore::open()
     if (m_streamKbps > 0) {
         swiftify_string_free(swiftify_core_set_stream_quality(m_core, uint32_t(m_streamKbps)));
     }
+    if (m_normalizeVolume) {
+        swiftify_string_free(swiftify_core_set_volume_normalization(m_core, true));
+    }
     if (!m_connectName.isEmpty()) {
         swiftify_string_free(swiftify_core_set_connect(m_core, m_connectEnabled, m_connectName.toUtf8().constData()));
     }
@@ -228,6 +231,11 @@ QCoro::Task<QString> RustCore::artistTopTracksJson(QString artistUri)
 }
 
 void RustCore::play() { throwIfError(swiftify_core_play(m_core)); }
+QCoro::Task<QString> RustCore::discoveryJson(QString locale)
+{
+    const QByteArray language = locale.toUtf8();
+    co_return co_await request([&](quint64 id) { swiftify_core_discovery_json(m_core, id, language.constData()); });
+}
 void RustCore::pause() { throwIfError(swiftify_core_pause(m_core)); }
 void RustCore::seek(quint32 positionMs) { throwIfError(swiftify_core_seek(m_core, positionMs)); }
 void RustCore::setVolume(float volume) { throwIfError(swiftify_core_set_volume(m_core, volume)); }
@@ -236,6 +244,12 @@ void RustCore::setStreamQuality(int kbps)
 {
     m_streamKbps = kbps;
     throwIfError(swiftify_core_set_stream_quality(m_core, uint32_t(kbps)));
+}
+
+void RustCore::setVolumeNormalization(bool enabled)
+{
+    m_normalizeVolume = enabled;
+    throwIfError(swiftify_core_set_volume_normalization(m_core, enabled));
 }
 
 void RustCore::setConnectDevice(bool enabled, const QString &name)
@@ -255,6 +269,11 @@ void RustCore::setAudioCache(const QString &path, qint64 limitBytes)
 void RustCore::setPlaybackShaping(float tempo, float pitchSemitones, bool preservesPitch)
 {
     throwIfError(swiftify_core_set_playback_shaping(m_core, tempo, pitchSemitones, preservesPitch));
+}
+
+void RustCore::setPreampGain(float gainDb)
+{
+    throwIfError(swiftify_core_set_preamp_gain(m_core, gainDb));
 }
 
 void RustCore::setEqualizer(const QList<float> &gainsDb)

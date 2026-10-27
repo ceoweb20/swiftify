@@ -508,6 +508,12 @@ async_call!(
     }
 );
 async_call!(
+    /// personalized home shelves and the complete saved rootlist; no tokens leave Rust.
+    swiftify_core_discovery_json(locale) => |core| {
+        core.discovery_json(locale).await
+    }
+);
+async_call!(
     /// completes with an artist's top songs as json, read through the session.
     swiftify_core_artist_top_tracks_json(artist_uri) => |core| {
         core.artist_top_tracks_json(artist_uri).await
@@ -549,6 +555,7 @@ fallible_call!(swiftify_core_pause() => |core| core.pause());
 fallible_call!(swiftify_core_seek(position_ms: u32) => |core| core.seek(position_ms));
 fallible_call!(swiftify_core_set_volume(volume: f32) => |core| core.set_volume(volume));
 fallible_call!(swiftify_core_set_stream_quality(kbps: u32) => |core| core.set_stream_quality(kbps));
+fallible_call!(swiftify_core_set_volume_normalization(enabled: bool) => |core| core.set_volume_normalization(enabled));
 /// keeps streamed songs in `path`, up to `limit_bytes`; an empty path keeps
 /// none. applies the next time playback connects. returns null on success, or
 /// an error message to free.
@@ -596,6 +603,7 @@ pub unsafe extern "C" fn swiftify_core_set_connect(
 
 fallible_call!(swiftify_core_set_playback_shaping(tempo: f32, pitch_semitones: f32, preserves_pitch: bool)
     => |core| core.set_playback_shaping(tempo, pitch_semitones, preserves_pitch));
+fallible_call!(swiftify_core_set_preamp_gain(gain_db: f32) => |core| core.set_preamp_gain(gain_db));
 
 /// returns null on success, or an error message to free.
 ///

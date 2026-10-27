@@ -31,6 +31,7 @@ class Settings : public QObject {
     Q_PROPERTY(QString visualizerShape READ visualizerShape WRITE setVisualizerShape NOTIFY visualizerShapeChanged FINAL)
     Q_PROPERTY(double visualizerSensitivity READ visualizerSensitivity WRITE setVisualizerSensitivity NOTIFY visualizerSensitivityChanged FINAL)
     Q_PROPERTY(int streamingQuality READ streamingQuality WRITE setStreamingQuality NOTIFY streamingQualityChanged FINAL)
+    Q_PROPERTY(bool normalizeVolume READ normalizeVolume WRITE setNormalizeVolume NOTIFY normalizeVolumeChanged FINAL)
     Q_PROPERTY(bool crossfadeEnabled READ crossfadeEnabled WRITE setCrossfadeEnabled NOTIFY crossfadeEnabledChanged FINAL)
     /// shows in Spotify as a Connect device and reports what plays to the account, which a scrobbling bot reads; it cannot be controlled from other apps
     Q_PROPERTY(bool spotifyConnect READ spotifyConnect WRITE setSpotifyConnect NOTIFY spotifyConnectChanged FINAL)
@@ -59,13 +60,24 @@ class Settings : public QObject {
     Q_PROPERTY(QString matugenColorsPath READ matugenColorsPath WRITE setMatugenColorsPath NOTIFY matugenColorsPathChanged FINAL)
     Q_PROPERTY(bool showWindowControls READ showWindowControls WRITE setShowWindowControls NOTIFY showWindowControlsChanged FINAL)
     Q_PROPERTY(bool windowControlsOnRight READ windowControlsOnRight WRITE setWindowControlsOnRight NOTIFY windowControlsOnRightChanged FINAL)
+    /// where the stats page reads from: "statsfm" or "local"
+    Q_PROPERTY(QString statsSource READ statsSource WRITE setStatsSource NOTIFY statsSourceChanged FINAL)
+    Q_PROPERTY(QString statsFmUsername READ statsFmUsername WRITE setStatsFmUsername NOTIFY statsFmUsernameChanged FINAL)
+    /// whether songs played here are kept for the local stats
+    Q_PROPERTY(bool trackListening READ trackListening WRITE setTrackListening NOTIFY trackListeningChanged FINAL)
     Q_PROPERTY(bool nativeTitleBar READ nativeTitleBar WRITE setNativeTitleBar NOTIFY nativeTitleBarChanged FINAL)
     Q_PROPERTY(bool trayIcon READ trayIcon WRITE setTrayIcon NOTIFY trayIconChanged FINAL)
     /// the whole window's zoom, as ctrl + and ctrl - set it
     Q_PROPERTY(double zoom READ zoom WRITE setZoom NOTIFY zoomChanged FINAL)
     Q_PROPERTY(bool discordEnabled READ discordEnabled WRITE setDiscordEnabled NOTIFY discordEnabledChanged FINAL)
     Q_PROPERTY(QString discordApplicationId READ discordApplicationId WRITE setDiscordApplicationId NOTIFY discordApplicationIdChanged FINAL)
+    Q_PROPERTY(bool loggingEnabled READ isLoggingEnabled WRITE setLoggingEnabled NOTIFY loggingEnabledChanged FINAL)
+    Q_PROPERTY(bool loggingActive READ isLoggingActive CONSTANT FINAL)
+    Q_PROPERTY(QString logDirectory READ logDirectory CONSTANT FINAL)
+    Q_PROPERTY(QString logFilePath READ logFilePath CONSTANT FINAL)
     Q_PROPERTY(QString language READ language WRITE setLanguage NOTIFY languageChanged FINAL)
+    Q_PROPERTY(bool russianEnabled READ isRussianEnabled NOTIFY languageAvailabilityChanged FINAL)
+    Q_PROPERTY(QString disabledLanguageMessage READ disabledLanguageMessage CONSTANT FINAL)
 
 public:
     /// the default file, ~/.config/Swiftify/Swiftify.conf. no default argument:
@@ -116,6 +128,8 @@ public:
     int songCacheMegabytes() const { return m_songCacheMegabytes; }
     void setSongCacheMegabytes(int megabytes);
     void setStreamingQuality(int value);
+    bool normalizeVolume() const { return m_normalizeVolume; }
+    void setNormalizeVolume(bool value);
     bool crossfadeEnabled() const { return m_crossfadeEnabled; }
     void setCrossfadeEnabled(bool value);
     bool spotifyConnect() const { return m_spotifyConnect; }
@@ -163,6 +177,12 @@ public:
     bool showWindowControls() const { return m_showWindowControls; }
     void setShowWindowControls(bool value);
     bool windowControlsOnRight() const { return m_windowControlsOnRight; }
+    QString statsSource() const { return m_statsSource; }
+    void setStatsSource(const QString &value);
+    QString statsFmUsername() const { return m_statsFmUsername; }
+    void setStatsFmUsername(const QString &value);
+    bool trackListening() const { return m_trackListening; }
+    void setTrackListening(bool value);
     void setWindowControlsOnRight(bool value);
     bool nativeTitleBar() const { return m_nativeTitleBar; }
     void setNativeTitleBar(bool value);
@@ -177,6 +197,18 @@ public:
     void setDiscordApplicationId(const QString &value);
     QString language() const { return m_language; }
     void setLanguage(const QString &value);
+    bool isLoggingEnabled() const { return m_loggingEnabled; }
+    void setLoggingEnabled(bool value);
+    bool isLoggingActive() const;
+    QString logDirectory() const;
+    QString logFilePath() const;
+    Q_INVOKABLE void openLogsFolder() const;
+    Q_INVOKABLE void openLogFile() const;
+    bool isRussianEnabled() const;
+    QString disabledLanguageMessage() const;
+    Q_INVOKABLE bool isLanguageEnabled(const QString &language) const;
+    void enforceEnabledLanguage();
+    bool takeRevertedDisabledLanguage();
 
 signals:
     void visualizersEnabledChanged();
@@ -189,6 +221,7 @@ signals:
     void visualizerShapeChanged();
     void visualizerSensitivityChanged();
     void streamingQualityChanged();
+    void normalizeVolumeChanged();
     void crossfadeEnabledChanged();
     void spotifyConnectChanged();
     void connectDeviceNameChanged();
@@ -210,12 +243,17 @@ signals:
     void matugenColorsPathChanged();
     void showWindowControlsChanged();
     void windowControlsOnRightChanged();
+    void statsSourceChanged();
+    void statsFmUsernameChanged();
+    void trackListeningChanged();
     void nativeTitleBarChanged();
     void trayIconChanged();
     void zoomChanged();
     void discordEnabledChanged();
     void discordApplicationIdChanged();
+    void loggingEnabledChanged();
     void languageChanged();
+    void languageAvailabilityChanged();
 
 private:
     void load();
@@ -232,6 +270,7 @@ private:
     QString m_visualizerShape = QStringLiteral("bars");
     double m_visualizerSensitivity = 1.0;
     int m_streamingQuality = 160;
+    bool m_normalizeVolume = false;
     bool m_crossfadeEnabled = false;
     bool m_spotifyConnect = true;
     QString m_connectDeviceName = QStringLiteral("Swiftify");
@@ -253,6 +292,9 @@ private:
     QString m_matugenColorsPath = QString();
     bool m_showWindowControls = true;
     bool m_windowControlsOnRight = false;
+    QString m_statsSource = QStringLiteral("local");
+    QString m_statsFmUsername;
+    bool m_trackListening = true;
 #ifdef Q_OS_WIN
     bool m_nativeTitleBar = false;
 #else
@@ -263,6 +305,8 @@ private:
     bool m_discordEnabled = false;
     QString m_discordApplicationId;
     QString m_language = QStringLiteral("system");
+    bool m_loggingEnabled = false;
+    bool m_revertedDisabledLanguage = false;
 };
 
 } // namespace swiftify

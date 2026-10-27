@@ -44,6 +44,7 @@ public:
     /// items page. the web api only gives the songs of the person's own and
     /// collaborative playlists
     virtual QCoro::Task<QString> playlistJson(QString playlistUri) = 0;
+    virtual QCoro::Task<QString> discoveryJson(QString locale) = 0;
     /// an artist's top songs read through the session, shaped like the web
     /// api's top tracks response, which spotify took away
     virtual QCoro::Task<QString> artistTopTracksJson(QString artistUri) = 0;
@@ -54,6 +55,7 @@ public:
     virtual void setVolume(float volume) = 0;
     virtual float volume() const = 0;
     virtual void setStreamQuality(int kbps) = 0;
+    virtual void setVolumeNormalization(bool enabled) = 0;
     /// to show as a Spotify Connect device called `name` once playback
     /// connects, and report what plays to the account (a scrobbling bot sees
     /// it). the device cannot be controlled from other Spotify apps; a core
@@ -63,6 +65,7 @@ public:
     /// next time playback connects
     virtual void setAudioCache(const QString &path, qint64 limitBytes) = 0;
     virtual void setPlaybackShaping(float tempo, float pitchSemitones, bool preservesPitch) = 0;
+    virtual void setPreampGain(float gainDb) = 0;
     virtual void setEqualizer(const QList<float> &gainsDb) = 0;
 
     virtual bool sessionIsValid() const = 0;
@@ -96,6 +99,8 @@ signals:
     void remoteTrackStarted(const swiftify::Song &song);
     /// playback here was paused or resumed from elsewhere
     void remotePlayingChanged(bool playing);
+    /// volume was changed from elsewhere (e.g. Spotify Connect or system mixer)
+    void remoteVolumeChanged(float volume);
 };
 
 } // namespace swiftify
