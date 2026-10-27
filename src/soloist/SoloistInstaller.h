@@ -33,6 +33,7 @@ class SoloistInstaller : public QObject {
     /// 0..1 while the archive downloads, -1 while it extracts and verifies
     Q_PROPERTY(double progress READ progress NOTIFY progressChanged FINAL)
     Q_PROPERTY(QString status READ status NOTIFY statusChanged FINAL)
+    Q_PROPERTY(bool active READ active NOTIFY activeChanged FINAL)
 
 public:
     // No default constructor: QML must use create() and the instance wired to playback.
@@ -49,6 +50,8 @@ public:
     bool busy() const { return m_busy; }
     double progress() const { return m_progress; }
     QString status() const { return m_status; }
+    bool active() const { return m_active; }
+    void setActive(bool active);
 
     Q_INVOKABLE void install();
     Q_INVOKABLE bool saveApiKey(const QString &key);
@@ -59,6 +62,7 @@ signals:
     void busyChanged();
     void progressChanged();
     void statusChanged();
+    void activeChanged();
     /// a binary or a key changed, so the playback core re-reads its config
     void configurationChanged();
 
@@ -86,6 +90,7 @@ private:
     bool m_busy = false;
     double m_progress = -1;
     QString m_status;
+    bool m_active = false;
 };
 
 } // namespace swiftify

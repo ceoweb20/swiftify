@@ -1,6 +1,9 @@
 #pragma once
 
 #include <QJsonObject>
+#include <QList>
+#include <QLocale>
+#include <QRegularExpression>
 #include <QString>
 #include <QStringView>
 #include <QTranslator>
@@ -10,7 +13,7 @@ namespace swiftify {
 class Settings;
 
 ///set to false to disable russian translations. this skips tests and disables the option inside of the settings
-inline constexpr bool kRussianTranslationEnabled = false;
+inline constexpr bool kRussianTranslationEnabled = true;
 
 /// Uses Qt's normal qsTr/tr bindings; the small UTF-8 catalog is embedded so
 /// building translations doesn't require an additional Linguist installation.
@@ -34,9 +37,17 @@ signals:
 
 private:
     void apply();
+    QString translatedMessage(const QString &source, int depth = 0) const;
+    struct MessagePattern {
+        QRegularExpression expression;
+        QList<int> arguments;
+        QString translation;
+    };
     Settings *m_settings;
     QJsonObject m_catalog;
+    QList<MessagePattern> m_patterns;
     bool m_russian = false;
+    QLocale m_previousLocale;
 };
 
 } // namespace swiftify

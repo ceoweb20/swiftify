@@ -117,18 +117,11 @@ private:
     };
 
 private slots:
-    void connectDeviceSettingsReachTheCore()
+    void librespotDoesNotAdvertiseAConnectDevice()
     {
         Rig rig;
-        // on by default, under the app's own name
-        QVERIFY(rig.core.connectEnabled);
-        QCOMPARE(rig.core.connectName, QStringLiteral("Swiftify"));
-        rig.settings.setConnectDeviceName(QStringLiteral("  Kitchen  "));
-        QCOMPARE(rig.core.connectName, QStringLiteral("Kitchen"));
-        rig.settings.setConnectDeviceName(QStringLiteral("   "));
-        QCOMPARE(rig.core.connectName, QStringLiteral("Kitchen"));
-        rig.settings.setSpotifyConnect(false);
         QVERIFY(!rig.core.connectEnabled);
+        QCOMPARE(rig.core.connectName, QStringLiteral("Swiftify"));
     }
 
     void lastTrackQueueAndPositionSurviveRestartWithoutStartingSound()

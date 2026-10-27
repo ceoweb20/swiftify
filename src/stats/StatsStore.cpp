@@ -86,6 +86,11 @@ StatsStore::StatsStore(Settings *settings, SpotifySession *session, QNetworkAcce
         });
     }
     if (m_settings) {
+        connect(m_settings, &Settings::languageChanged, this, [this] {
+            m_calendarWeeks = calendarFor(m_snapshot.daily, QDate::currentDate(), &m_calendarMonths,
+                                         &m_calendarMax, &m_calendarTotal);
+            emit snapshotChanged();
+        });
         connect(m_settings, &Settings::statsSourceChanged, this, [this] {
             emit sourceChanged();
             refresh();

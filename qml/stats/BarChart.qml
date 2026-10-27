@@ -86,7 +86,7 @@ Item {
                     visible: true
                     delay: 0
                     text: (column.index < root.labels.length ? root.labels[column.index] + " · " : "")
-                          + column.value.toLocaleString(Qt.locale(), "f", 0) + " " + root.unit
+                          + column.value.toLocaleString(Format.locale, "f", 0) + " " + root.unit
                 }
             }
         }

@@ -33,7 +33,7 @@ QtObject {
         property: "speed"
         value: root.spinSpeed
     }
-    readonly property string catchphrase: "i mean i guess bro"
+    readonly property string catchphrase: qsTr("Nothing to show yet")
 
     /// a clicked cover flying to the hero of the page it opens (HeroFlight).
     /// the click arms it with where the cover was; the hero that appears

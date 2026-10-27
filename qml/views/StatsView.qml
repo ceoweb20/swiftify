@@ -22,7 +22,7 @@ Flickable {
     readonly property list<string> weekdayNames: {
         const names = []
         for (let day = 1; day <= 7; ++day) {
-            names.push(Qt.locale().dayName(day % 7, Locale.ShortFormat))
+            names.push(Format.locale.dayName(day % 7, Locale.ShortFormat))
         }
         return names
     }
@@ -42,7 +42,7 @@ Flickable {
         return top + height > root.contentY - slack && top < root.contentY + root.height + slack
     }
     function hourName(hour: int): string {
-        return new Date(2000, 0, 1, hour).toLocaleTimeString(Qt.locale(), "h AP").replace(":00", "")
+        return new Date(2000, 0, 1, hour).toLocaleTimeString(Format.locale, "HH:mm")
     }
     /// "1,284 plays", "3 hr 5 min" when ranking by time, or "" when the
     /// source left both out
@@ -57,7 +57,7 @@ Flickable {
     }
     /// "1,284"
     function figure(value: real): string {
-        return Math.round(value).toLocaleString(Qt.locale(), "f", 0)
+        return Math.round(value).toLocaleString(Format.locale, "f", 0)
     }
     /// listening time as the overview says it: hours past a few, else minutes
     function listeningTime(milliseconds: real): string {
@@ -246,7 +246,7 @@ Flickable {
             StyledText {
                 width: parent.width
                 visible: Stats.errorMessage.length > 0
-                text: Stats.errorMessage
+                text: qsTranslate("Stats", Stats.errorMessage)
                 wrapMode: Text.Wrap
                 color: Appearance.colors.error
             }
@@ -577,7 +577,7 @@ Flickable {
                             best = day
                         }
                     }
-                    return best >= 0 ? qsTr("Busiest day: %1").arg(Qt.locale().dayName((best + 1) % 7, Locale.LongFormat)) : ""
+                    return best >= 0 ? qsTr("Busiest day: %1").arg(Format.locale.dayName((best + 1) % 7, Locale.LongFormat)) : ""
                 }
 
                 BarChart {

@@ -52,6 +52,7 @@ public:
     void reloadConfiguration();
     /// stops the child process, as an update of its binary needs
     void stopDaemon();
+    bool usingSoloist() const { return m_useSoloist; }
 
     QCoro::Task<QString> connectSession(QString accessToken, QString clientId) override;
     QCoro::Task<QString> connectStoredSession(QString login, QString clientId) override;
@@ -93,6 +94,7 @@ public:
     bool skipRemote(bool forward) override;
 
 signals:
+    void backendChanged();
     /// anything soloist reported, or a reset; what waiting calls wake on
     void stateChanged();
     /// the build passed its 90 days and exited; a new one should be installed

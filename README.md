@@ -153,17 +153,21 @@ is no additional SDK or dependency. Local file paths and private cover URLs are
 never included. The RPC protocol has automated tests against a fake local Discord
 server; testing the real Discord status requires a valid application ID and Discord.
 
-### Spotify Connect (scrobbling)
+### Language and playback quality
 
-By default swiftify shows up in Spotify as a connect device called "Swiftify" and
-tells your account what it plays, so a scrobbling bot, or any other app that reads
-your current playback, sees the song, its position and whether it is paused. the
-name and the switch are in **Settings → Playback → Spotify Connect**.
+English and Russian are available in Settings → Appearance → Language, including
+menus, dialogs, playback errors and Soloist setup. Dates, weekdays and numbers
+follow the selected language. Track names, artist names and user playlists are
+not translated.
 
-it only reports: the sound is still played by swiftify's own players, so crossfade
-and the equalizer work as before, and other Spotify apps can not control swiftify
-or move playback to it. a song shows up once it starts to play. if spotify refuses
-the connection, playback carries on without it.
+Librespot no longer advertises a second Connect device; only Soloist does so when
+it is needed for fallback playback. The legacy device-name setting was removed.
+
+The Lossless section appears only while the Soloist backend is selected. The
+library account's subscription is read from Spotify's profile API. Premium is a
+requirement, not proof that Lossless is available for the paired Soloist account
+or its region. Configure the Swiftify device's quality in Spotify itself: the
+current Soloist WebSocket API cannot set or verify delivered stream quality.
 
 Translations use Qt `qsTr` / `qsTranslate` and an embedded UTF-8 catalog at
 `translations/ru.json`; no additional Linguist tools are required. Russian plural
@@ -212,32 +216,6 @@ flushed on orderly quit. Logging out clears it. Missing local files and unavaila
 Spotify tracks are not silently replaced with another song; Play reports the usual
 loading error. Invalid snapshots are ignored. Extremely large queues keep up to
 2,000 entries around the current occurrence and up to 100 history entries.
-
-### Playlist collections (Web API experiment)
-
-**Collections / Подборки** combines the saved/followed playlists returned by
-`GET /v1/me/playlists`, playlist contexts from the last 50 tracks returned by
-`GET /v1/me/player/recently-played`, and playlist links you add manually. It is
-not the Spotify Home/Made For You feed and cannot enumerate every personalized mix.
-
-Accepts full `https://open.spotify.com/playlist/...` links (including localized
-`intl-...` paths) and `spotify:playlist:...` URIs. Share query parameters are
-discarded. Links are resolved only through `GET /v1/playlists/{id}`; supplied URLs
-and short-link redirects are never fetched. Local links are account-scoped and
-do not follow/unfollow or change playlists on Spotify. Up to 30 links and 20
-distinct recent playlist contexts are resolved per explicit refresh, with short
-in-memory metadata caching and rate-limit backoff. There is no background polling.
-
-Only documented Web API calls are added: no browser impersonation, JS assets,
-query hashes, private home/browse endpoints or rootlist scraping. Unsupported
-DJ/Jam/app contexts are ignored. If metadata is denied or absent, the entry is
-marked unavailable rather than resolved through an undocumented fallback.
-
-**Playback is unchanged:** opening a metadata-approved playlist delegates to
-Swiftify's existing playlist player, including its existing librespot integration.
-The public API restricts contents of playlists not owned/collaborated on by the
-user; this experiment does not claim that all playback is implemented through
-the public Web API. "Open in Spotify" remains available for unavailable entries.
 
 ### Full-screen visualizers
 

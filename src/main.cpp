@@ -10,7 +10,6 @@
 #include "audio/AudioShaping.h"
 #include "core/RustCore.h"
 #include "library/LibraryStore.h"
-#include "library/PlaylistCollections.h"
 #include "playback/PlaybackController.h"
 #include "render/SpectrumSource.h"
 #include "stats/PlayHistory.h"
@@ -288,6 +287,9 @@ int main(int argc, char *argv[])
     // build for this platform from spotify when asked, and replaces it before
     // the 90 days a soloist build lives run out
     SoloistInstaller soloistInstaller(nullptr);
+    QObject::connect(&soloistCore, &SoloistCore::backendChanged, &soloistInstaller, [&] {
+        soloistInstaller.setActive(soloistCore.usingSoloist());
+    });
     QObject::connect(&soloistInstaller, &SoloistInstaller::configurationChanged,
                      &soloistCore, &SoloistCore::reloadConfiguration);
     QObject::connect(&soloistInstaller, &SoloistInstaller::busyChanged, &soloistCore, [&] {
@@ -319,7 +321,6 @@ int main(int argc, char *argv[])
     PlaybackController player(&core, &session, &settings, &errors);
     DiscordPresence discord(&player, &settings);
     LibraryStore library(&session, &settings, &errors);
-    PlaylistCollections collections(&session, &settings, &library);
     library.attachPlayer(&player);
     AudioShaping sound(&core, &settings, &session);
     AppController app(nullptr);

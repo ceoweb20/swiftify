@@ -94,6 +94,7 @@ Profile profile(const QJsonObject &user)
         string(user, "id"),
         name.isEmpty() ? QStringLiteral("Spotify User") : name,
         preferredArtworkUrl(user.value(QStringLiteral("images")).toArray(), 192),
+        string(user, "product"),
     };
 }
 

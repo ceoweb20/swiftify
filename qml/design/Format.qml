@@ -1,8 +1,10 @@
 pragma Singleton
 pragma ComponentBehavior: Bound
 import QtQuick
+import Swiftify
 
 QtObject {
+    readonly property var locale: Settings.language === "system" ? Qt.locale() : Qt.locale(Settings.language)
     /// "3:07", as playbackTime() writes a song's time
     function playbackTime(milliseconds: real): string {
         const seconds = Math.max(Math.floor(milliseconds / 1000), 0)

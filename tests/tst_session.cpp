@@ -361,6 +361,18 @@ private:
     }
 
 private slots:
+    void profileIncludesSubscriptionWithoutAssumingPremium()
+    {
+        const auto premium = json::profile(QJsonObject{{QStringLiteral("id"), QStringLiteral("account")},
+                                                      {QStringLiteral("product"), QStringLiteral("premium")}});
+        QCOMPARE(premium.product, QStringLiteral("premium"));
+        const auto free = json::profile(QJsonObject{{QStringLiteral("id"), QStringLiteral("account")},
+                                                   {QStringLiteral("product"), QStringLiteral("free")}});
+        QCOMPARE(free.product, QStringLiteral("free"));
+        const auto unknown = json::profile(QJsonObject{{QStringLiteral("id"), QStringLiteral("account")}});
+        QVERIFY(unknown.product.isEmpty());
+    }
+
     void secureStoreCacheSkipsRepeatedReadsAndIdenticalWrites()
     {
         CountingStore backend;

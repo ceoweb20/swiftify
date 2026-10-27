@@ -80,25 +80,8 @@ PlaybackController::PlaybackController(PlaybackCore *core, SpotifySession *sessi
     };
     m_visualizersEnabled = m_settings->anyVisualizerEnabled();
     connect(m_settings, &Settings::crossfadeEnabledChanged, this, [this] { preloadNextTrack(); });
-    const auto applyConnectDevice = [this] {
-        try {
-            m_core->setConnectDevice(m_settings->spotifyConnect(), m_settings->connectDeviceName());
-        } catch (const SpotifyError &) {
-        }
-    };
-    applyConnectDevice();
-    const auto connectDeviceChanged = [this, applyConnectDevice] {
-        applyConnectDevice();
-        // it applies when playback connects: the next play does, and an idle
-        // connection is made again now so the device shows up (or goes) at once
-        m_session->markPlaybackConnectionSuspect();
-        if (!m_playing && m_session->isConnected()) {
-            detach(reconnectForConnectDevice());
-        }
-        preloadNextTrack();
-    };
-    connect(m_settings, &Settings::spotifyConnectChanged, this, connectDeviceChanged);
-    connect(m_settings, &Settings::connectDeviceNameChanged, this, connectDeviceChanged);
+    // Only Soloist advertises a Connect device. Ignore legacy reporter preferences.
+    m_core->setConnectDevice(false, QStringLiteral("Swiftify"));
     connect(m_settings, &Settings::visualizersEnabledChanged, this, updateVisualizers);
     connect(m_settings, &Settings::playerBarVisualizerChanged, this, updateVisualizers);
     connect(m_settings, &Settings::trackListVisualizerChanged, this, updateVisualizers);
@@ -1210,15 +1193,6 @@ void PlaybackController::pollPlayback()
         handleEndOfTrack();
     }
     stopIfAudioOutputStalled();
-}
-
-QCoro::Task<> PlaybackController::reconnectForConnectDevice()
-{
-    try {
-        co_await m_session->ensureFreshPlaybackConnection(true);
-    } catch (const SpotifyError &error) {
-        qCDebug(lcPlayer) << "Could not reconnect for the Connect device setting:" << error.message();
-    }
 }
 
 void PlaybackController::syncPositionAndDuration()

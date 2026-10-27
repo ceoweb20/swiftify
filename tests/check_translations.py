@@ -1,4 +1,4 @@
-"""Check catalog validity, placeholders, and coverage of literal qsTr calls."""
+"""Check catalog validity, placeholders, and QML/C++ translation coverage."""
 import json
 import pathlib
 import re
@@ -39,11 +39,16 @@ for source, translated in catalog.items():
         ), f"Placeholders differ: {source}"
 
 missing = []
-for path in (root / "qml").rglob("*.qml"):
-    for match in re.finditer(r'qsTr\(("(?:[^"\\]|\\.)*")', path.read_text(encoding="utf-8")):
-        source = json.loads(match.group(1))
-        if source not in catalog:
-            missing.append(f"{path.relative_to(root)}: {source}")
+literal = r'"(?:[^"\\]|\\.)*"'
+for path in list((root / "qml").rglob("*.qml")) + list((root / "src").rglob("*.cpp")):
+    text = path.read_text(encoding="utf-8")
+    patterns = [rf'\b(?:qsTr|tr)\(\s*({literal})',
+                rf'\b(?:qsTranslate|QCoreApplication::translate)\(\s*{literal}\s*,\s*({literal})']
+    for pattern in patterns:
+        for match in re.finditer(pattern, text):
+            source = json.loads(match.group(1))
+            if source not in catalog:
+                missing.append(f"{path.relative_to(root)}: {source}")
 if missing:
     raise SystemExit("Missing Russian translations:\n" + "\n".join(missing))
-print(f"Validated {len(catalog)} Russian translations and QML coverage.")
+print(f"Validated {len(catalog)} Russian translations and QML/C++ coverage.")

@@ -30,7 +30,7 @@ Item {
         Reveal.shown: !Player.loadingLyrics && !Player.hasLyrics
         symbol: "lyrics"
         title: qsTr("Lyrics Unavailable")
-        description: Player.lyricsMessage.length > 0 ? Player.lyricsMessage : "i guess bro"
+        description: Player.lyricsMessage.length > 0 ? qsTranslate("Errors", Player.lyricsMessage) : qsTr("Lyrics are not available for this track.")
     }
 
     ListView {

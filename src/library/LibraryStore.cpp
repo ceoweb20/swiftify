@@ -472,7 +472,6 @@ void LibraryStore::goBack()
     case Page::PinnedPlaylists: showPinnedPlaylists(); break;
     case Page::Personalized: showPersonalized(); break;
     case Page::Stats: showStats(); break;
-    case Page::Collections: showCollections(); break;
     case Page::Playlist: {
         const auto found = std::find_if(m_playlistList.begin(), m_playlistList.end(),
                                         [&](const Playlist &playlist) { return playlist.id == destination.playlistId; });
@@ -605,12 +604,6 @@ QCoro::Task<> LibraryStore::loadDiscovery(CancelToken token)
     m_loadingDiscovery = false;
     m_discoveryLoad.finish(token);
     emit discoveryChanged();
-}
-
-void LibraryStore::showCollections()
-{
-    cancelDetailLoads();
-    navigate({Page::Collections});
 }
 
 void LibraryStore::showStats()

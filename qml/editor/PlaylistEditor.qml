@@ -92,7 +92,7 @@ iconShape: "bun"
     FileDialog {
         id: picker
         title: qsTr("Choose a Cover Photo")
-        nameFilters: ["Images (*.png *.jpg *.jpeg *.webp *.gif *.bmp *.tif *.tiff *.avif *.heic)"]
+        nameFilters: [qsTr("Images (*.png *.jpg *.jpeg *.webp *.gif *.bmp *.tif *.tiff *.avif *.heic)")]
         onAccepted: {
             maker.photo = selectedFile
             if (maker.photoValid) {

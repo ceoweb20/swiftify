@@ -190,30 +190,6 @@ Item {
             visible: root.page === 2
 
             ContentSection {
-                title: qsTr("Spotify Connect")
-                symbol: "cast"
-
-                ConfigSwitch {
-                    objectName: "spotifyConnectSwitch"
-                    text: qsTr("Show Swiftify as a Spotify Connect device")
-                    checked: Settings.spotifyConnect
-                    onToggledTo: (checked) => Settings.spotifyConnect = checked
-                }
-                OutlinedTextField {
-                    x: 8
-                    width: Math.min(460, parent.width - 16)
-                    placeholder: qsTr("Device name")
-                    enabled: Settings.spotifyConnect
-                    text: Settings.connectDeviceName
-                    onAccepted: Settings.connectDeviceName = text
-                    onTextEdited: if (text.trim().length > 0) Settings.connectDeviceName = text
-                }
-                NoteText {
-                    text: qsTr("Spotify, and anything watching your account such as a scrobbling bot, sees what Swiftify plays. Other Spotify apps cannot control Swiftify.")
-                }
-            }
-
-            ContentSection {
                 title: qsTr("Crossfade")
                 symbol: "play_circle"
 
@@ -259,6 +235,7 @@ Item {
 
                 ConfigSelection {
                     text: qsTr("Streaming")
+                    visible: !Soloist.active
                     currentIndex: Math.max(0, root.qualities.indexOf(Settings.streamingQuality))
                     segments: [
                         Segment { text: qsTr("96 kbps") },
@@ -284,6 +261,32 @@ Item {
                 }
                 NoteText {
                     text: qsTr("both cache and quality apply the next time playback connects")
+                    visible: !Soloist.active
+                }
+                Column {
+                    objectName: "soloistLosslessSection"
+                    width: parent.width
+                    spacing: 12
+                    visible: Soloist.active
+                    StatusRow {
+                        label: qsTr("Spotify subscription")
+                        value: Library.subscriptionProduct === "premium" ? "Premium"
+                               : Library.subscriptionProduct.length > 0 ? qsTr("Free") : qsTr("Unknown")
+                        good: Library.subscriptionProduct === "premium"
+                    }
+                    NoteText {
+                        text: Library.subscriptionProduct === "premium"
+                              ? qsTr("Soloist supports lossless audio up to 24-bit / 44.1 kHz. Choose the quality for the Swiftify device in Spotify. Premium alone does not confirm Lossless availability; it also depends on your account and region. Soloist's API cannot change or verify the stream quality.")
+                              : Library.subscriptionProduct.length > 0
+                                ? qsTr("Lossless requires Spotify Premium. The connected library account does not have Premium.")
+                                : qsTr("Connect your Spotify library to check its subscription. Soloist's API does not report whether Lossless is available for its paired account.")
+                    }
+                    TextButton {
+                        x: 8
+                        text: qsTr("Configure Lossless in Spotify")
+                        enabled: Library.subscriptionProduct === "premium"
+                        onClicked: App.openUrl("spotify:")
+                    }
                 }
             }
         }
@@ -655,8 +658,7 @@ Item {
 
                 StatusRow {
                     label: qsTr("Soloist")
-                    value: !Soloist.installed ? qsTr("not installed")
-                           : Soloist.version.length > 0 ? Soloist.version : qsTr("installed")
+                    value: Soloist.installed ? qsTr("installed") : qsTr("not installed")
                     good: Soloist.installed
                 }
                 StatusRow {
@@ -702,7 +704,7 @@ Item {
                           ? qsTr("Librespot is the default player. Spotify Soloist fallback is available on Linux, Apple Silicon Macs and 64-bit Windows.")
                           : Soloist.busy && Soloist.progress >= 0
                             ? qsTr("Downloading from Spotify: ") + Math.round(Soloist.progress * 100) + "%"
-                            : Soloist.status.length > 0 ? Soloist.status
+                            : Soloist.status.length > 0 ? qsTranslate("Soloist", Soloist.status)
                             : Soloist.updateRecommended
                               ? qsTr("This Soloist build is close to its 90-day expiry. Reinstall it to keep playback working.")
                               : qsTr("Librespot plays by default. If Spotify refuses its audio key (which can happen on newer accounts), Swiftify switches to Soloist. Install Soloist here and enter your own API key from the developer dashboard. Pick “Swiftify” in Spotify's devices once to pair.")
@@ -710,7 +712,7 @@ Item {
             }
 
             ContentSection {
-                title: "Discord Rich Presence"
+                title: qsTr("Discord Rich Presence")
                 symbol: "share"
 
                 ConfigSwitch {

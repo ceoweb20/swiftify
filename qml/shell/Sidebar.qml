@@ -67,14 +67,6 @@ Item {
 
             NavigationItem {
                 width: parent.width
-                text: qsTr("Collections")
-                iconShape: "sunny"
-                symbol: "queue_music"
-                selected: root.isSelected(Library.Page.Collections)
-                onClicked: Library.showCollections()
-            }
-            NavigationItem {
-                width: parent.width
                 text: qsTr("Stats")
                 iconShape: "softBurst"
                 symbol: "insights"

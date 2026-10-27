@@ -59,7 +59,7 @@ Item {
         StyledText {
             required property int modelData
             y: 20 + modelData * (root.cell + root.gap) + (root.cell - height) / 2
-            text: Qt.locale().dayName(modelData + 1, Locale.ShortFormat)
+            text: Format.locale.dayName(modelData + 1, Locale.ShortFormat)
             font.pixelSize: Appearance.fontSize.smallest
             color: Appearance.colors.outline
         }
@@ -134,7 +134,7 @@ Item {
                 visible: pointed.visible
                 delay: 0
                 text: (pointed.count === 1 ? qsTr("%n play", "", pointed.count) : qsTr("%n plays", "", pointed.count)) + " · "
-                      + root.dateOf(pointed.week, pointed.day).toLocaleDateString(Qt.locale(), Locale.ShortFormat)
+                      + root.dateOf(pointed.week, pointed.day).toLocaleDateString(Format.locale, Locale.ShortFormat)
             }
         }
     }

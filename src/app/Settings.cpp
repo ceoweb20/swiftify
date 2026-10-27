@@ -128,11 +128,6 @@ void Settings::load()
     }
     m_normalizeVolume = stored<bool>(m_store, "normalizeVolume", m_normalizeVolume);
     m_crossfadeEnabled = stored<bool>(m_store, "crossfadeEnabled", m_crossfadeEnabled);
-    m_spotifyConnect = stored<bool>(m_store, "reportToSpotify", m_spotifyConnect);
-    m_connectDeviceName = stored<QString>(m_store, "connectDeviceName", m_connectDeviceName).trimmed().left(64);
-    if (m_connectDeviceName.isEmpty()) {
-        m_connectDeviceName = QStringLiteral("Swiftify");
-    }
     m_crossfadeDurationSeconds = std::clamp(
         stored<int>(m_store, "crossfadeDurationSeconds", m_crossfadeDurationSeconds), 1, 12);
     m_livingBackdrop = stored<bool>(m_store, "livingBackdrop", m_livingBackdrop);
@@ -330,27 +325,6 @@ void Settings::setSongCacheMegabytes(int megabytes)
     m_songCacheMegabytes = value;
     m_store.setValue(QStringLiteral("songCacheMegabytes"), value);
     emit songCacheMegabytesChanged();
-}
-
-void Settings::setSpotifyConnect(bool value)
-{
-    if (m_spotifyConnect == value) {
-        return;
-    }
-    m_spotifyConnect = value;
-    m_store.setValue(QStringLiteral("reportToSpotify"), value);
-    emit spotifyConnectChanged();
-}
-
-void Settings::setConnectDeviceName(const QString &raw)
-{
-    const QString value = raw.trimmed().left(64);
-    if (value.isEmpty() || m_connectDeviceName == value) {
-        return;
-    }
-    m_connectDeviceName = value;
-    m_store.setValue(QStringLiteral("connectDeviceName"), value);
-    emit connectDeviceNameChanged();
 }
 
 void Settings::setCrossfadeEnabled(bool value)

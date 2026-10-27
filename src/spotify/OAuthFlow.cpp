@@ -2,6 +2,7 @@
 
 #include "spotify/SpotifyError.h"
 
+#include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -20,11 +21,15 @@ namespace swiftify {
 
 namespace {
 
-const QByteArray kCallbackPage =
-    "<!doctype html><meta charset=utf-8><title>Swiftify</title>"
-    "<style>body{font:16px system-ui,sans-serif;background:#141313;color:#e6e1e1;"
-    "display:grid;place-items:center;height:100vh;margin:0}</style>"
-    "<p>You're signed in. You can close this tab and return to Swiftify.</p>";
+QByteArray callbackPage()
+{
+    return QByteArray("<!doctype html><meta charset=utf-8><title>Swiftify</title>"
+                      "<style>body{font:16px system-ui,sans-serif;background:#141313;color:#e6e1e1;"
+                      "display:grid;place-items:center;height:100vh;margin:0}</style><p>")
+        + QCoreApplication::translate("OAuthFlow", "You're signed in. You can close this tab and return to Swiftify.")
+              .toHtmlEscaped().toUtf8()
+        + "</p>";
+}
 
 QByteArray httpResponse(int status, const QByteArray &reason, const QByteArray &body)
 {
@@ -149,7 +154,7 @@ void OAuthFlow::handleRequest(QTcpSocket *socket)
         return;
     }
 
-    socket->write(httpResponse(200, "OK", kCallbackPage));
+    socket->write(httpResponse(200, "OK", callbackPage()));
     socket->disconnectFromHost();
     if (m_receivedCallback) {
         return;

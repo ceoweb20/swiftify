@@ -183,7 +183,6 @@ public:
     /// the system took the audio device away. stop, and rebuild the output
     /// only when someone presses play again.
     void invalidateAudioOutput();
-    QCoro::Task<> reconnectForConnectDevice();
     /// the machine is about to suspend
     void prepareForSleep();
 

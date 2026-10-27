@@ -55,6 +55,13 @@ void SoloistInstaller::setBusy(bool busy)
     }
 }
 
+void SoloistInstaller::setActive(bool active)
+{
+    if (m_active == active) return;
+    m_active = active;
+    emit activeChanged();
+}
+
 void SoloistInstaller::setProgress(double progress)
 {
     if (!qFuzzyCompare(m_progress, progress)) {

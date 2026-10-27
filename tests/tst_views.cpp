@@ -174,6 +174,27 @@ private slots:
         QCOMPARE(qmlInstaller, &installer);
     }
 
+    void losslessSettingsOnlyAppearForSoloist()
+    {
+        SoloistInstaller installer(nullptr);
+        Rig rig;
+        rig.settings.setLanguage(QStringLiteral("en"));
+        const auto pages = rig.show(QStringLiteral("SettingsPages"));
+        QVERIFY(pages);
+        pages->setProperty("page", 2);
+        Rig::settle();
+        auto *lossless = pages->findChild<QQuickItem *>(QStringLiteral("soloistLosslessSection"));
+        QVERIFY(lossless);
+        QVERIFY(!lossless->isVisible());
+        installer.setActive(true);
+        Rig::settle();
+        QVERIFY(lossless->isVisible());
+        installer.setActive(false);
+        Rig::settle();
+        QVERIFY(!lossless->isVisible());
+        QVERIFY(!pages->findChild<QObject *>(QStringLiteral("spotifyConnectSwitch")));
+    }
+
     void vaultPasswordDialog_data()
     {
         QTest::addColumn<bool>("existing");
@@ -228,26 +249,6 @@ private slots:
     }
 
 
-    void collectionsViewBuildsWithoutCredentials()
-    {
-        Rig rig;
-        const auto page = rig.show(QStringLiteral("CollectionsView"));
-        QVERIFY(page);
-        QVERIFY(page->findChild<QObject *>(QStringLiteral("collectionLink")));
-        QVERIFY(!rig.collections.busy());
-        QVERIFY(rig.collections.entries().isEmpty());
-        QVERIFY(rig.collections.status().contains(QStringLiteral("Connect your Spotify library")));
-        QVERIFY(rig.core.pending.isEmpty());
-        Playlist playlist;
-        playlist.id = QStringLiteral("37i9dQZF1DXcBWIGoYBM5M");
-        playlist.name = QStringLiteral("Daily Mix fixture");
-        const QVariantMap row {{QStringLiteral("id"), playlist.id},
-            {QStringLiteral("playlist"), QVariant::fromValue(playlist)}, {QStringLiteral("origin"), QStringLiteral("recent")},
-            {QStringLiteral("available"), true}, {QStringLiteral("linked"), true}, {QStringLiteral("status"), QString()}};
-        QVERIFY(page->setProperty("model", QVariantList {row}));
-        Rig::settle();
-        QVERIFY(!rig.render().isNull());
-    }
 
     void fullScreenVisualizerCanBeDisabledIndependently()
     {
@@ -654,7 +655,6 @@ private slots:
         QCOMPARE(player->property("controlsOpacity").toReal(), 1.0);
         QCOMPARE(transport->property("opacity").toReal(), 1.0);
         QCOMPARE(dfButton->property("symbol").toString(), QStringLiteral("fullscreen"));
-        const qreal yBeforeInactivity = nowPlaying->y();
 
         // Click fullscreen / distraction-free button
         QVERIFY(QMetaObject::invokeMethod(dfButton, "clicked"));
@@ -685,8 +685,10 @@ private slots:
         // Cursor is hidden in focus mode
         QCOMPARE(tracker->property("cursorShape").toInt(), static_cast<int>(Qt::BlankCursor));
         QVERIFY(cursorOverlay->isVisible());
-        // Whole group smoothly moves down into center
-        QVERIFY(nowPlaying->y() > yBeforeInactivity);
+        // Compare the layout offset, not absolute y: entering fullscreen may
+        // resize the window independently of the controls animation.
+        QCOMPARE(QQmlProperty(nowPlaying, QStringLiteral("anchors.verticalCenterOffset")).read().toReal(),
+                 nowPlaying->property("controlsShift").toReal());
         // Artwork and seek bar remain visible
         QVERIFY(artwork->isVisible());
         QVERIFY(seek->isVisible());
@@ -705,7 +707,7 @@ private slots:
         QCOMPARE(more->property("opacity").toReal(), 1.0);
         QCOMPARE(tracker->property("cursorShape").toInt(), static_cast<int>(Qt::ArrowCursor));
         QVERIFY(!cursorOverlay->isVisible());
-        QCOMPARE(nowPlaying->y(), yBeforeInactivity);
+        QCOMPARE(QQmlProperty(nowPlaying, QStringLiteral("anchors.verticalCenterOffset")).read().toReal(), 0.0);
 
         // Escape key exits distraction-free mode
         QKeyEvent escEvent(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);

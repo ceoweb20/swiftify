@@ -161,7 +161,7 @@ RippleButton {
         StyledText {
             width: root.width
             horizontalAlignment: Text.AlignHCenter
-            text: root.option.name
+            text: qsTranslate("Themes", root.option.name)
             elide: Text.ElideRight
             font.pixelSize: Appearance.fontSize.smaller
             font.weight: root.selected ? Font.DemiBold : Font.Normal

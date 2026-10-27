@@ -247,6 +247,7 @@ void SoloistCore::reloadConfiguration()
 void SoloistCore::useSoloist()
 {
     m_useSoloist = true;
+    emit backendChanged();
     // A refused account stays on Soloist until logout/reset, not one retry
     // per song. Stop the primary output before Soloist takes over.
     try {
@@ -948,6 +949,7 @@ void SoloistCore::disconnectSession()
 {
     stopDaemon();
     m_useSoloist = !m_config.tryLibrespot;
+    emit backendChanged();
     m_fallback->disconnectSession();
 }
 
@@ -955,6 +957,7 @@ void SoloistCore::reset()
 {
     stopDaemon();
     m_useSoloist = !m_config.tryLibrespot;
+    emit backendChanged();
     ++m_resets;
     m_expectedUri.clear();
     m_expectedStarted = false;

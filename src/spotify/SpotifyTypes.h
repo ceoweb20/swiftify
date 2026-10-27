@@ -153,6 +153,7 @@ struct Profile {
     QString id;
     QString displayName;
     QUrl artworkUrl;
+    QString product;
 
     bool isValid() const { return !id.isEmpty(); }
 };

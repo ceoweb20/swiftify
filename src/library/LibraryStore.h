@@ -94,6 +94,7 @@ class LibraryStore : public QObject {
     Q_PROPERTY(QString profileId READ profileId NOTIFY profileChanged FINAL)
     Q_PROPERTY(QString profileName READ profileName NOTIFY profileChanged FINAL)
     Q_PROPERTY(QUrl profileArtworkUrl READ profileArtworkUrl NOTIFY profileChanged FINAL)
+    Q_PROPERTY(QString subscriptionProduct READ subscriptionProduct NOTIFY profileChanged FINAL)
 
     Q_PROPERTY(swiftify::PlaylistListModel *playlists READ playlists CONSTANT FINAL)
     Q_PROPERTY(swiftify::PlaylistListModel *pinnedPlaylists READ pinnedPlaylists CONSTANT FINAL)
@@ -143,7 +144,7 @@ class LibraryStore : public QObject {
     Q_PROPERTY(bool savingPlaylist READ isSavingPlaylist NOTIFY loadingChanged FINAL)
 
 public:
-    enum class Page { Home, Search, Songs, Playlists, PinnedPlaylists, Playlist, Album, Artist, Stats, Personalized, Collections };
+    enum class Page { Home, Search, Songs, Playlists, PinnedPlaylists, Playlist, Album, Artist, Stats, Personalized };
     Q_ENUM(Page)
     enum class SortOrder { Playlist, Title, Artist, Album, Duration };
     Q_ENUM(SortOrder)
@@ -167,6 +168,7 @@ public:
     int historyDepth() const { return int(m_history.size()); }
 
     QString profileId() const { return m_profile.id; }
+    QString subscriptionProduct() const { return m_profile.product; }
     QString profileName() const { return m_profile.displayName; }
     QUrl profileArtworkUrl() const { return m_profile.artworkUrl; }
 
@@ -233,7 +235,6 @@ public:
     Q_INVOKABLE void refreshDiscovery();
     /// what the person has been listening to (StatsStore)
     Q_INVOKABLE void showStats();
-    Q_INVOKABLE void showCollections();
     Q_INVOKABLE void selectPlaylist(const swiftify::Playlist &playlist);
     Q_INVOKABLE void selectPlaylistById(const QString &id);
     Q_INVOKABLE void selectAlbum(const swiftify::Album &album);
