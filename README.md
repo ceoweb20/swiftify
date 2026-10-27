@@ -242,6 +242,7 @@ only one instance runs at a time. launching another copy passes the command to t
 ## problems and project notes
 
 - **login does not return to the app:** check the redirect uri above and make sure port `8898` is not occupied.
+- **“the update download url was refused” after the repository rename:** install the current version from [releases](https://github.com/ceoweb20/swiftifyplusplus/releases/latest) once. older builds cannot follow the renamed api address to fetch their own fix. keep the data directory; a manual app replacement does not require deleting your logins or settings.
 - **spotify refuses the audio key:** configure soloist rather than repeatedly reconnecting librespot.
 - **soloist is not listed in spotify:** check that both devices are on the same network and that a firewall is not blocking discovery. pairing from the desktop app on the same computer can help.
 - **the vault asks again after migration:** secure storage was unavailable or access was denied. on macos, changing the build's signing identity can also break keychain trust.

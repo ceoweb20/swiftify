@@ -33,6 +33,7 @@ env:
   SWIFTIFY_UPDATE_PUBLIC_KEY: ${{ vars.SWIFTIFY_UPDATE_PUBLIC_KEY }}
   # builds update from the repository that built them
   SWIFTIFY_UPDATE_REPOSITORY: ${{ github.repository }}
+  SWIFTIFY_UPDATE_REPOSITORY_ID: ${{ github.repository_id }}
   CARGO_BUILD_JOBS: 4
 
 concurrency:

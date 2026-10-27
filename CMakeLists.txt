@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.24)
 
 project(Swiftify
-    VERSION 0.25.0
+    VERSION 0.25.1
     DESCRIPTION "A native Spotify client"
     LANGUAGES C CXX)
 
@@ -42,9 +42,13 @@ option(SWIFTIFY_DESKTOP_INTEGRATION "Build the Linux desktop integration" ${SWIF
 # Soloist fallback support is always built; its binary is downloaded at runtime
 # rather than shipped, as Spotify's terms require.
 option(SWIFTIFY_BUILD_UPDATER "Build the standalone signed-update installer" ON)
-set(SWIFTIFY_UPDATE_REPOSITORY "ceoweb20/swiftify" CACHE STRING "GitHub owner/name whose published releases are offered by in-app updates")
+set(SWIFTIFY_UPDATE_REPOSITORY "ceoweb20/swiftifyplusplus" CACHE STRING "GitHub owner/name whose published releases are offered by in-app updates")
 if(NOT SWIFTIFY_UPDATE_REPOSITORY MATCHES "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
     message(FATAL_ERROR "SWIFTIFY_UPDATE_REPOSITORY must look like owner/name")
+endif()
+set(SWIFTIFY_UPDATE_REPOSITORY_ID "" CACHE STRING "Stable numeric GitHub repository ID; empty uses name-based lookup")
+if(NOT SWIFTIFY_UPDATE_REPOSITORY_ID STREQUAL "" AND NOT SWIFTIFY_UPDATE_REPOSITORY_ID MATCHES "^[1-9][0-9]*$")
+    message(FATAL_ERROR "SWIFTIFY_UPDATE_REPOSITORY_ID must be a positive numeric GitHub repository ID")
 endif()
 # the public half of the key this repository signs its releases with. a build may
 # name another with -DSWIFTIFY_UPDATE_PUBLIC_KEY=, or an empty one to turn updates off
@@ -287,7 +291,8 @@ target_compile_definitions(swiftify_app PUBLIC
 target_compile_definitions(swiftify_app PRIVATE
     SWIFTIFY_BUILD_FONT_DIRECTORY="${SWIFTIFY_FONT_DIRECTORY}"
     SWIFTIFY_UPDATE_PUBLIC_KEY="${SWIFTIFY_UPDATE_PUBLIC_KEY}"
-    SWIFTIFY_UPDATE_REPOSITORY="${SWIFTIFY_UPDATE_REPOSITORY}")
+    SWIFTIFY_UPDATE_REPOSITORY="${SWIFTIFY_UPDATE_REPOSITORY}"
+    SWIFTIFY_UPDATE_REPOSITORY_ID="${SWIFTIFY_UPDATE_REPOSITORY_ID}")
 target_link_libraries(swiftify_app PUBLIC Qt6::WebSockets)
 if(TARGET Qt6::DBus)
     target_link_libraries(swiftify_app PUBLIC Qt6::DBus)

@@ -22,6 +22,7 @@ $fixture = Join-Path ([IO.Path]::GetTempPath()) "swiftify-build-test-$([guid]::N
 $originalPath = $env:PATH
 $originalQtRoot = $env:QT_ROOT_DIR
 $originalCargoJobs = $env:CARGO_BUILD_JOBS
+$originalRepositoryId = $env:SWIFTIFY_UPDATE_REPOSITORY_ID
 $originalLocation = (Get-Location).Path
 $script:invocations = New-Object 'System.Collections.Generic.List[object]'
 $script:configurations = @{}
@@ -112,9 +113,11 @@ try {
         New-FixtureFile "$mingwPath\$file" 'selected compiler runtime'
     }
     $env:QT_ROOT_DIR = $qtPath
+    $env:SWIFTIFY_UPDATE_REPOSITORY_ID = '123456789'
     Assert-True ((Find-QtKit '') -eq $qtPath) 'Qt discovery must respect QT_ROOT_DIR.'
     $parameters = @{ QtPath = $qtPath; MingwPath = $mingwPath; BuildRoot = $buildRoot; InstallPrefix = $installPrefix; Jobs = 2 }
     Invoke-WindowsBuild @parameters
+    Assert-True (@($script:invocations | Where-Object { $_.Arguments -contains '-DSWIFTIFY_UPDATE_REPOSITORY_ID=123456789' }).Count -eq 1) 'The stable update repository ID must reach CMake.'
     Assert-True (Test-Path -LiteralPath "$installPrefix\bin\swiftify.exe") 'Swiftify was not installed.'
     Assert-True (-not (Test-Path -LiteralPath "$installPrefix\bin\qtkeychain.dll")) 'The OS credential backend must not be shipped.'
     Assert-True (Test-Path -LiteralPath "$installPrefix\bin\qcoro.dll") 'QCoro runtime was not deployed.'
@@ -174,6 +177,7 @@ $env:VCToolsRedistDir = Join-Path $PSScriptRoot '..\..\VC\Redist\MSVC\14.44'
     $env:PATH = $originalPath
     $env:QT_ROOT_DIR = $originalQtRoot
     $env:CARGO_BUILD_JOBS = $originalCargoJobs
+    $env:SWIFTIFY_UPDATE_REPOSITORY_ID = $originalRepositoryId
     $resolvedFixture = [IO.Path]::GetFullPath($fixture)
     $temporaryRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\') + '\'
     if ($resolvedFixture.StartsWith($temporaryRoot, [StringComparison]::OrdinalIgnoreCase) -and (Split-Path -Leaf $resolvedFixture) -like 'swiftify-build-test-*') {

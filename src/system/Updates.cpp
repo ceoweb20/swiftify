@@ -20,14 +20,37 @@
 namespace swiftify {
 namespace {
 Updates *s_instance = nullptr;
-QString releasePrefix() { return QStringLiteral("https://github.com/%1/releases/download/").arg(Updates::repository()); }
-QUrl releaseApi() { return QUrl(QStringLiteral("https://api.github.com/repos/%1/releases/latest").arg(Updates::repository())); }
+QString releasePrefix(const QString &repository) { return QStringLiteral("https://github.com/%1/releases/download/").arg(repository); }
 }
 
 QString Updates::repository()
 {
-    // owner/name of the GitHub repository whose published releases are offered
-    return QStringLiteral(SWIFTIFY_UPDATE_REPOSITORY);
+    return canonicalRepository(QStringLiteral(SWIFTIFY_UPDATE_REPOSITORY));
+}
+
+QString Updates::canonicalRepository(const QString &repository)
+{
+    if (repository.compare(QLatin1StringView("ceoweb20/swiftify"), Qt::CaseInsensitive) == 0)
+        return QStringLiteral("ceoweb20/swiftifyplusplus");
+    return repository;
+}
+
+QString Updates::repositoryId()
+{
+    const QString configured = QStringLiteral(SWIFTIFY_UPDATE_REPOSITORY_ID);
+    if (!configured.isEmpty()) return configured;
+    // Also migrate local builds whose existing CMake cache still has the old name.
+    if (repository().compare(QLatin1StringView("ceoweb20/swiftifyplusplus"), Qt::CaseInsensitive) == 0)
+        return QStringLiteral("1423888200");
+    return {};
+}
+
+QUrl Updates::latestReleaseApi()
+{
+    const QString id = repositoryId();
+    return id.isEmpty()
+        ? QUrl(QStringLiteral("https://api.github.com/repos/%1/releases/latest").arg(repository()))
+        : QUrl(QStringLiteral("https://api.github.com/repositories/%1/releases/latest").arg(id));
 }
 
 QString Updates::platform()
@@ -55,27 +78,53 @@ bool Updates::newerStable(const QString &candidate, const QString &current)
         && QVersionNumber::fromString(candidate) > QVersionNumber::fromString(current);
 }
 
-bool Updates::trustedDownload(const QUrl &url)
+bool Updates::trustedDownload(const QUrl &url, const QString &releaseRepository)
 {
-    if (url.scheme() != QLatin1StringView("https") || !url.userInfo().isEmpty()
+    if (!url.isValid() || url.scheme() != QLatin1StringView("https") || !url.userInfo().isEmpty() || url.hasFragment()
         || (url.port(-1) != -1 && url.port() != 443)) return false;
-    if (url == releaseApi()) return true;
-    if (url.host() == QLatin1StringView("github.com")) return url.toString().startsWith(releasePrefix());
+    const QUrl namedApi(QStringLiteral("https://api.github.com/repos/%1/releases/latest").arg(repository()));
+    if (url == latestReleaseApi() || url == namedApi) return true;
+    if (url.host() == QLatin1StringView("github.com")) {
+        const QString path = url.path(QUrl::FullyEncoded);
+        const QString source = releaseRepository.isEmpty() ? repository() : releaseRepository;
+        return !url.hasQuery() && !path.contains(u'%')
+            && url.adjusted(QUrl::NormalizePathSegments).path(QUrl::FullyEncoded) == path
+            && path.startsWith(QStringLiteral("/%1/releases/download/").arg(source));
+    }
     // GitHub release assets redirect to these CDNs. Never forward credentials
     // or cookies, never follow arbitrary or plaintext redirects.
     return url.host() == QLatin1StringView("release-assets.githubusercontent.com")
         || url.host() == QLatin1StringView("objects.githubusercontent.com");
 }
 
+QString Updates::releaseRepository(const QJsonObject &release, const QString &version)
+{
+    const QUrl page(release.value(QStringLiteral("html_url")).toString());
+    if (!page.isValid() || page.scheme() != QLatin1StringView("https")
+        || page.host() != QLatin1StringView("github.com") || !page.userInfo().isEmpty()
+        || page.hasQuery() || page.hasFragment() || (page.port(-1) != -1 && page.port() != 443)) return {};
+    const QRegularExpression path(QStringLiteral("^/([A-Za-z0-9_-][A-Za-z0-9_.-]*)/([A-Za-z0-9_-][A-Za-z0-9_.-]*)/releases/tag/v%1$")
+                                  .arg(QRegularExpression::escape(version)));
+    const auto match = path.match(page.path(QUrl::FullyEncoded));
+    if (!match.hasMatch()) return {};
+    const QString canonical = match.captured(1) + u'/' + match.captured(2);
+    // A pinned repository ID binds this API response to the same repository
+    // even after a rename. Name-only configurations must still match exactly.
+    if (repositoryId().isEmpty() && canonical.compare(repository(), Qt::CaseInsensitive) != 0) return {};
+    return canonical;
+}
+
 QUrl Updates::releaseAsset(const QJsonObject &release, const QString &name, const QString &version)
 {
-    const QString expected = releasePrefix() + QStringLiteral("v") + version + QLatin1Char('/') + name;
+    const QString canonical = releaseRepository(release, version);
+    if (canonical.isEmpty()) return {};
+    const QString expected = releasePrefix(canonical) + QStringLiteral("v") + version + QLatin1Char('/') + name;
     QUrl result;
     for (const auto &value : release.value(QStringLiteral("assets")).toArray()) {
         const auto asset = value.toObject();
         if (asset.value(QStringLiteral("name")).toString() != name) continue;
         const QUrl url(asset.value(QStringLiteral("browser_download_url")).toString());
-        if (!result.isEmpty() || url.toString() != expected || !trustedDownload(url)) return {};
+        if (!result.isEmpty() || url.toString() != expected || !trustedDownload(url, canonical)) return {};
         result = url;
     }
     return result;
@@ -213,7 +262,7 @@ QByteArray Updates::read(const QString &name) const
 
 void Updates::fetch(const QUrl &url, const QString &file, qint64 limit, Completed done, int redirects)
 {
-    if (!trustedDownload(url) || redirects > 5) { fail(tr("The update download URL was refused.")); return; }
+    if (!trustedDownload(url, m_releaseRepository) || redirects > 5) { fail(tr("The update download URL was refused.")); return; }
     auto output = std::make_shared<QSaveFile>(m_work + QLatin1Char('/') + file);
     if (!output->open(QIODevice::WriteOnly)) { fail(tr("Could not write the update download.")); return; }
     QNetworkRequest request(url);
@@ -265,13 +314,15 @@ void Updates::check()
     }
     m_work = m_directory->path();
     m_busy = true; m_available = false; m_version.clear(); m_manifest = {}; m_progress = 0;
+    m_releaseRepository.clear();
     m_status = tr("Checking for updates…"); emit changed();
-    fetch(releaseApi(), QStringLiteral("release.json"), 1024 * 1024, [this] {
+    fetch(latestReleaseApi(), QStringLiteral("release.json"), 1024 * 1024, [this] {
         m_release = QJsonDocument::fromJson(read(QStringLiteral("release.json"))).object();
         const QString tag = m_release.value(QStringLiteral("tag_name")).toString();
         const QString version = tag.startsWith(QLatin1Char('v')) ? tag.mid(1) : QString();
+        m_releaseRepository = releaseRepository(m_release, version);
         if (m_release.value(QStringLiteral("draft")).toBool(true)
-            || m_release.value(QStringLiteral("prerelease")).toBool(true) || version.isEmpty()) {
+            || m_release.value(QStringLiteral("prerelease")).toBool(true) || version.isEmpty() || m_releaseRepository.isEmpty()) {
             fail(tr("GitHub returned an invalid stable release.")); return;
         }
         if (m_settings) m_settings->setValue(QStringLiteral("updates/lastCheck"), QDateTime::currentDateTimeUtc());

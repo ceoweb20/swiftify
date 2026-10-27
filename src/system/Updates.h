@@ -55,9 +55,14 @@ public:
 
     // Pure policy helpers, also used by focused tests.
     static QString repository();
+    static QString canonicalRepository(const QString &repository);
+    static QString repositoryId();
+    static QUrl latestReleaseApi();
     static QString platform();
     static bool newerStable(const QString &candidate, const QString &current);
-    static bool trustedDownload(const QUrl &url);
+    // releaseRepository must come from metadata fetched through latestReleaseApi().
+    static bool trustedDownload(const QUrl &url, const QString &releaseRepository = {});
+    static QString releaseRepository(const QJsonObject &release, const QString &version);
     static QUrl releaseAsset(const QJsonObject &release, const QString &name, const QString &version);
     static QString installationRoot(const QString &executable);
 
@@ -82,6 +87,7 @@ private:
     QTimer m_dueCheck;
     QJsonObject m_release;
     QJsonObject m_manifest;
+    QString m_releaseRepository;
     std::unique_ptr<QTemporaryDir> m_directory;
     QString m_root, m_helperPath, m_work, m_version, m_status;
     bool m_supported = false;
