@@ -64,6 +64,8 @@ Column {
             visible: root.onScreen
             asynchronous: true
             sourceComponent: ListView {
+                id: cards
+                objectName: "shelfCards"
                 orientation: ListView.Horizontal
                 spacing: Appearance.sizes.shelfGap
                 leftMargin: root.pageMargin
@@ -76,6 +78,26 @@ Column {
                 model: root.model
                 delegate: root.delegate
                 ScrollBar.horizontal: StyledScrollBar {}
+
+                WheelHandler {
+                    target: null
+                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                    onWheel: (event) => {
+                        const pixel = Math.abs(event.pixelDelta.x) > Math.abs(event.pixelDelta.y)
+                                      ? event.pixelDelta.x : event.pixelDelta.y
+                        const angle = Math.abs(event.angleDelta.x) > Math.abs(event.angleDelta.y)
+                                      ? event.angleDelta.x : event.angleDelta.y
+                        const delta = pixel !== 0 ? pixel : angle / 120 * Math.max(48, Appearance.sizes.cardSize / 2)
+                        const start = -cards.leftMargin
+                        const end = Math.max(start, cards.contentWidth - cards.width + cards.rightMargin)
+                        const next = Math.max(start, Math.min(end, cards.contentX - delta))
+                        event.accepted = Math.abs(next - cards.contentX) > 0.01
+                        if (event.accepted) {
+                            cards.cancelFlick()
+                            cards.contentX = next
+                        }
+                    }
+                }
 
                 // back where it was; what it reports before then is its start
                 property bool restored: false

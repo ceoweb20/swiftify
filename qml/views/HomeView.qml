@@ -95,6 +95,46 @@ Flickable {
             }
         }
 
+        Column {
+            x: root.margin
+            width: root.width - 2 * root.margin
+            spacing: 10
+
+            Flow {
+                width: parent.width
+                spacing: 8
+                TextButton {
+                    objectName: "startDjMix"
+                    variant: TextButton.Tonal
+                    symbol: "auto_awesome"
+                    text: DJMix.busy ? qsTr("Building your mix…")
+                          : DJMix.active ? qsTr("New DJ Mix") : qsTr("Start DJ Mix")
+                    enabled: !DJMix.busy
+                    onClicked: DJMix.start()
+                }
+                TextButton {
+                    visible: DJMix.busy
+                    variant: TextButton.Text
+                    text: qsTr("Cancel")
+                    onClicked: DJMix.cancel()
+                }
+            }
+            StyledText {
+                width: parent.width
+                wrapMode: Text.Wrap
+                text: qsTr("A personal queue from your Spotify mixes, favourites and recent listening. Swiftify's mix, not Spotify AI DJ.")
+                color: Appearance.colors.onSurfaceVariant
+                font.pixelSize: Appearance.fontSize.smaller
+            }
+            StyledText {
+                width: parent.width
+                visible: DJMix.status.length > 0
+                wrapMode: Text.Wrap
+                text: qsTranslate("DJMix", DJMix.status)
+                color: Appearance.colors.onSurfaceVariant
+            }
+        }
+
         Item {
             width: root.width
             height: 220

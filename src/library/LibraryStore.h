@@ -178,6 +178,7 @@ public:
     QVariantList homeSections() const { return m_homeSections; }
     bool isLoadingDiscovery() const { return m_loadingDiscovery; }
     QString discoveryStatus() const { return m_discoveryStatus; }
+    QString personalizedAccountId() const { return m_discoveryUserId; }
     int pinsRevision() const { return m_pinsRevision; }
     SongListModel *playlistSongs() const { return m_playlistSongs; }
     SongListModel *displayedPlaylistSongs() const { return m_displayedPlaylistSongs; }

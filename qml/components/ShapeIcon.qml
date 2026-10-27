@@ -15,6 +15,7 @@ Item {
     /// what it springs into while hovered; none, and it only turns
     property string hoverShape
     property bool hovered: false
+    property bool rotateOnHover: true
     property string symbol
     property real size: 40
     property real iconSize: Math.round(size * 0.5)
@@ -65,7 +66,7 @@ Item {
         color: root.color
         // room for the overshoot
         extent: 0.92
-        spinAngle: root.hovered ? 24 : 0
+        spinAngle: root.rotateOnHover && root.hovered ? 24 : 0
 
         Behavior on spinAngle {
             enabled: !Appearance.performanceMode
@@ -77,12 +78,13 @@ Item {
     }
 
     MaterialSymbol {
+        objectName: "shapeIconSymbol"
         anchors.centerIn: parent
         text: root.symbol
         iconSize: root.iconSize
         fill: root.fill
         color: root.iconColor
-        rotation: root.hovered ? -10 : 0
+        rotation: root.rotateOnHover && root.hovered ? -10 : 0
 
         Behavior on rotation {
             enabled: !Appearance.performanceMode

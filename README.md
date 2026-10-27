@@ -175,6 +175,26 @@ Translations use Qt `qsTr` / `qsTranslate` and an embedded UTF-8 catalog at
 `translations/ru.json`; no additional Linguist tools are required. Russian plural
 entries contain three forms (one, few, many).
 
+### Cover colors and DJ Mix
+
+**Settings → Appearance → Colours → Cover colors** makes the app follow the
+playing cover. It reuses the player's cached, background-generated Material
+palettes and its existing color fade; no extra downloads or idle polling are
+added. Light/dark mode is respected. A missing or unreadable cover falls back to
+Swiftify's default palette, rather than keeping the previous track's colors.
+
+**Start DJ Mix** on Home assembles up to 40 tracks from available personalized
+Spotify playlists, saved songs, recent listening and top tracks by those artists.
+It removes duplicate/unplayable tracks, excludes the current song, and spaces
+artists where possible. The collection requests are bounded. Missing playlists
+fall back to library data; an empty/failed request leaves the old queue intact.
+Cancelling or manually choosing a track withdraws a pending mix. The resulting
+queue is local to Swiftify: no playlist is created or changed on Spotify.
+
+This is Swiftify's own mix, **not Spotify AI DJ** and not the same recommendation
+algorithm. It has no voice narration or undocumented DJ control endpoint. Use
+**New DJ Mix** to build another queue; it does not claim endless DJ playback.
+
 ### Personalized Spotify playlists
 
 **Made for You / Для тебя** in the sidebar opens all personalized playlists

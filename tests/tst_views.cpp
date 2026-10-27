@@ -34,6 +34,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QMouseEvent>
+#include <QWheelEvent>
 #include <QNetworkAccessManager>
 #include <QQmlComponent>
 #include <QQmlEngine>
@@ -166,6 +167,89 @@ private:
     using Rig = swiftify::testing::ViewRig;
 
 private slots:
+    void artworkThemeUsesThePlayingCoverWithoutAFeedbackLoop()
+    {
+        Rig rig;
+        rig.connectPlayback();
+        rig.settings.setThemeMode(QStringLiteral("dark"));
+        rig.settings.setThemeSource(QStringLiteral("artwork"));
+        QImage cover(64, 64, QImage::Format_RGB32);
+        cover.fill(QColor(QStringLiteral("#2b71c9")));
+        const QString path = rig.directory.filePath(QStringLiteral("cover.png"));
+        QVERIFY(cover.save(path));
+        Song song;
+        song.uri = QStringLiteral("spotify:track:cover-theme");
+        song.artworkUrl = QUrl::fromLocalFile(path);
+        rig.player.play(song, {song});
+        const auto playing = rig.core.take(QStringLiteral("playTrack"));
+        QVERIFY(playing);
+        playing->succeed();
+        QTRY_VERIFY_WITH_TIMEOUT(rig.theme.usingArtworkScheme(), 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(rig.style.primary().blue() > rig.style.primary().red(), 5000);
+        QTRY_COMPARE(rig.theme.colors()->roles(), rig.style.scheme()->roles());
+        rig.settings.setThemeMode(QStringLiteral("light"));
+        QTRY_VERIFY(!rig.theme.dark());
+        QTRY_VERIFY(!rig.style.scheme()->dark());
+        Song empty;
+        empty.uri = QStringLiteral("spotify:track:no-cover");
+        rig.player.play(empty, {empty});
+        QTRY_VERIFY(!rig.theme.usingArtworkScheme());
+        QCOMPARE(rig.theme.colors()->roles(), Theme::rolesFromSeed(QColor::fromRgba(Theme::kAccent), false, true));
+    }
+
+    void selectedNavigationIconsStayCenteredOnHover()
+    {
+        Rig rig;
+        rig.settings.setPerformanceMode(true);
+        const auto navigation = rig.show(QStringLiteral("NavigationItem"));
+        QVERIFY(navigation);
+        navigation->setProperty("symbol", QStringLiteral("search"));
+        navigation->setProperty("selected", true);
+        Rig::settle();
+        auto *icon = navigation->findChild<QQuickItem *>(QStringLiteral("selectedNavigationIcon"));
+        QVERIFY(icon);
+        auto *symbol = icon->findChild<QQuickItem *>(QStringLiteral("shapeIconSymbol"));
+        QVERIFY(symbol);
+        icon->setProperty("hovered", true);
+        Rig::settle();
+        QCOMPARE(symbol->rotation(), 0.0);
+        const QPointF center = symbol->mapToItem(icon, QPointF(symbol->width() / 2, symbol->height() / 2));
+        QVERIFY(qAbs(center.x() - icon->width() / 2) < 0.1);
+        QVERIFY(qAbs(center.y() - icon->height() / 2) < 0.1);
+        const auto pages = rig.show(QStringLiteral("SettingsPages"));
+        QVERIFY(pages);
+        QVERIFY(!pages->findChild<QObject *>(QStringLiteral("immersiveVisualizerSwitch")));
+    }
+
+    void horizontalShelvesRespondToMouseAndTouchpadWheels()
+    {
+        Rig rig;
+        QQmlComponent component(&rig.engine);
+        component.setData("import QtQuick\nimport Swiftify\n"
+                          "Item { width: 500; height: 200;"
+                          " Shelf { width: 400; pageMargin: 0; rowHeight: 100; model: 12;"
+                          " delegate: Rectangle { width: 160; height: 100; color: 'blue' } } }", QUrl());
+        std::unique_ptr<QObject> object(component.create());
+        QVERIFY2(object, qPrintable(component.errorString()));
+        qobject_cast<QQuickItem *>(object.get())->setParentItem(rig.window->contentItem());
+        QQuickItem *cards = nullptr;
+        QTRY_VERIFY((cards = object->findChild<QQuickItem *>(QStringLiteral("shelfCards"))));
+        Rig::settle();
+        rig.render();
+        const QPointF position = cards->mapToScene(QPointF(200, 50));
+        const auto scroll = [&](QPoint pixels, QPoint angle) {
+            const qreal before = cards->property("contentX").toReal();
+            QWheelEvent event(position, position, pixels, angle, Qt::NoButton, Qt::NoModifier,
+                              Qt::NoScrollPhase, false);
+            QCoreApplication::sendEvent(rig.window.get(), &event);
+            Rig::settle();
+            QVERIFY(cards->property("contentX").toReal() > before);
+        };
+        scroll({}, QPoint(0, -120));
+        scroll({}, QPoint(-120, 0));
+        scroll(QPoint(-40, 0), {});
+    }
+
     void russianSleepTimerLabelsFitTheirSegments()
     {
         Rig rig;

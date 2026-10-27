@@ -73,8 +73,8 @@ private:
     void retarget(Target target);
     void step(qreal progress);
     /// pure, so it may run on any thread
-    static Target targetFor(const QList<QColor> &palette, const QList<qreal> &weights, bool dark);
-    static Target targetFor(const WeightedPalette &palette, bool dark);
+    static Target targetFor(const QList<QColor> &palette, const QList<qreal> &weights);
+    static Target targetFor(const WeightedPalette &palette);
 
     PlaybackController *m_player;
     Theme *m_theme;
@@ -82,7 +82,7 @@ private:
     MaterialScheme *m_scheme;
     MaterialScheme *m_darkScheme;
     QUrl m_artworkUrl;
-    /// each cover's colours, for the theme's light or dark at the time
+    /// Each cover's palette and both scheme variants, independent of app mode.
     QCache<QUrl, Target> m_targets {128};
     Target m_fallback;
     /// showing the theme's colours rather than a cover's

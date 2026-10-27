@@ -34,6 +34,8 @@ public:
     QCoro::Task<RecentPlayback> recentHistory(QString accessToken, int limit = 20);
     QCoro::Task<QList<Song>> playlistSongs(QString playlistId, QString accessToken);
     QCoro::Task<QList<Song>> savedSongs(QString accessToken);
+    /// One bounded page for a mix, without downloading the entire saved library.
+    QCoro::Task<QList<Song>> savedSongSample(QString accessToken);
     /// how many songs are saved, from one page of one: the count without the list
     QCoro::Task<int> savedSongTotal(QString accessToken);
     QCoro::Task<QList<Song>> recentlyPlayed(QString accessToken);

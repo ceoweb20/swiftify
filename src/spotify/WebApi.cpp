@@ -274,6 +274,15 @@ QCoro::Task<QList<Song>> WebApi::recentlyPlayed(QString accessToken)
     co_return history.songs;
 }
 
+QCoro::Task<QList<Song>> WebApi::savedSongSample(QString accessToken)
+{
+    const auto document = co_await requestJson(apiUrl(QStringLiteral("/v1/me/tracks"),
+        QUrlQuery{{QStringLiteral("limit"), QStringLiteral("50")}, kMarket}), "GET", accessToken);
+    QList<Song> result;
+    appendWrappedTracks(result, document.object());
+    co_return result;
+}
+
 QCoro::Task<RecentPlayback> WebApi::recentHistory(QString accessToken, int limit)
 {
     const QUrlQuery requestQuery {{QStringLiteral("limit"), QString::number(std::clamp(limit, 1, 50))}};

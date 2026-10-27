@@ -29,6 +29,7 @@ class Theme : public QObject {
     Q_PROPERTY(swiftify::MaterialScheme *colors READ colors CONSTANT FINAL)
     Q_PROPERTY(bool dark READ dark NOTIFY schemeChanged FINAL)
     Q_PROPERTY(bool usingSystemScheme READ usingSystemScheme NOTIFY schemeChanged FINAL)
+    Q_PROPERTY(bool usingArtworkScheme READ usingArtworkScheme NOTIFY schemeChanged FINAL)
     Q_PROPERTY(QString systemSchemePath READ systemSchemePath NOTIFY schemeChanged FINAL)
     Q_PROPERTY(QString fontFamily READ fontFamily CONSTANT FINAL)
     Q_PROPERTY(QString monoFontFamily READ monoFontFamily CONSTANT FINAL)
@@ -46,6 +47,10 @@ public:
     MaterialScheme *colors() const { return m_colors; }
     bool dark() const { return m_colors->dark(); }
     bool usingSystemScheme() const { return m_usingSystemScheme; }
+    bool usingArtworkScheme() const;
+    void setArtworkSchemes(const MaterialScheme::Roles &light, const MaterialScheme::Roles &dark);
+    void clearArtworkScheme();
+    void finishArtworkTransition();
     /// the matugen file in use or looked for
     QString systemSchemePath() const { return m_systemSchemePath; }
     QString fontFamily() const;
@@ -81,6 +86,8 @@ private:
     bool m_usingSystemScheme = false;
     QString m_systemSchemePath;
     std::optional<MaterialScheme::Roles> m_systemRoles;
+    std::optional<MaterialScheme::Roles> m_artworkLight;
+    std::optional<MaterialScheme::Roles> m_artworkDark;
     QStringList m_schemeDirectories;
     /// shells' scheme files that exist, watched themselves rather than their
     /// folders, which the shells fill with other things all the time

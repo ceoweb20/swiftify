@@ -11,6 +11,7 @@
 #include "core/RustCore.h"
 #include "library/LibraryStore.h"
 #include "playback/PlaybackController.h"
+#include "playback/DjMix.h"
 #include "render/SpectrumSource.h"
 #include "stats/PlayHistory.h"
 #include "stats/StatsStore.h"
@@ -324,6 +325,7 @@ int main(int argc, char *argv[])
     DiscordPresence discord(&player, &settings);
     LibraryStore library(&session, &settings, &errors);
     library.attachPlayer(&player);
+    DjMix djMix(&session, &library, &player);
     AudioShaping sound(&core, &settings, &session);
     AppController app(nullptr);
     Updates updates(&settings);

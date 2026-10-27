@@ -153,7 +153,7 @@ QString Translations::translate(const char *context, const char *sourceText, con
     }
     if (value.isString()) return value.toString();
     const QByteArray scope(context ? context : "");
-    if (scope == "Errors" || scope == "Soloist" || scope == "SpotifySession" || scope == "Stats" || scope == "Discovery") {
+    if (scope == "Errors" || scope == "Soloist" || scope == "SpotifySession" || scope == "Stats" || scope == "Discovery" || scope == "DJMix") {
         return translatedMessage(QString::fromUtf8(sourceText));
     }
     return {};

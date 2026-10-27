@@ -7,6 +7,7 @@
 #include "theme/Theme.h"
 
 #include <QQmlEngine>
+#include <QPointer>
 #include <QtConcurrent>
 
 #include <algorithm>
@@ -37,6 +38,7 @@ PlayerStyle::PlayerStyle(PlaybackController *player, Theme *theme, ArtworkCache 
     m_transition.setEndValue(1.0);
     m_transition.setEasingCurve(QEasingCurve::InOutQuad);
     connect(&m_transition, &QVariantAnimation::valueChanged, this, [this](const QVariant &value) { step(value.toReal()); });
+    connect(&m_transition, &QVariantAnimation::finished, m_theme, &Theme::finishArtworkTransition);
 
     m_fallback = themeTarget();
     m_to = m_fallback;
@@ -48,12 +50,13 @@ PlayerStyle::PlayerStyle(PlaybackController *player, Theme *theme, ArtworkCache 
     // light and dark, and of the desktop's scheme coming or going, not of one
     // theme picked for another
     connect(m_theme->colors(), &MaterialScheme::changed, this, [this] {
-        // a cover's colours only follow light or dark; with no cover they are
-        // the theme's own, whichever it is now. reseeded without a fade
-        const bool dark = m_theme->dark();
-        m_targets.clear();
+        // Artwork fades also update the chrome. Do not feed those updates back
+        // into extraction or restart the same fade on each animation frame.
+        if (m_theme->usingArtworkScheme() && m_scheme->dark() == m_theme->dark()) return;
+        // Cover targets already contain both modes. With no cover, adopt the
+        // selected theme itself instead of recomputing any artwork palette.
         m_fallback = themeTarget();
-        m_to = m_onFallback ? m_fallback : targetFor(m_to.palette, m_to.weights, dark);
+        if (m_onFallback) m_to = m_fallback;
         m_from = m_to;
         step(1.0);
     });
@@ -77,19 +80,19 @@ PlayerStyle *PlayerStyle::create(QQmlEngine *, QJSEngine *)
     return s_instance;
 }
 
-PlayerStyle::Target PlayerStyle::targetFor(const QList<QColor> &palette, const QList<qreal> &weights, bool dark)
+PlayerStyle::Target PlayerStyle::targetFor(const QList<QColor> &palette, const QList<qreal> &weights)
 {
     const QColor seed = palette.value(0, QColor::fromRgba(Theme::kAccent));
-    return {palette, weights, Theme::rolesFromSeed(seed, dark, true), Theme::rolesFromSeed(seed, true, true)};
+    return {palette, weights, Theme::rolesFromSeed(seed, false, true), Theme::rolesFromSeed(seed, true, true)};
 }
 
-PlayerStyle::Target PlayerStyle::targetFor(const WeightedPalette &palette, bool dark)
+PlayerStyle::Target PlayerStyle::targetFor(const WeightedPalette &palette)
 {
     QList<qreal> weights;
     for (double weight : palette.weights) {
         weights.append(weight);
     }
-    return targetFor(palette.colors, weights, dark);
+    return targetFor(palette.colors, weights);
 }
 
 void PlayerStyle::artworkChanged()
@@ -111,31 +114,29 @@ void PlayerStyle::artworkChanged()
     // the old palette stays until this resolves, so the accent never flashes.
     // a cover that will not load or be read gives way to the theme's, not
     // the last song's
-    m_artwork->bytes(url, [this, url](const QByteArray &data) {
-        if (url != m_artworkUrl) {
+    const QPointer<PlayerStyle> guarded(this);
+    m_artwork->bytes(url, [this, guarded, url](const QByteArray &data) {
+        if (!guarded || url != m_artworkUrl) {
             return;
         }
         if (data.isEmpty()) {
             adoptFallback();
             return;
         }
-        const bool dark = m_theme->dark();
-        QtConcurrent::run([data, dark]() -> std::optional<Target> {
+        QtConcurrent::run([data]() -> std::optional<Target> {
             const std::optional<WeightedPalette> palette = palette::extract(data);
             if (!palette) {
                 return std::nullopt;
             }
-            return targetFor(*palette, dark);
-        }).then(this, [this, url, dark](const std::optional<Target> &worked) {
+            return targetFor(*palette);
+        }).then(this, [this, url](const std::optional<Target> &worked) {
             if (!worked) {
                 if (url == m_artworkUrl) {
                     adoptFallback();
                 }
                 return;
             }
-            // the theme went light or dark while this was worked out
-            const Target target = dark == m_theme->dark() ? *worked
-                                                          : targetFor(worked->palette, worked->weights, m_theme->dark());
+            const Target target = *worked;
             m_targets.insert(url, new Target(target));
             if (url == m_artworkUrl) {
                 m_onFallback = false;
@@ -148,6 +149,8 @@ void PlayerStyle::artworkChanged()
 void PlayerStyle::adoptFallback()
 {
     m_onFallback = true;
+    m_theme->clearArtworkScheme();
+    m_fallback = themeTarget();
     retarget(m_fallback);
 }
 
@@ -193,8 +196,11 @@ void PlayerStyle::step(qreal progress)
     }
     m_palette = palette;
     m_weights = weights;
-    m_scheme->setRoles(MaterialScheme::interpolate(m_from.light, m_to.light, progress), m_theme->dark());
-    m_darkScheme->setRoles(MaterialScheme::interpolate(m_from.dark, m_to.dark, progress), true);
+    const auto light = MaterialScheme::interpolate(m_from.light, m_to.light, progress);
+    const auto dark = MaterialScheme::interpolate(m_from.dark, m_to.dark, progress);
+    m_scheme->setRoles(m_theme->dark() ? dark : light, m_theme->dark());
+    m_darkScheme->setRoles(dark, true);
+    if (!m_onFallback) m_theme->setArtworkSchemes(light, dark);
     emit paletteChanged();
 }
 

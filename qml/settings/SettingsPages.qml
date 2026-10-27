@@ -88,13 +88,6 @@ Item {
                     checked: Settings.trackListVisualizer
                     onToggledTo: (checked) => Settings.trackListVisualizer = checked
                 }
-                ConfigSwitch {
-                    objectName: "immersiveVisualizerSwitch"
-                    text: qsTr("Full-screen player visualizer")
-                    enabled: Settings.visualizersEnabled
-                    checked: Settings.immersiveVisualizer
-                    onToggledTo: (checked) => Settings.immersiveVisualizer = checked
-                }
                 ConfigSelection {
                     text: qsTr("Style")
                     enabled: Settings.visualizersEnabled && Settings.immersiveVisualizer
@@ -345,9 +338,17 @@ Item {
                             required property themeOption modelData
                             option: modelData
                             selected: modelData.id === Settings.themeSource
+                                      || (modelData.id === "builtin" && Settings.themeSource === "system" && !Theme.usingSystemScheme)
                             onClicked: Settings.themeSource = modelData.id
                         }
                     }
+                }
+
+                TextButton {
+                    x: 8
+                    text: qsTr("Configure Matugen")
+                    visible: Settings.themeSource !== "system"
+                    onClicked: Settings.themeSource = "system"
                 }
 
                 Item {
@@ -387,7 +388,9 @@ Item {
                     }
                 }
                 NoteText {
-                    text: Settings.themeSource !== "system"
+                    text: Settings.themeSource === "artwork"
+                        ? qsTr("The interface follows the current cover. Without artwork, Swiftify uses its default palette.")
+                        : Settings.themeSource !== "system"
                         ? qsTr("these are hardcoded themes")
                         : (Theme.usingSystemScheme
                             ? qsTr("following ") + Theme.systemSchemePath + qsTr("; updates when the file changes.")

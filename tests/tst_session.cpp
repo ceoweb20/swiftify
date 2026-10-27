@@ -5,6 +5,7 @@
 #include "core/Async.h"
 #include "library/LibraryStore.h"
 #include "playback/PlaybackController.h"
+#include "playback/DjMix.h"
 #include "spotify/SpotifyJson.h"
 #include "spotify/CredentialStore.h"
 #include "spotify/OAuthFlow.h"
@@ -361,6 +362,61 @@ private:
     }
 
 private slots:
+    void djMixStartsAQueueFromTheConnectedLibrary()
+    {
+        LibraryRig rig;
+        rig.storePlayback({}, QStringLiteral("stored-login"));
+        rig.accounts.api.insert(QStringLiteral("/v1/me/player/recently-played"),
+            R"({"items":[{"track":{"uri":"spotify:track:a","name":"A"}}]})");
+        rig.accounts.api.insert(QStringLiteral("/v1/me/tracks"),
+            R"({"items":[{"track":{"uri":"spotify:track:a","name":"A"}},{"track":{"uri":"spotify:track:b","name":"B"}}]})");
+        signIn(rig);
+        const auto connection = rig.core.take(QStringLiteral("connectStored"));
+        QVERIFY(connection);
+        connection->succeed(QStringLiteral("stored-login"));
+        QTRY_VERIFY(rig.session.isConnected());
+        PlaybackController player(&rig.core, &rig.session, &rig.settings, &rig.errors);
+        DjMix mix(&rig.session, &rig.library, &player);
+        mix.start();
+        QTRY_VERIFY(!mix.busy());
+        QVERIFY(mix.active());
+        QVERIFY(player.hasSong());
+        QCOMPARE(player.upNext()->count(), 1);
+        QVERIFY(rig.accounts.apiCalls.join(u'\n').contains(QStringLiteral("limit=50")));
+        const auto track = rig.core.take(QStringLiteral("playTrack"));
+        QVERIFY(track);
+        track->succeed();
+        rig.core.reset();
+    }
+
+    void aManualSongChoiceCancelsAnUnfinishedDjMix()
+    {
+        LibraryRig rig;
+        rig.storePlayback({}, QStringLiteral("stored-login"));
+        rig.accounts.api.insert(QStringLiteral("/v1/me/player/recently-played"),
+            R"({"items":[{"track":{"uri":"spotify:track:a","name":"A"}}]})");
+        rig.accounts.api.insert(QStringLiteral("/v1/me/tracks"), R"({"items":[]})");
+        signIn(rig);
+        const auto connection = rig.core.take(QStringLiteral("connectStored"));
+        QVERIFY(connection);
+        connection->succeed(QStringLiteral("stored-login"));
+        QTRY_VERIFY(rig.session.isConnected());
+        PlaybackController player(&rig.core, &rig.session, &rig.settings, &rig.errors);
+        DjMix mix(&rig.session, &rig.library, &player);
+        rig.accounts.holding = true;
+        mix.start();
+        QVERIFY(mix.busy());
+        Song chosen;
+        chosen.uri = QStringLiteral("spotify:track:chosen");
+        player.play(chosen, {chosen});
+        QVERIFY(!mix.busy());
+        rig.accounts.release();
+        settle();
+        QCOMPARE(player.currentSong().uri, chosen.uri);
+        QVERIFY(!mix.active());
+        rig.core.reset();
+    }
+
     void profileIncludesSubscriptionWithoutAssumingPremium()
     {
         const auto premium = json::profile(QJsonObject{{QStringLiteral("id"), QStringLiteral("account")},

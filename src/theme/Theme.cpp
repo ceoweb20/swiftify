@@ -223,6 +223,35 @@ void Theme::refreshSystemScheme()
     reload();
 }
 
+bool Theme::usingArtworkScheme() const
+{
+    return m_settings->themeSource() == QLatin1StringView("artwork") && m_artworkLight.has_value();
+}
+
+void Theme::setArtworkSchemes(const MaterialScheme::Roles &light, const MaterialScheme::Roles &dark)
+{
+    const bool wasUsingArtwork = usingArtworkScheme();
+    m_artworkLight = light;
+    m_artworkDark = dark;
+    if (usingArtworkScheme()) {
+        m_colors->setRoles(m_colors->dark() ? dark : light, m_colors->dark());
+        if (!wasUsingArtwork) emit schemeChanged();
+    }
+}
+
+void Theme::clearArtworkScheme()
+{
+    const bool wasUsingArtwork = usingArtworkScheme();
+    m_artworkLight.reset();
+    m_artworkDark.reset();
+    if (wasUsingArtwork) reload();
+}
+
+void Theme::finishArtworkTransition()
+{
+    if (usingArtworkScheme()) emit schemeChanged();
+}
+
 QString Theme::fontFamily() const
 {
     return fonts::interfaceFamily();
@@ -275,7 +304,9 @@ void Theme::reload()
 
     const bool dark = wantsDark();
     m_usingSystemScheme = false;
-    if (const themes::Family *family = themes::find(m_settings->themeSource())) {
+    if (usingArtworkScheme()) {
+        m_colors->setRoles(dark ? *m_artworkDark : *m_artworkLight, dark);
+    } else if (const themes::Family *family = themes::find(m_settings->themeSource())) {
         m_colors->setRoles(themes::roles(dark ? family->dark : family->light, dark), dark);
     } else {
         m_colors->setRoles(rolesFromSeed(QColor::fromRgba(kAccent), dark, true), dark);
@@ -309,14 +340,17 @@ QList<ThemeOption> Theme::themeOptions(bool dark) const
     // the desktop's own scheme shows as it is, light or dark; before it
     // exists, as the colours it would fall back to
     const auto desktop = readScheme(systemSchemePath(), dark);
-    options.append(option(QStringLiteral("system"),
+    if (desktop) options.append(option(QStringLiteral("system"),
 #ifdef Q_OS_MACOS
                           QStringLiteral("Matugen"),
 #else
                           QStringLiteral("Desktop"),
 #endif
-                          desktop ? *desktop : rolesFromSeed(QColor::fromRgba(kAccent), dark, true)));
+                          *desktop));
     options.append(option(QStringLiteral("builtin"), QStringLiteral("Swiftify"), rolesFromSeed(QColor::fromRgba(kAccent), dark, true)));
+    const auto &artwork = dark ? m_artworkDark : m_artworkLight;
+    options.append(option(QStringLiteral("artwork"), QStringLiteral("Cover colors"),
+                          artwork ? *artwork : rolesFromSeed(QColor::fromRgba(kAccent), dark, true)));
     for (const themes::Family &family : themes::families()) {
         options.append(option(family.id, family.name, themes::roles(dark ? family.dark : family.light, dark)));
     }

@@ -97,10 +97,11 @@ T.AbstractButton {
             spacing: 12
 
             Item {
+                id: iconSlot
                 anchors.verticalCenter: parent.verticalCenter
                 visible: !root.showArtwork
-                width: 24
-                height: 24
+                width: 32
+                height: 32
 
                 MaterialSymbol {
                     anchors.centerIn: parent
@@ -111,11 +112,14 @@ T.AbstractButton {
                     color: Appearance.colors.onSurfaceVariant
                 }
                 ShapeIcon {
+                    objectName: "selectedNavigationIcon"
                     anchors.centerIn: parent
                     Reveal.shown: root.selected
                     Reveal.overshoot: 2.4
                     size: 30
-                    iconSize: 17
+                    iconSize: 18
+                    fill: 0
+                    rotateOnHover: false
                     shape: root.iconShape
                     keepsShape: root.keepsShape
                     symbol: root.symbol
@@ -137,7 +141,7 @@ T.AbstractButton {
 
             StyledText {
                 anchors.verticalCenter: parent.verticalCenter
-                width: parent.width - 36
+                width: Math.max(0, parent.width - (root.showArtwork ? 24 : iconSlot.width) - parent.spacing)
                 text: root.text
                 elide: Text.ElideRight
                 font.pixelSize: Appearance.fontSize.small

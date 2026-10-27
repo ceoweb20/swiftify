@@ -83,6 +83,44 @@ class ThemeTest : public QObject {
     Q_OBJECT
 
 private slots:
+    void artworkThemeRespectsSelectionAndMode()
+    {
+        QTemporaryDir directory;
+        Settings settings(directory.filePath(QStringLiteral("swiftify.conf")));
+        settings.setThemeMode(QStringLiteral("dark"));
+        Theme theme(&settings);
+        const auto original = theme.colors()->roles();
+        const auto light = Theme::rolesFromSeed(QColor(QStringLiteral("#3185d2")), false, true);
+        const auto dark = Theme::rolesFromSeed(QColor(QStringLiteral("#3185d2")), true, true);
+        theme.setArtworkSchemes(light, dark);
+        QCOMPARE(theme.colors()->roles(), original);
+        settings.setThemeSource(QStringLiteral("artwork"));
+        QVERIFY(theme.usingArtworkScheme());
+        QTRY_COMPARE(theme.colors()->roles(), dark);
+        settings.setThemeMode(QStringLiteral("light"));
+        QTRY_COMPARE(theme.colors()->roles(), light);
+        theme.clearArtworkScheme();
+        QVERIFY(!theme.usingArtworkScheme());
+        QCOMPARE(theme.colors()->roles(), Theme::rolesFromSeed(QColor::fromRgba(Theme::kAccent), false, true));
+    }
+
+    void missingMatugenDoesNotDuplicateTheBuiltinTheme()
+    {
+        MatugenPaths paths;
+        Settings settings(paths.directory.filePath(QStringLiteral("swiftify.conf")));
+        settings.setMatugenColorsPath(paths.directory.filePath(QStringLiteral("missing.json")));
+        Theme theme(&settings);
+        const auto options = theme.themeOptions(true);
+        QCOMPARE(std::count_if(options.begin(), options.end(), [](const auto &option) {
+            return option.id == QLatin1StringView("builtin");
+        }), 1);
+        QVERIFY(std::none_of(options.begin(), options.end(), [](const auto &option) {
+            return option.id == QLatin1StringView("system");
+        }));
+        QVERIFY(themes::find(QStringLiteral("aurora")));
+        QVERIFY(themes::find(QStringLiteral("desert-bloom")));
+    }
+
     void freshSettingsUseSpotifyColors_data()
     {
         QTest::addColumn<bool>("dark");
@@ -415,7 +453,7 @@ private slots:
         // an id nobody knows is the app's own colours rather than nothing
         settings.setThemeSource(QStringLiteral("not-a-theme"));
         QTRY_VERIFY(theme.colors()->primary().isValid());
-        QCOMPARE(theme.themeOptions(false).size(), themes::families().size() + (theme.themeOptions(false).first().id == QLatin1String("system") ? 2 : 1));
+        QCOMPARE(theme.themeOptions(false).size(), themes::families().size() + (theme.themeOptions(false).first().id == QLatin1String("system") ? 3 : 2));
     }
 };
 
