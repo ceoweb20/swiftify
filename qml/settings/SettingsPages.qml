@@ -670,6 +670,13 @@ Item {
                     width: Math.min(460, parent.width - 16)
                     placeholder: qsTr("Soloist API key")
                     onAccepted: Soloist.saveApiKey(text)
+                    Connections {
+                        target: soloistKey.inputItem
+                        function onActiveFocusChanged() {
+                            if (!soloistKey.inputItem.activeFocus && soloistKey.text.trim().length > 0)
+                                Soloist.saveApiKey(soloistKey.text)
+                        }
+                    }
                 }
                 Flow {
                     x: 8

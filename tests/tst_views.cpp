@@ -14,6 +14,7 @@
 #include "playback/PlaybackController.h"
 #include "render/SpectrumItem.h"
 #include "render/SpectrumSource.h"
+#include "soloist/SoloistInstaller.h"
 #include "spotify/CredentialStore.h"
 #include "spotify/CredentialVault.h"
 #include "spotify/OAuthFlow.h"
@@ -165,6 +166,14 @@ private:
     using Rig = swiftify::testing::ViewRig;
 
 private slots:
+    void soloistSettingsUseThePlaybackInstaller()
+    {
+        SoloistInstaller installer(nullptr);
+        QQmlEngine engine;
+        auto *qmlInstaller = engine.singletonInstance<SoloistInstaller *>("Swiftify", "Soloist");
+        QCOMPARE(qmlInstaller, &installer);
+    }
+
     void vaultPasswordDialog_data()
     {
         QTest::addColumn<bool>("existing");

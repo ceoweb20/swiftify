@@ -35,7 +35,8 @@ class SoloistInstaller : public QObject {
     Q_PROPERTY(QString status READ status NOTIFY statusChanged FINAL)
 
 public:
-    explicit SoloistInstaller(QObject *parent = nullptr);
+    // No default constructor: QML must use create() and the instance wired to playback.
+    explicit SoloistInstaller(QObject *parent);
     ~SoloistInstaller() override;
     static SoloistInstaller *create(QQmlEngine *, QJSEngine *);
 

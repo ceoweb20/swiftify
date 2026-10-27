@@ -288,7 +288,7 @@ int main(int argc, char *argv[])
     // soloist's binaries may not be redistributed, so the app downloads the
     // build for this platform from spotify when asked, and replaces it before
     // the 90 days a soloist build lives run out
-    SoloistInstaller soloistInstaller;
+    SoloistInstaller soloistInstaller(nullptr);
     QObject::connect(&soloistInstaller, &SoloistInstaller::configurationChanged,
                      &soloistCore, &SoloistCore::reloadConfiguration);
     QObject::connect(&soloistInstaller, &SoloistInstaller::busyChanged, &soloistCore, [&] {
