@@ -5,11 +5,14 @@ Keep the portable ZIPs for the signed updater; installers are separate release
 assets. No credentials, signing secrets or Soloist binaries are bundled here.
 """
 import argparse
+import os
 from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
+import time
 
 
 SOURCE = Path(__file__).resolve().parents[1]
@@ -18,6 +21,31 @@ SOURCE = Path(__file__).resolve().parents[1]
 def version():
     text = (SOURCE / "CMakeLists.txt").read_text()
     return re.search(r"project\(Swiftify\s+VERSION (\d+\.\d+\.\d+)", text)[1]
+
+
+def create_dmg(staging, destination, scratch):
+    # Explicit HFS+ avoids the default APFS creation path on newer runners.
+    # Use a fresh intermediate image on each attempt; a failed diskimages
+    # helper may still hold the previous image open for a short time.
+    for attempt in range(1, 4):
+        image = scratch / f"installer-{attempt}.dmg"
+        command = ["hdiutil", "create", "-volname", "Swiftify", "-srcfolder", str(staging),
+                   "-fs", "HFS+", "-format", "UDZO", "-ov", str(image)]
+        try:
+            result = subprocess.run(command, check=True, capture_output=True, text=True, timeout=180)
+        except subprocess.CalledProcessError as error:
+            detail = (error.stdout or "") + (error.stderr or "")
+            if attempt == 3 or "resource busy" not in detail.lower():
+                if detail:
+                    print(detail, file=sys.stderr)
+                raise
+            print(f"DMG device temporarily busy; retrying ({attempt}/3).", file=sys.stderr)
+            time.sleep(5 * attempt)
+        else:
+            if result.stdout:
+                print(result.stdout, end="")
+            os.replace(image, destination)
+            return
 
 
 def package(root, target, output, iscc=None):
@@ -30,11 +58,12 @@ def package(root, target, output, iscc=None):
             raise ValueError("A deployed macOS application bundle is required")
         destination = output / f"swiftify-{release}-{target}.dmg"
         with tempfile.TemporaryDirectory(prefix="swiftify-dmg-") as temporary:
-            staging = Path(temporary)
+            scratch = Path(temporary)
+            staging = scratch / "contents"
+            staging.mkdir()
             subprocess.run(["ditto", str(root), str(staging / "Swiftify.app")], check=True)
             (staging / "Applications").symlink_to("/Applications")
-            subprocess.run(["hdiutil", "create", "-volname", "Swiftify", "-srcfolder", str(staging),
-                            "-format", "UDZO", "-ov", str(destination)], check=True)
+            create_dmg(staging, destination, scratch)
     elif target == "windows-x86_64":
         if not (root / "bin/swiftify.exe").is_file():
             raise ValueError("A deployed Windows application tree is required")

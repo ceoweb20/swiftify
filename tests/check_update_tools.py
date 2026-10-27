@@ -4,6 +4,7 @@ import importlib.util
 import io
 import json
 import os
+import subprocess
 from pathlib import Path
 import tempfile
 import unittest
@@ -53,16 +54,53 @@ class UpdateToolsTest(unittest.TestCase):
             (root / "Contents/MacOS/swiftify").write_bytes(b"fixture")
             output = Path(temporary) / "dist"
             calls = []
-            def create_image(command, check):
+            def create_image(command, check, **kwargs):
                 calls.append(command)
                 if command[0] == "hdiutil":
                     stage = Path(command[command.index("-srcfolder") + 1])
                     self.assertEqual(os.readlink(stage / "Applications"), "/Applications")
+                    self.assertEqual(command[command.index("-fs") + 1], "HFS+")
                     Path(command[-1]).write_bytes(b"dmg")
+                return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
             with patch.object(installer.subprocess, "run", side_effect=create_image):
                 result = installer.package(root, "macos-aarch64", output)
             self.assertEqual([call[0] for call in calls], ["ditto", "hdiutil"])
             self.assertEqual(result.suffix, ".dmg")
+
+    def test_busy_dmg_creation_is_retried_with_a_new_image_path(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            scratch = Path(temporary)
+            staging = scratch / "contents"
+            staging.mkdir()
+            destination = scratch / "output.dmg"
+            images = []
+            def create(command, **kwargs):
+                image = Path(command[-1])
+                images.append(image)
+                self.assertFalse(image.is_relative_to(staging))
+                if len(images) == 1:
+                    raise subprocess.CalledProcessError(1, command, stderr="hdiutil: create failed - Resource busy")
+                image.write_bytes(b"complete image")
+                return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+            with patch.object(installer.subprocess, "run", side_effect=create), patch.object(installer.time, "sleep") as sleep:
+                installer.create_dmg(staging, destination, scratch)
+            self.assertEqual(len(images), 2)
+            self.assertNotEqual(images[0], images[1])
+            self.assertEqual(destination.read_bytes(), b"complete image")
+            sleep.assert_called_once_with(5)
+
+    def test_dmg_retries_are_bounded_and_preserve_previous_output(self):
+        for message, attempts in (("Resource busy", 3), ("Permission denied", 1)):
+            with self.subTest(message=message), tempfile.TemporaryDirectory() as temporary:
+                scratch = Path(temporary)
+                destination = scratch / "output.dmg"
+                destination.write_bytes(b"previous valid image")
+                error = subprocess.CalledProcessError(1, "hdiutil", stderr=message)
+                with patch.object(installer.subprocess, "run", side_effect=error) as run, patch.object(installer.time, "sleep"):
+                    with self.assertRaises(subprocess.CalledProcessError):
+                        installer.create_dmg(scratch / "contents", destination, scratch)
+                self.assertEqual(run.call_count, attempts)
+                self.assertEqual(destination.read_bytes(), b"previous valid image")
 
     def test_installers_require_a_deployed_application(self):
         with tempfile.TemporaryDirectory() as temporary:

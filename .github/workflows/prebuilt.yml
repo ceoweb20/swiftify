@@ -287,15 +287,37 @@ jobs:
           cargo test --locked --manifest-path tools/update-helper/Cargo.toml
           cargo test --locked --manifest-path spotify-core/Cargo.toml --no-default-features --features capi vault::tests
           python3 tests/check_update_tools.py
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - name: upload macos installer
+        id: upload_macos_installer
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ matrix.runner }}-installer
           path: dist/*.dmg
           if-no-files-found: error
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - name: retry macos installer upload
+        if: steps.upload_macos_installer.outcome == 'failure'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ matrix.runner }}-installer
+          path: dist/*.dmg
+          overwrite: true
+          if-no-files-found: error
+      - name: upload macos update package
+        id: upload_macos_update
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ matrix.runner }}-update
           path: dist/*.zip
+          if-no-files-found: error
+      - name: retry macos update upload
+        if: steps.upload_macos_update.outcome == 'failure'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ matrix.runner }}-update
+          path: dist/*.zip
+          overwrite: true
           if-no-files-found: error
 
   # a release is made for every version in CMakeLists.txt that has none yet, once

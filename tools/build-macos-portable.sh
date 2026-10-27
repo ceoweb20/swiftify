@@ -35,6 +35,11 @@ cmake -S "$SOURCE" -B "$WORK/app" "${common[@]}" \
 cmake --build "$WORK/app" --parallel "$JOBS"
 APP="$WORK/app/swiftify.app"
 "$QT/bin/macdeployqt" "$APP" -qmldir="$SOURCE/qml" -always-overwrite -appstore-compliant
+# Qt Quick's local storage pulls in QtSql. Only SQLite is used; optional
+# drivers can reference database clients absent from the runner and end user.
+for driver in odbc psql mimer; do
+    rm -f "$APP/Contents/PlugIns/sqldrivers/libqsql$driver.dylib"
+done
 python3 "$SOURCE/tools/package-portable.py" --root "$APP" --target "$TARGET" --mark-only
 # No Developer ID certificate or notarization: Gatekeeper is left as it is, and
 # quarantine is not stripped from anything.
