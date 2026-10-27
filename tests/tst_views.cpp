@@ -166,6 +166,35 @@ private:
     using Rig = swiftify::testing::ViewRig;
 
 private slots:
+    void russianSleepTimerLabelsFitTheirSegments()
+    {
+        Rig rig;
+        rig.settings.setLanguage(QStringLiteral("ru"));
+        Translations translations(&rig.settings);
+        const auto panel = rig.show(QStringLiteral("SleepTimerPanel"));
+        QVERIFY(panel);
+        auto *picker = panel->findChild<QQuickItem *>(QStringLiteral("sleepTimerFadePicker"));
+        QVERIFY(picker);
+        for (int width : {380, 300}) {
+            panel->setWidth(width);
+            Rig::settle();
+            rig.render();
+            QList<QQuickItem *> labels;
+            QList<QQuickItem *> queue{picker};
+            for (qsizetype index = 0; index < queue.size(); ++index) {
+                auto *item = queue.at(index);
+                queue.append(item->childItems());
+                if (item->objectName() == QLatin1StringView("segmentLabel")) labels.append(item);
+            }
+            QCOMPARE(labels.size(), 3);
+            QCOMPARE(labels.at(1)->property("text").toString(), QStringLiteral("За 10 с"));
+            for (auto *label : labels) {
+                QVERIFY(label->width() > 0);
+                QVERIFY(label->property("contentWidth").toReal() <= label->width() + 1);
+            }
+        }
+    }
+
     void soloistSettingsUseThePlaybackInstaller()
     {
         SoloistInstaller installer(nullptr);

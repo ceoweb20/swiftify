@@ -180,15 +180,18 @@ Item {
                 onClicked: root.activated(index)
 
                 contentItem: Item {
-                    implicitWidth: content.implicitWidth
+                    implicitWidth: content.naturalWidth
                     implicitHeight: content.implicitHeight
 
                     Row {
                         id: content
+                        readonly property real naturalWidth: label.implicitWidth + (symbol.visible ? symbol.implicitWidth + spacing : 0)
                         anchors.centerIn: parent
+                        width: Math.min(naturalWidth, parent.width)
                         spacing: 6
 
                         MaterialSymbol {
+                            id: symbol
                             anchors.verticalCenter: parent.verticalCenter
                             visible: segment.modelData.symbol.length > 0
                             text: segment.modelData.symbol
@@ -201,10 +204,16 @@ Item {
                             }
                         }
                         StyledText {
+                            id: label
+                            objectName: "segmentLabel"
                             anchors.verticalCenter: parent.verticalCenter
+                            width: Math.max(0, content.width - (symbol.visible ? symbol.width + content.spacing : 0))
                             visible: segment.modelData.text.length > 0
                             text: segment.modelData.text
                             font.pixelSize: Appearance.fontSize.smallie
+                            fontSizeMode: Text.Fit
+                            minimumPixelSize: Math.min(10, font.pixelSize)
+                            elide: Text.ElideRight
                             font.weight: Font.Medium
                             color: segment.foreground
 
