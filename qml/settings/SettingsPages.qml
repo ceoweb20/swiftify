@@ -699,13 +699,13 @@ Item {
                 }
                 NoteText {
                     text: !Soloist.supported
-                          ? qsTr("Spotify Soloist only runs on Linux, Apple Silicon Macs and 64-bit Windows, so Spotify cannot play on this computer. Your own music files still play.")
+                          ? qsTr("Librespot is the default player. Spotify Soloist fallback is available on Linux, Apple Silicon Macs and 64-bit Windows.")
                           : Soloist.busy && Soloist.progress >= 0
                             ? qsTr("Downloading from Spotify: ") + Math.round(Soloist.progress * 100) + "%"
                             : Soloist.status.length > 0 ? Soloist.status
                             : Soloist.updateRecommended
                               ? qsTr("This Soloist build is close to its 90-day expiry. Reinstall it to keep playback working.")
-                              : qsTr("Spotify plays through Soloist, downloaded from Spotify itself. The key is yours alone: generate it in the developer dashboard. Then pick “Swiftify” in Spotify's devices once to pair.")
+                              : qsTr("Librespot plays by default. If Spotify refuses its audio key (which can happen on newer accounts), Swiftify switches to Soloist. Install Soloist here and enter your own API key from the developer dashboard. Pick “Swiftify” in Spotify's devices once to pair.")
                 }
             }
 

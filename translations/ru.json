@@ -53,7 +53,7 @@
   "Could not start the update installer.": "Не удалось запустить установщик обновления.",
   "Preparing the update. Swiftify will restart when it is ready…": "Подготовка обновления. Когда всё будет готово, Swiftify перезапустится…",
   "Updating saved song…": "Сохранение трека…",
-  "Spotify refuses this account the audio key to play tracks with. New accounts only play through Spotify's own clients: install Soloist (see the README) and Swiftify will play through it.": "Spotify не выдаёт этому аккаунту аудиоключ для воспроизведения. Новые аккаунты играют только через официальные клиенты Spotify: установите Soloist (см. README), и Swiftify будет играть через него.",
+  "Spotify refused librespot's audio key. Playback through librespot may not work on newer accounts. Install Spotify Soloist and enter your own Soloist API key in Settings → Account → Spotify Soloist, then press Play again.": "Spotify отказал librespot в выдаче аудиоключа. На новых аккаунтах воспроизведение через librespot может не работать. Установите Spotify Soloist и укажите свой API-ключ Soloist в Настройки → Аккаунт → Spotify Soloist, затем снова нажмите Play.",
   "Language": "Язык",
   "Player bar visualizer": "Визуализация в нижнем плеере",
   "Track list visualizer": "Визуализация в списке треков",

@@ -21,15 +21,15 @@ struct SoloistConfig {
     QString apiKey;
     QString dataDirectory;
     QString deviceName = QStringLiteral("Swiftify");
+    bool tryLibrespot = true;
 };
 
-/// plays spotify songs through spotify soloist, spotify's own connect client.
-/// soloist is the only way spotify plays: librespot is kept for the login,
-/// lyrics, playlists and the person's own music files, never for streaming.
-/// soloist runs as a child process and is driven over its local websocket api.
+/// Tries librespot first, then uses Spotify Soloist if the account is refused
+/// audio keys. Other errors do not switch backends. Soloist runs as a child
+/// process and is driven over its local websocket API.
 ///
 /// what soloist can't do is left to `fallback`, the rust core: the login,
-/// lyrics, and the person's own music files. where the sound server allows,
+/// lyrics and playlists. where the sound server allows,
 /// soloist plays into a sink of swiftify's own, recorded and played on through
 /// the rust core, so the equalizer and the visualizers reach it too; tempo
 /// and pitch can't apply to audio that arrives as it plays.
@@ -75,6 +75,7 @@ public:
     float volume() const override { return m_volume; }
     void setStreamQuality(int kbps) override;
     void setVolumeNormalization(bool enabled) override;
+    void setConnectDevice(bool enabled, const QString &name) override;
     void setAudioCache(const QString &path, qint64 limitBytes) override;
     void setPlaybackShaping(float tempo, float pitchSemitones, bool preservesPitch) override;
     void setPreampGain(float gainDb) override;
@@ -131,9 +132,11 @@ private:
     int soloistVolume() const;
     /// hands what soloist plays to the rust core, if it is routed through it
     void playRouted();
+    void useSoloist();
 
     PlaybackCore *m_fallback;
     SoloistConfig m_config;
+    bool m_useSoloist = false;
     std::unique_ptr<SwiftifyLiveBuffer, void (*)(SwiftifyLiveBuffer *)> m_liveBuffer;
 #ifdef SWIFTIFY_DESKTOP_INTEGRATION
     std::unique_ptr<SoloistAudioRoute> m_route;
@@ -168,7 +171,6 @@ private:
     quint64 m_messages = 0;
 
     float m_volume = 0.75f;
-    /// a file of the person's own is playing, through the rust core
     /// the song swiftify last asked soloist for, and whether it has started
     QString m_expectedUri;
     bool m_expectedStarted = false;

@@ -33,9 +33,9 @@ const QString kCatchphrase = QStringLiteral("i mean i guess bro");
 /// would only burn the queue. soloist plays for such accounts instead (the
 /// README's "spotify could not load this track" section); the error banner
 /// translates this exact text.
-const QString kAudioKeyRefused = QStringLiteral("Spotify refuses this account the audio key to play tracks with. "
-                                                "New accounts only play through Spotify's own clients: install "
-                                                "Soloist (see the README) and Swiftify will play through it.");
+const QString kAudioKeyRefused = QStringLiteral("Spotify refused librespot's audio key. Playback through librespot may not work "
+                                                "on newer accounts. Install Spotify Soloist and enter your own Soloist API key "
+                                                "in Settings → Account → Spotify Soloist, then press Play again.");
 const QString kVolumeKey = QStringLiteral("playerVolume");
 const QString kVolumeBeforeMuteKey = QStringLiteral("playerVolumeBeforeMute");
 const QString kPlaybackStateKey = QStringLiteral("lastPlaybackState");

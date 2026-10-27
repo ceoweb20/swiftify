@@ -207,7 +207,8 @@ private slots:
         qputenv("SWIFTIFY_SOLOIST_ROUTE", "off");
         m_fallback = std::make_unique<FakeCore>();
         m_core = std::make_unique<SoloistCore>(
-            m_fallback.get(), SoloistConfig{m_program, QStringLiteral("key"), m_dir->filePath(QStringLiteral("data"))});
+            m_fallback.get(), SoloistConfig{m_program, QStringLiteral("key"), m_dir->filePath(QStringLiteral("data")),
+                                           QStringLiteral("Swiftify"), false});
     }
 
     void cleanup()
@@ -216,6 +217,91 @@ private slots:
         m_fallback.reset();
         m_soloist.reset();
         m_dir.reset();
+    }
+
+    void librespotPlaysByDefaultWithoutStartingSoloist()
+    {
+        m_core.reset();
+        m_core = std::make_unique<SoloistCore>(m_fallback.get(),
+            SoloistConfig{m_program, QStringLiteral("key"), m_dir->filePath(QStringLiteral("data"))});
+        auto task = m_core->playTrack(QStringLiteral("spotify:track:a"));
+        const auto call = m_fallback->take(QStringLiteral("playTrack"));
+        QVERIFY(call);
+        call->succeed();
+        QCoro::waitFor(task);
+        QCOMPARE(m_soloist->connections, 0);
+        m_fallback->position = 1234;
+        m_fallback->duration = 90000;
+        QCOMPARE(m_core->playbackPositionMs(), 1234u);
+        QCOMPARE(m_core->playbackDurationMs(), 90000u);
+        m_core->pause();
+        QVERIFY(m_fallback->log.contains(QStringLiteral("pause")));
+        m_core->setConnectDevice(true, QStringLiteral("Swiftify test"));
+        QVERIFY(m_fallback->connectEnabled);
+    }
+
+    void refusedLibrespotKeyFallsBackAndStaysOnSoloist()
+    {
+        m_core.reset();
+        m_core = std::make_unique<SoloistCore>(m_fallback.get(),
+            SoloistConfig{m_program, QStringLiteral("key"), m_dir->filePath(QStringLiteral("data"))});
+        auto task = m_core->playTrack(QStringLiteral("spotify:track:a"));
+        const auto call = m_fallback->take(QStringLiteral("playTrack"));
+        QVERIFY(call);
+        call->fail(QString::fromLatin1(SWIFTIFY_CORE_AUDIO_KEY_REFUSED));
+        QCoro::waitFor(task);
+        QVERIFY(m_soloist->commandNames().contains(QStringLiteral("play")));
+        QVERIFY(m_fallback->log.contains(QStringLiteral("pause")));
+        QCoro::waitFor(m_core->playTrack(QStringLiteral("spotify:track:b")));
+        QVERIFY(!m_fallback->take(QStringLiteral("playTrack")));
+        m_core->reset();
+        auto again = m_core->playTrack(QStringLiteral("spotify:track:c"));
+        const auto primary = m_fallback->take(QStringLiteral("playTrack"));
+        QVERIFY(primary);
+        primary->succeed();
+        QCoro::waitFor(again);
+    }
+
+    void unrelatedLibrespotErrorsDoNotSwitchPlayers_data()
+    {
+        QTest::addColumn<QString>("message");
+        QTest::newRow("network") << QStringLiteral("network unavailable");
+        QTest::newRow("unavailable-track") << QString::fromLatin1(SWIFTIFY_CORE_UNAVAILABLE);
+        QTest::newRow("superseded") << QString::fromLatin1(SWIFTIFY_CORE_SUPERSEDED);
+    }
+
+    void unrelatedLibrespotErrorsDoNotSwitchPlayers()
+    {
+        QFETCH(QString, message);
+        m_core.reset();
+        m_core = std::make_unique<SoloistCore>(m_fallback.get(),
+            SoloistConfig{m_program, QStringLiteral("key"), m_dir->filePath(QStringLiteral("data"))});
+        auto task = m_core->playTrack(QStringLiteral("spotify:track:a"));
+        const auto call = m_fallback->take(QStringLiteral("playTrack"));
+        QVERIFY(call);
+        call->fail(message);
+        bool failed = false;
+        try {
+            QCoro::waitFor(task);
+        } catch (const SpotifyError &error) {
+            failed = true;
+            QCOMPARE(error.message(), message);
+        }
+        QVERIFY(failed);
+        QCOMPARE(m_soloist->connections, 0);
+    }
+
+    void refusedCrossfadeFallsBackToSoloist()
+    {
+        m_core.reset();
+        m_core = std::make_unique<SoloistCore>(m_fallback.get(),
+            SoloistConfig{m_program, QStringLiteral("key"), m_dir->filePath(QStringLiteral("data"))});
+        auto task = m_core->crossfadeTrack(QStringLiteral("spotify:track:a"), 2000);
+        const auto call = m_fallback->take(QStringLiteral("crossfadeTrack"));
+        QVERIFY(call);
+        call->fail(QString::fromLatin1(SWIFTIFY_CORE_AUDIO_KEY_REFUSED));
+        QCoro::waitFor(task);
+        QVERIFY(m_soloist->commandNames().contains(QStringLiteral("play")));
     }
 
     void playsASongThroughSoloist()

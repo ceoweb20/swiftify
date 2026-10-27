@@ -52,13 +52,16 @@ you can download swiftify for your operating system at [https://shredos.dev](htt
 
 ## Tutorials
 
-### spotify playback (soloist)
+### spotify playback (librespot with soloist fallback)
 
 spotify refuses librespot the keys to decrypt songs on newer accounts (librespot's
-logs say `error audio key 0 1`), so every song fails. swiftify therefore plays
-spotify's songs only through [spotify soloist](https://developer.spotify.com/documentation/soloist),
-spotify's own connect client, and keeps librespot for the login, lyrics, playlists
-and your own music files. there is no librespot playback fallback.
+logs say `error audio key 0 1`). swiftify tries librespot first, and switches to
+[spotify soloist](https://developer.spotify.com/documentation/soloist), spotify's
+own connect client, only when Spotify refuses the account's audio key. Network
+errors, unavailable tracks and cancelled requests do not switch players.
+Once switched, Soloist handles subsequent tracks until logout or restart.
+If it is not configured, playback stops with instructions to install Soloist
+and enter your own API key in Settings → Account → Spotify Soloist.
 
 soloist runs on linux (x86_64, aarch64, armv7), apple silicon macs and 64-bit
 windows. there is no intel mac build. its binaries may not be redistributed, so
@@ -83,8 +86,8 @@ for a shell, or a build agent, `tools/install-soloist.sh` (linux and macos) and
 on linux with pipewire, swiftify makes a sink called "Swiftify (Soloist)" for soloist to play into,
 and plays that on through its own output, so the equalizer and the visualizers still work.
 under pulseaudio alone, or on macos and windows, soloist plays straight to the speakers.
-`SWIFTIFY_SOLOIST_ROUTE=off` does that on purpose. tempo and pitch only work on your own
-music files, and crossfade waits for each song to end. soloist builds expire after 90 days;
+`SWIFTIFY_SOLOIST_ROUTE=off` does that on purpose. tempo and pitch do not apply to
+Soloist, and crossfade waits for each song to end. soloist builds expire after 90 days;
 swiftify replaces its own download before that, and again if one ever expires.
 
 if spotify on your phone doesnt list "Swiftify" for step 3, a firewall (ufw) is probably

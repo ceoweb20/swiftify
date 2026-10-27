@@ -39,8 +39,8 @@ endif()
 # the wayland, d-bus and pipewire pieces. off elsewhere so the portable parts
 # can be built and tested on a development machine without them.
 option(SWIFTIFY_DESKTOP_INTEGRATION "Build the Linux desktop integration" ${SWIFTIFY_IS_LINUX})
-# spotify soloist plays spotify's songs; it is not optional, and its binary is
-# downloaded at runtime rather than shipped, as spotify's terms require.
+# Soloist fallback support is always built; its binary is downloaded at runtime
+# rather than shipped, as Spotify's terms require.
 option(SWIFTIFY_BUILD_UPDATER "Build the standalone signed-update installer" ON)
 set(SWIFTIFY_UPDATE_REPOSITORY "ceoweb20/swiftify" CACHE STRING "GitHub owner/name whose published releases are offered by in-app updates")
 if(NOT SWIFTIFY_UPDATE_REPOSITORY MATCHES "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")

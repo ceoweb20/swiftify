@@ -73,6 +73,7 @@ SoloistCore::SoloistCore(PlaybackCore *fallback, SoloistConfig config, QObject *
     : PlaybackCore(parent)
     , m_fallback(fallback)
     , m_config(std::move(config))
+    , m_useSoloist(!m_config.tryLibrespot)
     , m_liveBuffer(nullptr, &swiftify_live_buffer_free)
 {
     m_process.setProcessChannelMode(QProcess::MergedChannels);
@@ -164,8 +165,22 @@ SoloistCore::SoloistCore(PlaybackCore *fallback, SoloistConfig config, QObject *
     });
     connect(&m_socket, &QWebSocket::textMessageReceived, this, &SoloistCore::handleMessage);
 
-    // started at once, so the device is there to pair with before anything plays
-    QTimer::singleShot(0, this, &SoloistCore::startDaemon);
+    // Do not launch a second Spotify device while librespot is working.
+    if (m_useSoloist) {
+        QTimer::singleShot(0, this, &SoloistCore::startDaemon);
+    }
+    connect(m_fallback, &PlaybackCore::remoteTrackStarted, this, [this](const Song &song) {
+        if (!m_useSoloist) emit remoteTrackStarted(song);
+    });
+    connect(m_fallback, &PlaybackCore::remotePlayingChanged, this, [this](bool playing) {
+        if (!m_useSoloist) emit remotePlayingChanged(playing);
+    });
+    connect(m_fallback, &PlaybackCore::remoteVolumeChanged, this, [this](float volume) {
+        if (!m_useSoloist) {
+            m_volume = volume;
+            emit remoteVolumeChanged(volume);
+        }
+    });
 }
 
 SoloistCore::~SoloistCore()
@@ -225,8 +240,19 @@ void SoloistCore::reloadConfiguration()
     m_config = configured();
     stopDaemon();
     m_failure.clear();
-    startDaemon();
+    if (m_useSoloist) startDaemon();
     emit stateChanged();
+}
+
+void SoloistCore::useSoloist()
+{
+    m_useSoloist = true;
+    // A refused account stays on Soloist until logout/reset, not one retry
+    // per song. Stop the primary output before Soloist takes over.
+    try {
+        m_fallback->pause();
+    } catch (const SpotifyError &) {
+    }
 }
 
 // --- the daemon -----------------------------------------------------------------
@@ -237,6 +263,18 @@ void SoloistCore::startDaemon()
         return;
     }
     m_failure.clear();
+    if (m_config.program.isEmpty() || m_config.apiKey.isEmpty()) {
+        const auto latest = configured();
+        m_config.program = latest.program;
+        m_config.apiKey = latest.apiKey;
+    }
+    if (m_config.tryLibrespot && (m_config.program.isEmpty() || m_config.apiKey.isEmpty())) {
+        m_failure = QStringLiteral("Spotify refused librespot's audio key. Playback through librespot may not work "
+                                   "on newer accounts. Install Spotify Soloist and enter your own Soloist API key "
+                                   "in Settings → Account → Spotify Soloist, then press Play again.");
+        emit stateChanged();
+        return;
+    }
     if (m_config.program.isEmpty()) {
         m_failure = soloist::platformSupported()
             ? QStringLiteral("Spotify plays through Spotify Soloist, which is not installed yet. "
@@ -403,6 +441,7 @@ void SoloistCore::handleMessage(const QString &text)
 
 void SoloistCore::followRemote()
 {
+    if (!m_useSoloist) return;
     // a play of swiftify's own is under way, or a song's end is being handed
     // over: what soloist says now is not someone else's doing
     // (a gate stays shut after swiftify's queue has run out; only just after
@@ -473,6 +512,7 @@ Song SoloistCore::songFromItem() const
 
 bool SoloistCore::skipRemote(bool forward)
 {
+    if (!m_useSoloist) return m_fallback->skipRemote(forward);
     if (!m_remote) {
         return false;
     }
@@ -664,6 +704,26 @@ void SoloistCore::stopSoloist()
 
 QCoro::Task<> SoloistCore::playTrack(QString spotifyUri)
 {
+    const quint64 initialResets = m_resets;
+    if (!m_useSoloist) {
+        try {
+            co_await m_fallback->playTrack(spotifyUri);
+            co_return;
+        } catch (const SpotifyError &error) {
+            throwIfReset(initialResets);
+            if (error.kind() != SpotifyError::Kind::AudioKeyRefused) throw;
+            useSoloist();
+        }
+    }
+    if (m_config.tryLibrespot && (m_config.program.isEmpty() || m_config.apiKey.isEmpty())) {
+        m_config = configured();
+        if (m_config.program.isEmpty() || m_config.apiKey.isEmpty()) {
+            throw SpotifyError(SpotifyError::Kind::AudioKeyRefused,
+                QStringLiteral("Spotify refused librespot's audio key. Playback through librespot may not work "
+                               "on newer accounts. Install Spotify Soloist and enter your own Soloist API key "
+                               "in Settings → Account → Spotify Soloist, then press Play again."));
+        }
+    }
     const quint64 resets = m_resets;
     const quint64 request = ++m_requests;
     // soloist's state is the old song's until this one starts, however it ends
@@ -731,13 +791,26 @@ QCoro::Task<> SoloistCore::playTrack(QString spotifyUri)
     gate(false);
 }
 
-void SoloistCore::preloadTrack(const QString &, bool)
+void SoloistCore::preloadTrack(const QString &uri, bool standby)
 {
-    // soloist buffers ahead by itself
+    if (!m_useSoloist) m_fallback->preloadTrack(uri, standby);
 }
 
-QCoro::Task<> SoloistCore::crossfadeTrack(QString spotifyUri, quint32)
+QCoro::Task<> SoloistCore::crossfadeTrack(QString spotifyUri, quint32 durationMs)
 {
+    const quint64 initialResets = m_resets;
+    if (!m_useSoloist) {
+        try {
+            co_await m_fallback->crossfadeTrack(spotifyUri, durationMs);
+            co_return;
+        } catch (const SpotifyError &error) {
+            throwIfReset(initialResets);
+            if (error.kind() != SpotifyError::Kind::AudioKeyRefused) throw;
+            useSoloist();
+        }
+        co_await playTrack(spotifyUri);
+        co_return;
+    }
     // soloist takes one song at a time, so there is no fading one into the
     // next here. the next song waits for this one to finish instead of
     // cutting it short.
@@ -756,14 +829,18 @@ QCoro::Task<> SoloistCore::crossfadeTrack(QString spotifyUri, quint32)
 
 QCoro::Task<> SoloistCore::restartAudioOutput()
 {
-    if (m_routed) {
+    if (!m_useSoloist || m_routed) {
         co_await m_fallback->restartAudioOutput();
-        playRouted();
+        if (m_useSoloist) playRouted();
     }
 }
 
 void SoloistCore::play()
 {
+    if (!m_useSoloist) {
+        m_fallback->play();
+        return;
+    }
     if (!m_socketOpen) {
         throw SpotifyError(SpotifyError::Kind::Core, m_failure.isEmpty() ? QStringLiteral("Soloist isn't running.") : m_failure);
     }
@@ -774,11 +851,19 @@ void SoloistCore::play()
 
 void SoloistCore::pause()
 {
+    if (!m_useSoloist) {
+        m_fallback->pause();
+        return;
+    }
     stopSoloist();
 }
 
 void SoloistCore::seek(quint32 positionMs)
 {
+    if (!m_useSoloist) {
+        m_fallback->seek(positionMs);
+        return;
+    }
     send(QStringLiteral("seek"), {{QStringLiteral("position_ms"), qint64(positionMs)}});
     // shown at once; soloist's position_sync confirms it
     m_anchorPositionMs = positionMs;
@@ -790,6 +875,10 @@ void SoloistCore::seek(quint32 positionMs)
 void SoloistCore::setVolume(float volume)
 {
     m_volume = std::clamp(volume, 0.0f, 1.0f);
+    if (!m_useSoloist) {
+        m_fallback->setVolume(m_volume);
+        return;
+    }
     try {
         // held at nothing while the gap between songs is gated; otherwise unity gain for routed soloist
         m_fallback->setVolume(m_gated ? 0.0f : (m_routed ? 1.0f : m_volume));
@@ -800,11 +889,12 @@ void SoloistCore::setVolume(float volume)
 
 bool SoloistCore::audioOutputStalled() const
 {
-    return m_routed && m_fallback->audioOutputStalled();
+    return (!m_useSoloist || m_routed) && m_fallback->audioOutputStalled();
 }
 
 quint32 SoloistCore::playbackPositionMs() const
 {
+    if (!m_useSoloist) return m_fallback->playbackPositionMs();
     // an end not yet taken reads as the end, even once soloist has started
     // the song over; with the clock stopped for the last moments, the time
     // still runs on toward the end
@@ -819,11 +909,13 @@ quint32 SoloistCore::playbackPositionMs() const
 
 quint32 SoloistCore::playbackDurationMs() const
 {
+    if (!m_useSoloist) return m_fallback->playbackDurationMs();
     return quint32(m_durationMs);
 }
 
 bool SoloistCore::takeEndOfTrack()
 {
+    if (!m_useSoloist) return m_fallback->takeEndOfTrack();
     if (!m_endOfTrack && endReached()) {
         m_endOfTrack = true;
     }
@@ -854,12 +946,15 @@ QCoro::Task<QString> SoloistCore::connectStoredSession(QString login, QString cl
 
 void SoloistCore::disconnectSession()
 {
+    stopDaemon();
+    m_useSoloist = !m_config.tryLibrespot;
     m_fallback->disconnectSession();
 }
 
 void SoloistCore::reset()
 {
-    stopSoloist();
+    stopDaemon();
+    m_useSoloist = !m_config.tryLibrespot;
     ++m_resets;
     m_expectedUri.clear();
     m_expectedStarted = false;
@@ -907,6 +1002,11 @@ void SoloistCore::setVolumeNormalization(bool enabled)
     m_fallback->setVolumeNormalization(enabled);
 }
 
+void SoloistCore::setConnectDevice(bool enabled, const QString &name)
+{
+    m_fallback->setConnectDevice(enabled, name);
+}
+
 void SoloistCore::setAudioCache(const QString &path, qint64 limitBytes)
 {
     m_fallback->setAudioCache(path, limitBytes);
@@ -940,7 +1040,7 @@ void SoloistCore::setSpectrumEnabled(bool enabled)
 int SoloistCore::spectrumLevels(float *out, int capacity) const
 {
     // unrouted, soloist's audio goes straight to pipewire, past the analyser
-    return m_routed ? m_fallback->spectrumLevels(out, capacity) : 0;
+    return !m_useSoloist || m_routed ? m_fallback->spectrumLevels(out, capacity) : 0;
 }
 
 } // namespace swiftify

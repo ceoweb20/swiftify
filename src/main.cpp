@@ -280,9 +280,8 @@ int main(int argc, char *argv[])
     Theme theme(&settings);
     QNetworkAccessManager network;
     RustCore rustCore;
-    // spotify's songs always play through soloist; the rust core keeps the
-    // login, lyrics and playlists. when soloist or its key is missing,
-    // playing explains how to set it up in settings
+    // Try librespot first. Soloist takes over only if Spotify refuses the
+    // account's audio keys; network and unavailable-track errors stay put.
     SoloistCore soloistCore(&rustCore, SoloistCore::configured());
     PlaybackCore &core = soloistCore;
     // soloist's binaries may not be redistributed, so the app downloads the
