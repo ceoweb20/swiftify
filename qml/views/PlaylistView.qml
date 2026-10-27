@@ -36,17 +36,12 @@ Item {
         showsEmpty: Library.playlistSongs.count === 0 || Library.displayedPlaylistSongs.count === 0
         emptySymbol: Library.playlistSongs.count === 0 ? "music_note" : "search_off"
         emptyTitle: Library.playlistSongs.count === 0 ? qsTr("No Songs") : qsTr("No Results for “%1”").arg(Library.playlistFilterQuery.trim())
-        emptyDescription: Library.playlistSongs.count > 0 ? qsTr("Check the spelling or try a new search.") : root.playlist.isLocal ? qsTr("Add tracks from anywhere on your computer, or drop them here.") : qsTr("Add songs from Search using the More menu.")
-
-        MusicPicker {
-            id: trackPicker
-            playlistId: root.playlist.isLocal ? root.playlist.id : ""
-        }
+        emptyDescription: Library.playlistSongs.count > 0 ? qsTr("Check the spelling or try a new search.") : qsTr("Add songs from Search using the More menu.")
 
         hero: CollectionHero {
             artworkUrl: root.playlist.artworkUrl
             fallbackKey: root.playlist.id.length > 0 ? root.playlist.id : root.playlist.name
-            kind: root.playlist.isLocal ? "LOCAL PLAYLIST" : "PLAYLIST"
+            kind: "PLAYLIST"
             title: root.playlist.name
             description: root.playlist.description
             facts: Format.joined([root.playlist.ownerDisplayName,
@@ -88,19 +83,6 @@ Item {
                     labelColor: shuffleButton.scheme.onPrimaryContainer
                     enabled: Library.displayedPlaylistSongs.count > 0
                     onClicked: Player.shufflePlay(Library.displayedPlaylistSongs)
-                },
-                // a playlist made here takes tracks from anywhere: copies,
-                // so the originals can move or go
-                TextButton {
-                    visible: root.playlist.isLocal
-                    iconOnly: parent ? parent.compactActions : false
-                    compactSize: parent ? parent.actionSize : 48
-                    implicitHeight: iconOnly ? compactSize : 48
-                    variant: TextButton.Tonal
-                    symbol: "add"
-                    text: qsTr("Add Tracks")
-                    busy: LocalFiles.copying
-                    onClicked: trackPicker.pickFiles()
                 }
             ]
         }

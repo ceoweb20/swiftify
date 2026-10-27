@@ -109,11 +109,6 @@ public:
         co_await await(QStringLiteral("crossfadeTrack"), uri);
         sounding = true;
     }
-    QCoro::Task<> playFile(QString path) override
-    {
-        co_await await(QStringLiteral("playFile"), path);
-        sounding = true;
-    }
     QCoro::Task<> restartAudioOutput() override
     {
         co_await await(QStringLiteral("restartAudioOutput"), {});
@@ -143,6 +138,13 @@ public:
     float volume() const override { return volumeValue; }
     void setStreamQuality(int) override {}
     void setVolumeNormalization(bool) override {}
+    bool connectEnabled = false;
+    QString connectName;
+    void setConnectDevice(bool enabled, const QString &name) override
+    {
+        connectEnabled = enabled;
+        connectName = name;
+    }
     void setAudioCache(const QString &, qint64) override {}
     void setPlaybackShaping(float, float, bool) override {}
     void setPreampGain(float gain) override { preamp = gain; }
@@ -194,9 +196,10 @@ private:
         }
         if (!ok) {
             // as RustCore tells a replaced request from a failed one
-            throw SpotifyError(payload == QLatin1StringView(SWIFTIFY_CORE_SUPERSEDED)     ? SpotifyError::Kind::Superseded
-                               : payload == QLatin1StringView(SWIFTIFY_CORE_UNAVAILABLE) ? SpotifyError::Kind::Unavailable
-                                                                                          : SpotifyError::Kind::Core,
+            throw SpotifyError(payload == QLatin1StringView(SWIFTIFY_CORE_SUPERSEDED)           ? SpotifyError::Kind::Superseded
+                               : payload == QLatin1StringView(SWIFTIFY_CORE_UNAVAILABLE)       ? SpotifyError::Kind::Unavailable
+                               : payload == QLatin1StringView(SWIFTIFY_CORE_AUDIO_KEY_REFUSED) ? SpotifyError::Kind::AudioKeyRefused
+                                                                                               : SpotifyError::Kind::Core,
                                payload);
         }
         co_return payload;

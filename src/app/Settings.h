@@ -33,6 +33,9 @@ class Settings : public QObject {
     Q_PROPERTY(int streamingQuality READ streamingQuality WRITE setStreamingQuality NOTIFY streamingQualityChanged FINAL)
     Q_PROPERTY(bool normalizeVolume READ normalizeVolume WRITE setNormalizeVolume NOTIFY normalizeVolumeChanged FINAL)
     Q_PROPERTY(bool crossfadeEnabled READ crossfadeEnabled WRITE setCrossfadeEnabled NOTIFY crossfadeEnabledChanged FINAL)
+    /// shows in Spotify as a Connect device and reports what plays to the account, which a scrobbling bot reads; it cannot be controlled from other apps
+    Q_PROPERTY(bool spotifyConnect READ spotifyConnect WRITE setSpotifyConnect NOTIFY spotifyConnectChanged FINAL)
+    Q_PROPERTY(QString connectDeviceName READ connectDeviceName WRITE setConnectDeviceName NOTIFY connectDeviceNameChanged FINAL)
     Q_PROPERTY(int crossfadeDurationSeconds READ crossfadeDurationSeconds WRITE setCrossfadeDurationSeconds NOTIFY crossfadeDurationSecondsChanged FINAL)
     /// how much of the songs streamed is kept, so playing one again needs no
     /// download: 500, 1000 or 2000 megabytes
@@ -129,6 +132,10 @@ public:
     void setNormalizeVolume(bool value);
     bool crossfadeEnabled() const { return m_crossfadeEnabled; }
     void setCrossfadeEnabled(bool value);
+    bool spotifyConnect() const { return m_spotifyConnect; }
+    void setSpotifyConnect(bool value);
+    QString connectDeviceName() const { return m_connectDeviceName; }
+    void setConnectDeviceName(const QString &value);
     int crossfadeDurationSeconds() const { return m_crossfadeDurationSeconds; }
     void setCrossfadeDurationSeconds(int value);
     /// animate the immersive background with the music
@@ -216,6 +223,8 @@ signals:
     void streamingQualityChanged();
     void normalizeVolumeChanged();
     void crossfadeEnabledChanged();
+    void spotifyConnectChanged();
+    void connectDeviceNameChanged();
     void crossfadeDurationSecondsChanged();
     void songCacheMegabytesChanged();
     void livingBackdropChanged();
@@ -263,6 +272,8 @@ private:
     int m_streamingQuality = 160;
     bool m_normalizeVolume = false;
     bool m_crossfadeEnabled = false;
+    bool m_spotifyConnect = true;
+    QString m_connectDeviceName = QStringLiteral("Swiftify");
     int m_crossfadeDurationSeconds = 5;
     int m_songCacheMegabytes = 1000;
     bool m_livingBackdrop = true;

@@ -94,13 +94,6 @@ Platform.MenuBar {
             onTriggered: Library.showPlaylists()
         }
         Platform.MenuItem {
-            text: qsTr("Local Files")
-            shortcut: "Ctrl+5"
-            checkable: true
-            checked: Library.page === Library.Page.LocalFiles || Library.page === Library.Page.LocalTracks
-            onTriggered: Library.showLocalFiles()
-        }
-        Platform.MenuItem {
             text: qsTr("Stats")
             shortcut: "Ctrl+6"
             checkable: true

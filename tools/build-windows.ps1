@@ -124,10 +124,10 @@ function Initialize-Msvc {
 }
 
 function Get-DependencySource {
-    param([string]$Git, [string]$Url, [string]$Destination)
+    param([string]$Git, [string]$Url, [string]$Destination, [string]$Reference)
 
     if (-not (Test-Path -LiteralPath $Destination)) {
-        Invoke-Native $Git @('clone', '--depth', '1', $Url, $Destination) | Out-Host
+        Invoke-Native $Git @('clone', '--depth', '1', '--branch', $Reference, $Url, $Destination) | Out-Host
     }
     if (-not (Test-Path -LiteralPath "$Destination\.git") -or -not (Test-Path -LiteralPath "$Destination\CMakeLists.txt")) {
         throw "Incomplete dependency checkout at $Destination. Use a different -BuildRoot or remove that incomplete checkout before retrying."
@@ -229,22 +229,13 @@ function Invoke-WindowsBuild {
             "-DCMAKE_INSTALL_PREFIX=$($dependencyPrefix.Replace('\', '/'))", '-DCMAKE_INSTALL_BINDIR=bin'
         )
         $dependencies = @(
-            @{ Name = 'qtkeychain'; Url = 'https://github.com/frankosterfeld/qtkeychain.git'; Options = @('-DBUILD_WITH_QT5=OFF', '-DBUILD_TEST_APPLICATION=OFF', '-DBUILD_TRANSLATIONS=OFF') },
-            @{ Name = 'qcoro'; Url = 'https://github.com/qcoro/qcoro.git'; Options = @('-DUSE_QT_VERSION=6', '-DQCORO_WITH_QTDBUS=OFF', '-DQCORO_WITH_QTWEBSOCKETS=OFF', '-DQCORO_WITH_QTQUICK=OFF', '-DQCORO_WITH_QML=OFF', '-DQCORO_WITH_QTTEST=OFF', '-DQCORO_BUILD_EXAMPLES=OFF') }
+            @{ Name = 'qcoro'; Url = 'https://github.com/qcoro/qcoro.git'; Ref = 'v0.13.0'; Options = @('-DUSE_QT_VERSION=6', '-DQCORO_WITH_QTDBUS=OFF', '-DQCORO_WITH_QTWEBSOCKETS=OFF', '-DQCORO_WITH_QTQUICK=OFF', '-DQCORO_WITH_QML=OFF', '-DQCORO_WITH_QTTEST=OFF', '-DQCORO_BUILD_EXAMPLES=OFF') }
         )
-        if ($rustTarget -eq 'x86_64-pc-windows-msvc') {
-            # windeployqt takes any dll named qt6... for one of qt's own and
-            # looks for it in qt's folder, where qt6keychain.dll is not. it gets
-            # the lib prefix mingw already gives it
-            $libraryPrefix = Join-Path $buildDirectory 'library-prefix.cmake'
-            Set-Content -LiteralPath $libraryPrefix -Value 'set(CMAKE_SHARED_LIBRARY_PREFIX lib)'
-            $dependencies[0].Options += "-DCMAKE_PROJECT_INCLUDE=$($libraryPrefix.Replace('\', '/'))"
-        }
         foreach ($dependency in $dependencies) {
             Write-Host "Building $($dependency.Name)..."
             $dependencySource = Join-Path $sourcesDirectory $dependency.Name
             $dependencyBuild = Join-Path $buildDirectory $dependency.Name
-            Get-DependencySource $git $dependency.Url $dependencySource
+            Get-DependencySource $git $dependency.Url $dependencySource $dependency.Ref
             Invoke-Native $cmake (@('-S', $dependencySource, '-B', $dependencyBuild) + $commonOptions + $dependency.Options) | Out-Host
             Invoke-Native $cmake @('--build', $dependencyBuild, '--parallel', "$Jobs") | Out-Host
             Invoke-Native $cmake @('--install', $dependencyBuild) | Out-Host
@@ -252,13 +243,13 @@ function Invoke-WindowsBuild {
 
         Write-Host 'Building Swiftify...'
         $appBuild = Join-Path $buildDirectory 'swiftify'
-        Invoke-Native $cmake (@('-S', $sourceRoot, '-B', $appBuild) + $commonOptions + @("-DRust_TOOLCHAIN=$rustToolchain", "-DRust_CARGO_TARGET=$rustTarget", "-DCMAKE_INSTALL_PREFIX=$($InstallPrefix.Replace('\', '/'))")) | Out-Host
+        Invoke-Native $cmake (@('-S', $sourceRoot, '-B', $appBuild) + $commonOptions + @("-DRust_TOOLCHAIN=$rustToolchain", "-DRust_CARGO_TARGET=$rustTarget", "-DCMAKE_INSTALL_PREFIX=$($InstallPrefix.Replace('\', '/'))") + $(if ($env:SWIFTIFY_UPDATE_PUBLIC_KEY) { @("-DSWIFTIFY_UPDATE_PUBLIC_KEY=$env:SWIFTIFY_UPDATE_PUBLIC_KEY") } else { @() }) + $(if ($env:SWIFTIFY_UPDATE_REPOSITORY) { @("-DSWIFTIFY_UPDATE_REPOSITORY=$env:SWIFTIFY_UPDATE_REPOSITORY") } else { @() })) | Out-Host
         Invoke-Native $cmake @('--build', $appBuild, '--parallel', "$Jobs") | Out-Host
         Invoke-Native $cmake @('--install', $appBuild) | Out-Host
         $installBin = Join-Path $InstallPrefix 'bin'
         $executable = Join-Path $installBin 'swiftify.exe'
         Invoke-Native $deployQt @('--release', '--force', '--compiler-runtime', '--qmldir', (Join-Path $sourceRoot 'qml'), $executable) | Out-Host
-        Copy-Item -Path "$dependencyPrefix\bin\*.dll" -Destination $installBin -Force
+        Get-ChildItem -Path "$dependencyPrefix\bin" -Filter '*qcoro*.dll' -ErrorAction SilentlyContinue | Copy-Item -Destination $installBin -Force
         if ($rustTarget -eq 'x86_64-pc-windows-msvc') {
             # windeployqt only leaves msvc's runtime installer, so the runtime
             # goes beside the exe and it runs without visual c++ installed

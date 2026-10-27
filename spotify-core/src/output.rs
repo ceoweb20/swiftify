@@ -251,10 +251,6 @@ impl LocalOutput {
         self.rate
     }
 
-    pub(crate) fn is_paused(&self) -> bool {
-        self.shared.paused.load(Ordering::Acquire)
-    }
-
     pub(crate) fn set_volume(&self, volume: f32) {
         self.shared
             .volume
@@ -267,16 +263,6 @@ impl LocalOutput {
             .playing()
             .as_ref()
             .is_none_or(LocalStream::ended)
-    }
-
-    /// stops the device if what played has run out, and nothing has taken
-    /// its place: a source appended meanwhile, and played, keeps playing
-    pub(crate) fn pause_if_ended(&self) {
-        let playing = self.shared.playing();
-        if playing.as_ref().is_none_or(LocalStream::ended) {
-            self.command(false);
-        }
-        drop(playing);
     }
 }
 

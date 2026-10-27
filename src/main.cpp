@@ -10,14 +10,16 @@
 #include "audio/AudioShaping.h"
 #include "core/RustCore.h"
 #include "library/LibraryStore.h"
-#include "library/LocalLibrary.h"
+#include "library/PlaylistCollections.h"
 #include "playback/PlaybackController.h"
 #include "render/SpectrumSource.h"
 #include "stats/PlayHistory.h"
 #include "stats/StatsStore.h"
 #include "spotify/CredentialStore.h"
+#include "spotify/CredentialVault.h"
 #include "spotify/SpotifySession.h"
 #include "system/SingleInstance.h"
+#include "system/Updates.h"
 #include "theme/PlayerStyle.h"
 #include "theme/Theme.h"
 
@@ -52,6 +54,7 @@
 #include <QQmlApplicationEngine>
 #include <QQuickStyle>
 #include <QSocketNotifier>
+#include <QTimer>
 #include <QtQml/qqmlextensionplugin.h>
 
 #ifdef Q_OS_UNIX
@@ -278,8 +281,8 @@ int main(int argc, char *argv[])
     QNetworkAccessManager network;
     RustCore rustCore;
     // spotify's songs always play through soloist; the rust core keeps the
-    // login, lyrics, playlists and the person's own music files. when soloist
-    // or its key is missing, playing explains how to set it up in settings
+    // login, lyrics and playlists. when soloist or its key is missing,
+    // playing explains how to set it up in settings
     SoloistCore soloistCore(&rustCore, SoloistCore::configured());
     PlaybackCore &core = soloistCore;
     // soloist's binaries may not be redistributed, so the app downloads the
@@ -311,19 +314,40 @@ int main(int argc, char *argv[])
     QObject::connect(&settings, &Settings::streamingQualityChanged, &core, applyStreaming);
     QObject::connect(&settings, &Settings::normalizeVolumeChanged, &core, applyStreaming);
     QObject::connect(&settings, &Settings::songCacheMegabytesChanged, &core, applyStreaming);
-    KeychainCredentialStore credentials;
+    CredentialVault vault(paths::dataDirectory() + QStringLiteral("/credentials/logins.vault"));
+    CachedCredentialStore credentials(&vault);
     SpotifySession session(&core, &credentials, &network, &errors);
     PlaybackController player(&core, &session, &settings, &errors);
     DiscordPresence discord(&player, &settings);
     LibraryStore library(&session, &settings, &errors);
+    PlaylistCollections collections(&session, &settings, &library);
     library.attachPlayer(&player);
     AudioShaping sound(&core, &settings, &session);
-    LocalLibrary localFiles(&settings);
-    library.attachLocalFiles(&localFiles);
-    // a song whose tags were edited shows as it is now wherever it is queued
-    QObject::connect(&localFiles, &LocalLibrary::scanned, &player,
-                     [&] { player.refreshSongDetails(localFiles.allSongs()); });
     AppController app(nullptr);
+    Updates updates(&settings);
+    QObject::connect(&updates, &Updates::restartRequested, &app, &AppController::quit);
+    // a verified update installs by itself, a moment after nothing has been
+    // playing: never over a song
+    QTimer installLater;
+    installLater.setSingleShot(true);
+    installLater.setInterval(20'000);
+    const auto canInstallNow = [&] {
+        return vault.unlocked() && updates.available() && updates.installAutomatically() && !updates.busy() && !player.isPlaying();
+    };
+    const auto installWhenIdle = [&] {
+        if (canInstallNow()) {
+            if (!installLater.isActive()) installLater.start();
+        } else {
+            installLater.stop();
+        }
+    };
+    QObject::connect(&installLater, &QTimer::timeout, &app, [&] {
+        if (canInstallNow()) updates.install();
+    });
+    QObject::connect(&updates, &Updates::updateFound, &app, installWhenIdle);
+    QObject::connect(&vault, &CredentialVault::changed, &app, installWhenIdle);
+    QObject::connect(&player, &PlaybackController::playingChanged, &app, installWhenIdle);
+    updates.scheduleAutomaticCheck();
     ArtworkCache artwork(&network);
     PlayerStyle playerStyle(&player, &theme, &artwork);
     SpectrumSource spectrum(&core, &player);

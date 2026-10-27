@@ -229,18 +229,28 @@ Item {
                     width: parent.width
                     implicitHeight: Math.max(artistText.implicitHeight, more.height, 28)
 
-                    ScrollingText {
+                    ArtistNames {
                         id: artistText
-                        objectName: "immersiveArtist"
+                        objectName: "immersiveArtists"
                         anchors.horizontalCenter: parent.horizontalCenter
                         anchors.verticalCenter: parent.verticalCenter
-                        width: Math.min(implicitWidth + 1, parent.width - (more.width + 6) * 2)
-                        text: root.shownSong.artists
-                        horizontalAlignment: Text.AlignHCenter
-                        font.pixelSize: Appearance.fontSize.larger
-                        font.weight: Font.Medium
+                        width: Math.max(0, Math.min(implicitWidth, metadata.width - more.width - (saveSong.visible ? saveSong.width + 5 : 0) - 5))
+                        song: root.shownSong
+                        pixelSize: Appearance.fontSize.larger
+                        weight: Font.Medium
                         color: Qt.rgba(1, 1, 1, 0.62)
-                        animateChange: !metadataFade.running
+                        hoverColor: "white"
+                    }
+                    SaveSongButton {
+                        id: saveSong
+                        objectName: "immersiveSaveSong"
+                        song: root.shownSong
+                        anchors.verticalCenter: parent.verticalCenter
+                        scheme: root.scheme
+                        size: 28
+                        iconSize: 20
+                        iconColor: saved ? root.scheme.primary : Qt.rgba(1, 1, 1, 0.62)
+                        colBackgroundHover: Qt.rgba(1, 1, 1, 0.1)
                     }
 
                     IconButton {

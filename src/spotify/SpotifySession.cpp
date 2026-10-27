@@ -1,4 +1,5 @@
 #include "spotify/SpotifySession.h"
+#include <QPointer>
 
 #include "app/ErrorCenter.h"
 #include "core/PlaybackCore.h"
@@ -168,26 +169,35 @@ QString SpotifySession::loginClientId(LoginPurpose purpose) const
 
 void SpotifySession::restoreSavedSessions()
 {
+    if (m_restoreStarted) return;
+    m_restoreStarted = true;
     detach(restore());
 }
 
 QCoro::Task<> SpotifySession::restore()
 {
+    const QPointer<SpotifySession> self(this);
     const quint64 generation = m_generation;
     m_restoring = true;
-    const auto finished = qScopeGuard([this] { m_restoring = false; });
+    const auto finished = qScopeGuard([self, generation] {
+        if (self && generation == self->m_generation) self->m_restoring = false;
+    });
     std::optional<StoredCredentials> playback;
     std::optional<StoredCredentials> library;
     try {
         playback = co_await m_credentials->load(CredentialStore::Account::Playback);
+        if (!self) co_return;
         library = co_await m_credentials->load(CredentialStore::Account::Library);
+    } catch (const Cancelled &) {
+        co_return;
     } catch (const SpotifyError &error) {
+        if (!self) co_return;
         setEvaluatingStoredLogin(false);
         reportError(error.message());
         qCWarning(lcSession) << "reading saved logins:" << error.message();
         co_return;
     }
-    if (generation != m_generation) {
+    if (!self || generation != m_generation) {
         co_return;
     }
 
@@ -505,6 +515,8 @@ QCoro::Task<> SpotifySession::logOutAsync()
     setConnected(false);
     setLibraryConnected(false, false);
     setEvaluatingStoredLogin(false);
+    m_restoreStarted = false;
+    m_restoring = false;
     emit loggedOut();
 }
 
@@ -729,7 +741,7 @@ void SpotifySession::persist(CredentialStore::Account account)
 
 QCoro::Task<> SpotifySession::drainSaves(CredentialStore::Account account)
 {
-    // one write at a time, the latest last: a slow keychain never ends up
+    // one write at a time, the latest last: a slow credential store never ends up
     // holding an older token than the one in use
     SaveQueue &queue = m_saves[int(account)];
     queue.running = true;

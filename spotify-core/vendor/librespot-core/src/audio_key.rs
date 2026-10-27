@@ -50,10 +50,18 @@ component! {
         pending: HashMap<u32, oneshot::Sender<Result<AudioKey, Error>>> = HashMap::new(),
         cache: HashMap<FileId, AudioKey> = HashMap::new(),
         ap_refused: bool = false,
+        refusals: u64 = 0,
     }
 }
 
 impl AudioKeyManager {
+    /// how many key requests spotify has refused since this manager was made.
+    /// an account spotify has locked out of the aes keys (a new one) gets
+    /// every request refused, and a rate-limited one a run of them
+    pub fn refusals(&self) -> u64 {
+        self.lock(|inner| inner.refusals)
+    }
+
     pub(crate) fn dispatch(&self, cmd: PacketType, mut data: Bytes) -> Result<(), Error> {
         let seq = BigEndian::read_u32(data.split_to(4).as_ref());
 
@@ -75,6 +83,7 @@ impl AudioKeyManager {
                     data.as_ref()[0],
                     data.as_ref()[1]
                 );
+                self.lock(|inner| inner.refusals += 1);
                 sender
                     .send(Err(AudioKeyError::AesKey.into()))
                     .map_err(|_| AudioKeyError::Channel)?

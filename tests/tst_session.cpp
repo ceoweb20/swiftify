@@ -4,6 +4,7 @@
 #include "app/Settings.h"
 #include "core/Async.h"
 #include "library/LibraryStore.h"
+#include "playback/PlaybackController.h"
 #include "spotify/SpotifyJson.h"
 #include "spotify/CredentialStore.h"
 #include "spotify/OAuthFlow.h"
@@ -24,6 +25,7 @@
 #include <QUrlQuery>
 
 #include <algorithm>
+#include <array>
 #include <utility>
 
 using namespace swiftify;
@@ -221,6 +223,48 @@ public:
     }
 };
 
+class CountingStore : public MemoryCredentialStore {
+public:
+    std::array<int, 2> reads {};
+    std::array<int, 2> writes {};
+    int removals = 0;
+    bool rejectWrite = false;
+    QCoro::Task<std::optional<StoredCredentials>> load(Account account) override
+    {
+        ++reads[size_t(account)];
+        co_return co_await MemoryCredentialStore::load(account);
+    }
+    QCoro::Task<> save(Account account, StoredCredentials credentials) override
+    {
+        ++writes[size_t(account)];
+        if (rejectWrite) throw SpotifyError(SpotifyError::Kind::Credentials, QStringLiteral("Fixture denied write"));
+        co_await MemoryCredentialStore::save(account, credentials);
+    }
+    QCoro::Task<> removeAll() override
+    {
+        ++removals;
+        co_await MemoryCredentialStore::removeAll();
+    }
+};
+
+QCoro::Task<> readCredentials(CredentialStore &store, CredentialStore::Account account,
+                              std::optional<StoredCredentials> &result, bool &done)
+{
+    result = co_await store.load(account); done = true;
+}
+
+QCoro::Task<> writeCredentials(CredentialStore &store, CredentialStore::Account account,
+                               StoredCredentials credentials, bool &success)
+{
+    try { co_await store.save(account, credentials); success = true; }
+    catch (const SpotifyError &) { success = false; }
+}
+
+QCoro::Task<> clearCredentials(CredentialStore &store, bool &done)
+{
+    co_await store.removeAll(); done = true;
+}
+
 QCoro::Task<> fetchLibraryToken(SpotifySession &session, QStringList &tokens)
 {
     try {
@@ -317,6 +361,144 @@ private:
     }
 
 private slots:
+    void secureStoreCacheSkipsRepeatedReadsAndIdenticalWrites()
+    {
+        CountingStore backend;
+        const auto account = CredentialStore::Account::Library;
+        const auto index = size_t(account);
+        StoredCredentials original {QStringLiteral("fixture-client"), QStringLiteral("fixture-refresh"), 2};
+        backend.items.insert(account, original);
+        CachedCredentialStore cache(&backend);
+        std::optional<StoredCredentials> result;
+        bool done = false;
+        detach(readCredentials(cache, account, result, done)); QTRY_VERIFY(done);
+        QVERIFY(result); QCOMPARE(backend.reads[index], 1);
+        done = false;
+        detach(readCredentials(cache, account, result, done)); QTRY_VERIFY(done);
+        QCOMPARE(backend.reads[index], 1);
+        QCOMPARE(result->refreshToken, original.refreshToken);
+        bool success = false;
+        detach(writeCredentials(cache, account, original, success)); QTRY_VERIFY(success);
+        QCOMPARE(backend.writes[index], 0);
+        auto updated = original; updated.refreshToken = QStringLiteral("fixture-rotated");
+        success = false;
+        detach(writeCredentials(cache, account, updated, success)); QTRY_VERIFY(success);
+        QCOMPARE(backend.writes[index], 1);
+        QCOMPARE(backend.items[account].refreshToken, updated.refreshToken);
+        done = false;
+        detach(readCredentials(cache, account, result, done)); QTRY_VERIFY(done);
+        QCOMPARE(result->refreshToken, updated.refreshToken);
+        QCOMPARE(backend.reads[index], 1);
+        done = false; detach(clearCredentials(cache, done)); QTRY_VERIFY(done);
+        QCOMPARE(backend.removals, 1);
+        done = false;
+        detach(readCredentials(cache, account, result, done)); QTRY_VERIFY(done);
+        QVERIFY(!result); QCOMPARE(backend.reads[index], 1);
+    }
+
+    void secureStoreCacheDoesNotPretendAFailedWriteWasSaved()
+    {
+        CountingStore backend;
+        const auto account = CredentialStore::Account::Playback;
+        StoredCredentials old {QStringLiteral("fixture-client"), QStringLiteral("fixture-old"), 2};
+        backend.items.insert(account, old);
+        CachedCredentialStore cache(&backend);
+        std::optional<StoredCredentials> result;
+        bool done = false;
+        detach(readCredentials(cache, account, result, done)); QTRY_VERIFY(done);
+        backend.rejectWrite = true;
+        auto replacement = old; replacement.refreshToken = QStringLiteral("fixture-new");
+        bool success = true;
+        detach(writeCredentials(cache, account, replacement, success));
+        QTRY_VERIFY(!success);
+        done = false;
+        detach(readCredentials(cache, account, result, done)); QTRY_VERIFY(done);
+        QCOMPARE(result->refreshToken, old.refreshToken);
+        QCOMPARE(backend.items[account].refreshToken, old.refreshToken);
+    }
+
+    void reopeningAWindowDoesNotRestoreCredentialsAgain()
+    {
+        CountingStore store;
+        ErrorCenter errors(nullptr);
+        FakeAccounts network;
+        FakeCore core;
+        SpotifySession session(&core, &store, &network, &errors);
+        session.restoreSavedSessions();
+        session.restoreSavedSessions();
+        QTRY_COMPARE(store.reads[0], 1);
+        QCOMPARE(store.reads[1], 1);
+        session.restoreSavedSessions();
+        QCOMPARE(store.reads[0], 1);
+        session.logOut();
+        QTRY_COMPARE(store.removals, 1);
+        session.restoreSavedSessions();
+        QTRY_COMPARE(store.reads[0], 2);
+        QCOMPARE(store.reads[1], 2);
+    }
+
+    void savedSongRequestsDisableBothControlsUntilCompletion()
+    {
+        Rig rig;
+        QTemporaryDir directory;
+        Settings settings(directory.filePath(QStringLiteral("test.conf")));
+        LibraryStore library(&rig.session, &settings, &rig.errors);
+        rig.session.setInitialLibraryLoader({});
+        rig.storeLibrary(rig.accounts.login(), QStringLiteral("valid-access"), 30);
+        rig.session.restoreSavedSessions();
+        QTRY_VERIFY(rig.session.hasLibraryToken());
+        rig.accounts.api.insert(QStringLiteral("/v1/me/library"), {});
+        rig.accounts.holding = true;
+        Song song;
+        song.uri = QStringLiteral("spotify:track:fixture");
+        library.toggleSaved(song);
+        QVERIFY(library.isSaved(song.uri));
+        QVERIFY(library.isSavePending(song.uri));
+        library.toggleSaved(song); // Duplicate click must not reverse a pending request.
+        QVERIFY(library.isSaved(song.uri));
+        rig.accounts.release();
+        QTRY_VERIFY(!library.isSavePending(song.uri));
+        QVERIFY(library.isSaved(song.uri));
+        library.toggleSaved(song);
+        QVERIFY(!library.isSaved(song.uri));
+        QVERIFY(library.isSavePending(song.uri));
+        rig.accounts.release();
+        QTRY_VERIFY(!library.isSavePending(song.uri));
+        QVERIFY(!library.isSaved(song.uri));
+        rig.accounts.api.remove(QStringLiteral("/v1/me/library")); // Fixture rejects the next save.
+        library.toggleSaved(song);
+        QVERIFY(library.isSaved(song.uri));
+        rig.accounts.release();
+        QTRY_VERIFY(!library.isSavePending(song.uri));
+        QVERIFY(!library.isSaved(song.uri)); // Failed writes roll back and re-enable the controls.
+    }
+
+    void currentTrackSavedStatusIsCheckedWhenPlaybackChanges()
+    {
+        Rig rig;
+        QTemporaryDir directory;
+        Settings settings(directory.filePath(QStringLiteral("test.conf")));
+        PlaybackController player(&rig.core, &rig.session, &settings, &rig.errors);
+        LibraryStore library(&rig.session, &settings, &rig.errors);
+        library.attachPlayer(&player);
+        rig.session.setInitialLibraryLoader({});
+        rig.accounts.api.insert(QStringLiteral("/v1/me/library/contains"), "[true]");
+        rig.storeLibrary(rig.accounts.login(), QStringLiteral("valid-access"), 30);
+        rig.storePlayback(rig.accounts.login(), QStringLiteral("stored-login"));
+        rig.session.restoreSavedSessions();
+        settle();
+        const auto connect = rig.core.take(QStringLiteral("connectStored"));
+        QVERIFY(connect);
+        connect->succeed(QStringLiteral("stored-login"));
+        QTRY_VERIFY(rig.session.isConnected());
+        Song song;
+        song.uri = QStringLiteral("spotify:track:fixture");
+        song.name = QStringLiteral("Fixture");
+        player.play(song, {song});
+        QTRY_VERIFY(library.isSaved(song.uri));
+        rig.core.reset();
+    }
+
     void savedLoginsKeepWhatTheyHold()
     {
         const StoredCredentials credentials {QStringLiteral("client"), QStringLiteral("refresh"), 2,
@@ -582,6 +764,12 @@ private slots:
             return result;
         };
         rig.accounts.api.insert(QStringLiteral("/v1/me"), R"({"id":"me","display_name":"Me"})");
+        rig.accounts.api.insert(QStringLiteral("/v1/artists/sade"),
+                                "{\"id\":\"sade\",\"uri\":\"spotify:artist:sade\",\"name\":\"Sade\",\"images\":["
+                                "{\"url\":\"https://images.test/sade-small.jpg\",\"width\":160},"
+                                "{\"url\":\"https://images.test/sade.jpg\",\"width\":640}]}");
+        rig.accounts.api.insert(QStringLiteral("/v1/artists/gone"),
+                                "{\"id\":\"gone\",\"uri\":\"spotify:artist:gone\",\"name\":\"Gone\",\"images\":[]}");
         rig.accounts.api.insert(QStringLiteral("/v1/artists/sade/albums"),
                                 R"({"items":[{"id":"diamond","name":"Diamond Life","uri":"spotify:album:diamond"}]})");
         rig.accounts.api.insert(QStringLiteral("/v1/artists/gone/albums"),
@@ -599,8 +787,10 @@ private slots:
         Artist sade;
         sade.id = QStringLiteral("sade");
         sade.name = QStringLiteral("Sade");
+        QVERIFY(sade.artworkUrl.isEmpty()); // Credits in a track have no portrait.
         library.selectArtist(sade);
-        settle();
+        const QUrl portrait(QStringLiteral("https://images.test/sade.jpg"));
+        QTRY_COMPARE(library.currentArtist().artworkUrl, portrait);
         const auto read = rig.core.take(QStringLiteral("topTracks"));
         QVERIFY(read);
         QCOMPARE(read->argument, QStringLiteral("spotify:artist:sade"));
@@ -623,6 +813,44 @@ private slots:
         QTRY_COMPARE(library.artistAlbums()->items().size(), 1);
         QCOMPARE(library.artistAlbums()->items().first().name, QStringLiteral("Left Behind"));
         QVERIFY(names().isEmpty());
+        QCOMPARE(rig.errors.message(), QString());
+        QVERIFY(library.currentArtist().artworkUrl.isEmpty()); // A genuinely absent photo stays absent.
+
+        // Reopening from the same sparse track credits keeps the fetched portrait.
+        library.selectArtist(sade);
+        QCOMPARE(library.currentArtist().artworkUrl, portrait);
+        settle();
+        const auto again = rig.core.take(QStringLiteral("topTracks"));
+        QVERIFY(again);
+        again->succeed(QStringLiteral("{\"tracks\":[]}"));
+        QTRY_VERIFY(!library.isLoadingArtist());
+        QCOMPARE(library.currentArtist().artworkUrl, portrait);
+
+        // A late profile from the previous page must not replace the current artist.
+        rig.accounts.holding = true;
+        library.selectArtist(sade);
+        library.selectArtist(gone);
+        rig.accounts.holding = false;
+        rig.accounts.release();
+        settle();
+        QCOMPARE(library.currentArtist().id, gone.id);
+        QVERIFY(library.currentArtist().artworkUrl.isEmpty());
+        const auto latest = rig.core.take(QStringLiteral("topTracks"));
+        QVERIFY(latest);
+        QCOMPARE(latest->argument, QStringLiteral("spotify:artist:gone"));
+        latest->succeed(QStringLiteral("{\"tracks\":[]}"));
+        QTRY_VERIFY(!library.isLoadingArtist());
+
+        // A refused refresh neither erases a cached portrait nor blocks albums.
+        rig.accounts.api.remove(QStringLiteral("/v1/artists/sade"));
+        library.selectArtist(sade);
+        settle();
+        const auto deniedProfile = rig.core.take(QStringLiteral("topTracks"));
+        QVERIFY(deniedProfile);
+        deniedProfile->succeed(QStringLiteral("{\"tracks\":[]}"));
+        QTRY_VERIFY(!library.isLoadingArtist());
+        QCOMPARE(library.currentArtist().artworkUrl, portrait);
+        QCOMPARE(library.artistAlbums()->items().size(), 1);
         QCOMPARE(rig.errors.message(), QString());
     }
 

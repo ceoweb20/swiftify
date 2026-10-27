@@ -4,19 +4,16 @@ import QtQuick.Controls.Basic
 import Swiftify
 
 // My Playlists, or the pinned ones (PlaylistGridView / PinnedPlaylistsView):
-// an adaptive grid of 180-240 px tiles. `local`, it is Local Files: the
-// playlists made on this computer, after a card for every file.
+// an adaptive grid of 180-240 px tiles.
 GridView {
     id: root
 
     property bool pinnedOnly: false
-    property bool local: false
     property bool personalized: false
-    readonly property PlaylistListModel source: local ? LocalFiles.playlists
-                                                : personalized ? Library.personalizedPlaylists
+    readonly property PlaylistListModel source: personalized ? Library.personalizedPlaylists
                                                 : pinnedOnly ? Library.pinnedPlaylists : Library.playlists
-    /// the tiles ahead of the playlists: a new playlist's, then local tracks'
-    readonly property int leading: pinnedOnly || personalized ? 0 : (local ? 2 : 1)
+    /// the tiles ahead of the playlists: a new playlist's
+    readonly property int leading: pinnedOnly || personalized ? 0 : 1
     readonly property real margin: Appearance.sizes.pageMargin
     // whole columns at least 200 px wide that fill the width exactly: the
     // grid lays columns out by cellWidth, so tile plus gap has to divide it.
@@ -52,7 +49,7 @@ GridView {
             anchors.fill: parent
             anchors.topMargin: -24
             anchors.bottomMargin: -24
-            key: root.local ? "local" : root.pinnedOnly ? "pinned" : "playlists"
+            key: root.pinnedOnly ? "pinned" : "playlists"
             count: 4
             maximumSize: 150
         }
@@ -60,7 +57,7 @@ GridView {
         TitleText {
             x: 10
             anchors.verticalCenter: parent.verticalCenter
-            text: root.local ? qsTr("Local Files") : root.pinnedOnly ? qsTr("Pinned Playlists") : qsTr("My Playlists")
+            text: root.pinnedOnly ? qsTr("Pinned Playlists") : qsTr("My Playlists")
             font.pixelSize: Appearance.fontSize.display
             font.weight: Font.Bold
         }
@@ -80,26 +77,14 @@ GridView {
 
         required property int index
         readonly property bool isNewTile: !root.pinnedOnly && !root.personalized && index === 0
-        readonly property bool isTracksTile: root.local && index === 1
         readonly property playlist playlist: root.source.at(index - root.leading)
 
         width: root.cellWidth
         height: root.cellHeight
 
-        // every music file of the person's own, as a list
         MediaCard {
             x: 10
-            visible: cell.isTracksTile
-            artworkSize: root.tile
-            placeholderSymbol: "folder_open"
-            title: qsTr("Local Tracks")
-            subtitle: Format.songCount(LocalFiles.songs.count)
-            onClicked: Library.showLocalTracks()
-        }
-
-        MediaCard {
-            x: 10
-            visible: !cell.isNewTile && !cell.isTracksTile
+            visible: !cell.isNewTile
             artworkSize: root.tile
             artworkUrl: cell.playlist.artworkUrl
             fallbackKey: cell.playlist.id.length > 0 ? cell.playlist.id : cell.playlist.name
@@ -140,8 +125,7 @@ GridView {
             buttonRadius: Appearance.sizes.artworkRadius
             colBackground: Appearance.colors.surfaceContainerLow
             colBackgroundHover: Appearance.colors.surfaceContainer
-            // a local one holds files, and is kept on this computer
-            onClicked: root.local ? UiState.createLocalPlaylistRequested(null) : UiState.beginCreatePlaylist()
+            onClicked: UiState.beginCreatePlaylist()
 
             contentItem: Column {
                 spacing: 10
@@ -205,20 +189,6 @@ GridView {
                     }
                     Library.togglePinned(root.menuPlaylist)
                 }
-            }
-            // spotify's are deleted from their own page, a local one from
-            // here too: nothing else lists it
-            StyledMenuSeparator {
-                visible: root.local
-                height: visible ? implicitHeight : 0
-            }
-            StyledMenuItem {
-                visible: root.local
-                height: visible ? implicitHeight : 0
-                text: qsTr("Delete Playlist")
-                symbol: "delete"
-                destructive: true
-                onTriggered: UiState.deletePlaylistRequested(root.menuPlaylist)
             }
         }
     }

@@ -93,6 +93,9 @@ void RustCore::open()
     if (m_normalizeVolume) {
         swiftify_string_free(swiftify_core_set_volume_normalization(m_core, true));
     }
+    if (!m_connectName.isEmpty()) {
+        swiftify_string_free(swiftify_core_set_connect(m_core, m_connectEnabled, m_connectName.toUtf8().constData()));
+    }
     if (!m_cachePath.isEmpty()) {
         swiftify_string_free(swiftify_core_set_audio_cache(m_core, m_cachePath.toUtf8().constData(),
                                                            quint64(std::max<qint64>(0, m_cacheBytes))));
@@ -154,9 +157,10 @@ QCoro::Task<QString> RustCore::request(Start start)
         throw Cancelled();
     }
     if (!ok) {
-        throw SpotifyError(payload == QLatin1StringView(SWIFTIFY_CORE_SUPERSEDED)     ? SpotifyError::Kind::Superseded
-                           : payload == QLatin1StringView(SWIFTIFY_CORE_UNAVAILABLE) ? SpotifyError::Kind::Unavailable
-                                                                                      : SpotifyError::Kind::Core,
+        throw SpotifyError(payload == QLatin1StringView(SWIFTIFY_CORE_SUPERSEDED)           ? SpotifyError::Kind::Superseded
+                           : payload == QLatin1StringView(SWIFTIFY_CORE_UNAVAILABLE)       ? SpotifyError::Kind::Unavailable
+                           : payload == QLatin1StringView(SWIFTIFY_CORE_AUDIO_KEY_REFUSED) ? SpotifyError::Kind::AudioKeyRefused
+                                                                                           : SpotifyError::Kind::Core,
                            payload);
     }
     co_return payload;
@@ -203,12 +207,6 @@ QCoro::Task<> RustCore::crossfadeTrack(QString spotifyUri, quint32 durationMs)
     });
 }
 
-QCoro::Task<> RustCore::playFile(QString path)
-{
-    const QByteArray file = path.toUtf8();
-    co_await request([&](quint64 id) { swiftify_core_play_file(m_core, id, file.constData()); });
-}
-
 QCoro::Task<> RustCore::restartAudioOutput()
 {
     co_await request([&](quint64 id) { swiftify_core_restart_audio_output(m_core, id); });
@@ -252,6 +250,13 @@ void RustCore::setVolumeNormalization(bool enabled)
 {
     m_normalizeVolume = enabled;
     throwIfError(swiftify_core_set_volume_normalization(m_core, enabled));
+}
+
+void RustCore::setConnectDevice(bool enabled, const QString &name)
+{
+    m_connectEnabled = enabled;
+    m_connectName = name;
+    throwIfError(swiftify_core_set_connect(m_core, enabled, name.toUtf8().constData()));
 }
 
 void RustCore::setAudioCache(const QString &path, qint64 limitBytes)

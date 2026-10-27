@@ -14,6 +14,11 @@ class QNetworkAccessManager;
 
 namespace swiftify {
 
+struct RecentPlayback {
+    QList<Song> songs;
+    QStringList playlistIds;
+};
+
 /// the spotify web api calls the library needs, as SpotifyWebAPI.swift makes
 /// them. every call throws SpotifyError on failure; a 401 surfaces as Unauthorized
 /// so the caller can refresh its token and retry once.
@@ -25,6 +30,8 @@ public:
 
     QCoro::Task<Profile> profile(QString accessToken);
     QCoro::Task<QList<Playlist>> playlists(QString accessToken);
+    QCoro::Task<Playlist> playlist(QString playlistId, QString accessToken);
+    QCoro::Task<RecentPlayback> recentHistory(QString accessToken, int limit = 20);
     QCoro::Task<QList<Song>> playlistSongs(QString playlistId, QString accessToken);
     QCoro::Task<QList<Song>> savedSongs(QString accessToken);
     /// how many songs are saved, from one page of one: the count without the list
@@ -33,7 +40,7 @@ public:
     QCoro::Task<SearchResults> search(QString query, QString accessToken);
     QCoro::Task<Song> song(QString trackId, QString accessToken);
     QCoro::Task<Album> album(QString albumId, QString accessToken);
-    QCoro::Task<Playlist> playlist(QString playlistId, QString accessToken);
+    /// Full artist profile (including images), unlike the credits inside a track.
     QCoro::Task<Artist> artist(QString artistId, QString accessToken);
     QCoro::Task<QList<Song>> albumSongs(Album album, QString accessToken);
     QCoro::Task<QList<Album>> artistAlbums(Artist artist, QString accessToken);

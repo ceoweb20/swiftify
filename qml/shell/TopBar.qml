@@ -110,7 +110,7 @@ Item {
                 iconSize: root.compact ? 19 : 26
                 shape: "clover4"
                 symbol: "add"
-                onClicked: Library.selectedPlaylist.isLocal ? UiState.createLocalPlaylistRequested(null) : UiState.beginCreatePlaylist()
+                onClicked: UiState.beginCreatePlaylist()
                 tooltip: qsTr("New Playlist")
             }
             ToolbarButton {
@@ -125,7 +125,6 @@ Item {
             }
             ToolbarButton {
                 effect: ToolbarButton.Pop
-                Reveal.shown: !Library.selectedPlaylist.isLocal
                 size: root.buttonSize
                 iconSize: root.compact ? 19 : 26
                 shape: "cookie6"
@@ -259,11 +258,6 @@ Item {
         }
     }
 
-    MusicPicker {
-        id: trackPicker
-        playlistId: Library.selectedPlaylist.isLocal ? Library.selectedPlaylist.id : ""
-    }
-
     MenuLoader {
         id: playbackMenu
         sourceComponent: PlaybackMenu {}
@@ -275,7 +269,7 @@ Item {
             StyledMenuItem {
                 text: qsTr("New Playlist")
                 symbol: "add"
-                onTriggered: Library.selectedPlaylist.isLocal ? UiState.createLocalPlaylistRequested(null) : UiState.beginCreatePlaylist()
+                onTriggered: UiState.beginCreatePlaylist()
             }
             StyledMenuItem {
                 visible: Library.selectedPlaylistEditable
@@ -285,22 +279,6 @@ Item {
                 onTriggered: UiState.editPlaylistRequested()
             }
             StyledMenuItem {
-                visible: Library.selectedPlaylist.isLocal
-                height: visible ? implicitHeight : 0
-                text: qsTr("Add Tracks…")
-                symbol: "playlist_add"
-                onTriggered: trackPicker.pickFiles()
-            }
-            StyledMenuItem {
-                visible: Library.selectedPlaylist.isLocal
-                height: visible ? implicitHeight : 0
-                text: qsTr("Add a Folder…")
-                symbol: "create_new_folder"
-                onTriggered: trackPicker.pickFolder()
-            }
-            StyledMenuItem {
-                visible: !Library.selectedPlaylist.isLocal
-                height: visible ? implicitHeight : 0
                 text: qsTr("Open in Spotify")
                 symbol: "open_in_new"
                 onTriggered: App.openUrl(root.playlistLink)

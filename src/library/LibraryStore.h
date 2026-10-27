@@ -22,7 +22,6 @@ class QJSEngine;
 namespace swiftify {
 
 class ErrorCenter;
-class LocalLibrary;
 class PlaybackController;
 class Settings;
 class SpotifySession;
@@ -144,9 +143,7 @@ class LibraryStore : public QObject {
     Q_PROPERTY(bool savingPlaylist READ isSavingPlaylist NOTIFY loadingChanged FINAL)
 
 public:
-    /// LocalFiles is the grid of playlists made on this computer, opening on
-    /// LocalTracks, every music file of the person's own as a list
-    enum class Page { Home, Search, Songs, Playlists, PinnedPlaylists, Playlist, Album, Artist, LocalFiles, LocalTracks, Stats, Personalized };
+    enum class Page { Home, Search, Songs, Playlists, PinnedPlaylists, Playlist, Album, Artist, Stats, Personalized, Collections };
     Q_ENUM(Page)
     enum class SortOrder { Playlist, Title, Artist, Album, Duration };
     Q_ENUM(SortOrder)
@@ -159,9 +156,6 @@ public:
 
     /// the player records search plays here
     void attachPlayer(PlaybackController *player);
-    /// playlists made on this computer open, and are edited, like the
-    /// person's own spotify playlists
-    void attachLocalFiles(LocalLibrary *localFiles);
 
     Page page() const { return m_destination.page; }
     QString selectedPlaylistId() const { return m_destination.page == Page::Playlist ? m_destination.playlistId : QString(); }
@@ -237,13 +231,9 @@ public:
     Q_INVOKABLE void showPinnedPlaylists();
     Q_INVOKABLE void showPersonalized();
     Q_INVOKABLE void refreshDiscovery();
-    /// music files of the person's own (LocalLibrary): the playlists made of
-    /// them, and a way to all of them
-    Q_INVOKABLE void showLocalFiles();
-    /// every music file of the person's own, as a list
-    Q_INVOKABLE void showLocalTracks();
     /// what the person has been listening to (StatsStore)
     Q_INVOKABLE void showStats();
+    Q_INVOKABLE void showCollections();
     Q_INVOKABLE void selectPlaylist(const swiftify::Playlist &playlist);
     Q_INVOKABLE void selectPlaylistById(const QString &id);
     Q_INVOKABLE void selectAlbum(const swiftify::Album &album);
@@ -257,6 +247,7 @@ public:
     Q_INVOKABLE bool isPinned(const QString &playlistId) const { return m_pinnedIds.contains(playlistId); }
     Q_INVOKABLE void togglePinned(const swiftify::Playlist &playlist);
     Q_INVOKABLE bool isSaved(const QString &uri) const { return m_savedUris.contains(uri); }
+    Q_INVOKABLE bool isSavePending(const QString &uri) const { return m_pendingSavedUris.contains(uri); }
     Q_INVOKABLE void toggleSaved(const swiftify::Song &song);
     Q_INVOKABLE QVariantList editablePlaylists() const;
     Q_INVOKABLE void clearSearchHistory();
@@ -272,11 +263,6 @@ public:
     /// when one is given. reports through playlistSaveFinished.
     Q_INVOKABLE void savePlaylist(bool isNew, const QString &name, const QString &description, bool isPublic,
                                   const QByteArray &coverJpeg);
-    /// creates a playlist of music files on this computer, holding
-    /// `firstSong` when that is one (a song, or null), or updates the open
-    /// one. reports through playlistSaveFinished.
-    Q_INVOKABLE void saveLocalPlaylist(bool isNew, const QString &name, const QString &description,
-                                       const QByteArray &coverJpeg, const QVariant &firstSong);
 
     /// what a library login runs before it counts as done
     QCoro::Task<> loadInitialLibrary();
@@ -310,6 +296,7 @@ private:
     struct ArtistDetail {
         QList<Song> topSongs;
         QList<Album> albums;
+        Artist artist;
     };
 
     void navigate(const Destination &destination);
@@ -328,11 +315,6 @@ private:
     void reportError(const QString &context, const QString &message);
     void reset();
     QString reorderFailureMessage(const QString &message, bool forbidden, const Playlist &playlist) const;
-    /// the open playlist's songs again, once a playlist made here or the
-    /// files it holds changed
-    void refreshLocalPlaylist();
-    void removeFromLocalPlaylist(const Song &song, const Playlist &playlist);
-    void deleteLocalPlaylist(const Playlist &playlist);
 
     QCoro::Task<> loadPlaylists();
     QCoro::Task<> loadHome();
@@ -341,7 +323,7 @@ private:
     QCoro::Task<> loadSavedSongTotal();
     /// a save or removal before the list has loaded
     void adjustSavedSongTotal(int delta);
-    QCoro::Task<> loadSavedStatuses(QList<Song> songs);
+    QCoro::Task<> loadSavedStatuses(QList<Song> songs, CancelToken token = {});
     QCoro::Task<> runPlaylistLoad(Playlist playlist, CancelToken token);
     QCoro::Task<> runAlbumLoad(Album album, CancelToken token);
     QCoro::Task<> runArtistLoad(Artist artist, CancelToken token);
@@ -360,7 +342,6 @@ private:
     SpotifySession *m_session;
     Settings *m_settings;
     ErrorCenter *m_errors;
-    LocalLibrary *m_localFiles = nullptr;
 
     Destination m_destination;
     QList<Destination> m_history;
@@ -431,6 +412,7 @@ private:
     TaskSlot m_artistLoad;
     TaskSlot m_search;
     TaskSlot m_discoveryLoad;
+    TaskSlot m_currentSavedStatus;
 };
 
 } // namespace swiftify

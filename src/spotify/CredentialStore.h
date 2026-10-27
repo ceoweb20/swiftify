@@ -6,11 +6,11 @@
 #include <QCoroTask>
 
 #include <optional>
+#include <memory>
 
 namespace swiftify {
 
-/// a saved login. the json the apple apps keep in their keychain, and more
-/// that they ignore.
+/// A saved login, serialized inside the encrypted credential vault.
 struct StoredCredentials {
     QString clientId;
     /// spotify rotates it on every refresh and revokes it if an old one is
@@ -41,25 +41,24 @@ public:
     virtual QCoro::Task<> save(Account account, StoredCredentials credentials) = 0;
     virtual QCoro::Task<> removeAll() = 0;
 
-    /// the keychain item names the apple apps use. a development build on a mac
-    /// would otherwise share (and rotate) the swift app's own login.
-    static QString service()
-    {
-#ifdef Q_OS_MACOS
-        return QStringLiteral("dev.addenator.Swiftify.spotify.qt-development");
-#else
-        return QStringLiteral("dev.addenator.Swiftify.spotify");
-#endif
-    }
     static QString accountName(Account account);
 };
 
-/// the secret service (gnome keyring, kwallet, keepassxc) through qtkeychain.
-class KeychainCredentialStore : public CredentialStore {
+/// Cache only in process memory; durable secrets still use the wrapped secure
+/// store. Avoids repeated reads and identical writes without weakening its ACL.
+class CachedCredentialStore final : public CredentialStore {
 public:
+    explicit CachedCredentialStore(CredentialStore *backend);
+    ~CachedCredentialStore() override;
+    CachedCredentialStore(const CachedCredentialStore &) = delete;
+    CachedCredentialStore &operator=(const CachedCredentialStore &) = delete;
     QCoro::Task<std::optional<StoredCredentials>> load(Account account) override;
     QCoro::Task<> save(Account account, StoredCredentials credentials) override;
     QCoro::Task<> removeAll() override;
+private:
+    struct State;
+    CredentialStore *m_backend;
+    std::shared_ptr<State> m_state;
 };
 
 /// kept in memory, for tests.

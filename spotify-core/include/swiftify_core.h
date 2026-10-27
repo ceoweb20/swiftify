@@ -27,6 +27,17 @@ SwiftifyCore *swiftify_core_new(void);
 void swiftify_core_free(SwiftifyCore *core);
 void swiftify_string_free(char *value);
 
+/* Opaque password-derived key, kept in memory only; no OS credential store. */
+typedef struct SwiftifyVault SwiftifyVault;
+/* Open an encrypted vault (empty encoded means create). Derivation is expensive:
+ * call from a worker thread. plaintext/error are owned strings, initially null. */
+SwiftifyVault *swiftify_vault_open(const char *password, const char *encoded,
+                                  char **plaintext, char **error);
+char *swiftify_vault_seal(const SwiftifyVault *vault, const char *plaintext, char **error);
+void swiftify_vault_free(SwiftifyVault *vault);
+/* Wipe and free a decrypted string instead of using swiftify_string_free. */
+void swiftify_secret_free(char *value);
+
 int swiftify_core_completion_fd(const SwiftifyCore *core);
 /* where there is no descriptor (windows: it is -1), callback(context) is
  * called from the finishing thread instead each time a completion is queued;
@@ -46,6 +57,9 @@ bool swiftify_core_take_completion(const SwiftifyCore *core, uint64_t *request_i
 #define SWIFTIFY_CORE_SUPERSEDED "the request was replaced by a newer one"
 /* a play call for a track spotify will not give this account fails with this */
 #define SWIFTIFY_CORE_UNAVAILABLE "Spotify could not load this track."
+/* a play call for an account spotify refuses the audio key for fails with
+ * this: new accounts only play through spotify's own clients */
+#define SWIFTIFY_CORE_AUDIO_KEY_REFUSED "Spotify refused the audio key for this account."
 
 void swiftify_core_connect(const SwiftifyCore *core, uint64_t request_id, const char *access_token,
                            const char *client_id);
@@ -74,26 +88,6 @@ void swiftify_core_playlist_json(const SwiftifyCore *core, uint64_t request_id,
  * /v1/artists/{id}/top-tracks response. */
 void swiftify_core_artist_top_tracks_json(const SwiftifyCore *core, uint64_t request_id,
                                           const char *artist_uri);
-/* plays a music file of the person's own from anywhere on disk: mp3, flac,
- * ogg vorbis, wav, aiff, or aac or apple lossless in an m4a. */
-void swiftify_core_play_file(const SwiftifyCore *core, uint64_t request_id, const char *path);
-
-/* what a music file's tags say, as json: title, artist, album, albumArtist,
- * trackNumber, discNumber, date, genre (each null when the file does not
- * say), durationMs and artworkPath (an embedded cover written into
- * artwork_dir under a name taken from its contents, or a cover image kept
- * beside the file, or null). null with *error set if it cannot be read.
- * needs no core and may be called from any thread. */
-char *swiftify_read_local_tags(const char *path, const char *artwork_dir, char **error);
-/* writes edits into a music file's tags: json with any of title, artist,
- * album, albumArtist, genre, date, trackNumber, discNumber (each set, or
- * cleared when empty; one left out is kept) and removeArtwork, with
- * `artwork` (artwork_len bytes of a jpeg or png, or null) as the front
- * cover. returns null, or an error to free; the file is left as it was if
- * anything fails. needs no core and may be called from any thread. */
-char *swiftify_write_local_tags(const char *path, const char *edits, const uint8_t *artwork,
-                                size_t artwork_len);
-
 void swiftify_core_disconnect(const SwiftifyCore *core);
 /* Personalized Spotify shelves and saved playlists, using the playback session. */
 void swiftify_core_discovery_json(const SwiftifyCore *core, uint64_t request_id, const char *locale);
@@ -108,6 +102,11 @@ char *swiftify_core_set_volume_normalization(const SwiftifyCore *core, bool enab
  * next time playback connects */
 char *swiftify_core_set_audio_cache(const SwiftifyCore *core, const char *path,
                                     uint64_t limit_bytes);
+/* whether the app is to show as a spotify connect device called name and
+ * report what it plays, which anything watching the account (a scrobbling bot)
+ * sees; it cannot be controlled from elsewhere. applies the next time playback
+ * connects. returns null, or an error to free. */
+char *swiftify_core_set_connect(const SwiftifyCore *core, bool enabled, const char *name);
 char *swiftify_core_set_playback_shaping(const SwiftifyCore *core, float tempo,
                                          float pitch_semitones, bool preserves_pitch);
 char *swiftify_core_set_preamp_gain(const SwiftifyCore *core, float gain_db);

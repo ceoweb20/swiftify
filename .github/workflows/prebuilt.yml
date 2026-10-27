@@ -1,11 +1,10 @@
-# prebuilt windows and linux x86_64 builds and a macos arm64 dmg. a v tag
-# (v0.10.0) builds all three and puts them on a draft release to publish by
-# hand. it also runs from the actions tab, and on pull requests that change how
-# the builds are made
+# Native macOS arm64/Intel, Windows x64 and Linux x64 builds, plus signed update
+# metadata for the in-app updater. Pushing a v<version> tag publishes a release.
 name: prebuilt
 
 on:
   push:
+    branches: [main]
     tags: ['v*']
   workflow_dispatch:
   pull_request:
@@ -13,16 +12,38 @@ on:
       - .github/workflows/prebuilt.yml
       - tools/build-windows.ps1
       - tools/build-linux-tarball.sh
-      - tools/build-macos-dmg.sh
+      - tools/build-macos-portable.sh
+      - tools/package-portable.py
+      - tools/sign-updates.py
+      - tools/update-helper/**
+      - CMakeLists.txt
+      - cmake/**
+      - src/**
+      - qml/**
+      - spotify-core/**
+      - translations/**
 
 permissions:
   contents: read
+
+env:
+  QT_VERSION: 6.11.3
+  SWIFTIFY_UPDATE_PUBLIC_KEY: ${{ vars.SWIFTIFY_UPDATE_PUBLIC_KEY }}
+  # builds update from the repository that built them
+  SWIFTIFY_UPDATE_REPOSITORY: ${{ github.repository }}
+  CARGO_BUILD_JOBS: 4
+
+concurrency:
+  group: prebuilt-${{ github.workflow }}-${{ github.ref }}
+  # a run on main may be the one that publishes a release: never cancel it for a newer push
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   windows:
     # windows-2025 and windows-latest come with visual studio 2026, which
     # build-windows.ps1 does not take
     runs-on: windows-2022
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -43,10 +64,10 @@ jobs:
         shell: pwsh
         run: pwsh -NoProfile -ExecutionPolicy Bypass -File ./tests/check_windows_build.ps1
 
-      # qt 6.11 and newer split the windows repository by compiler, which aqt
-      # 3.3 cannot read yet. 6.10 is the newest it can
       - uses: jurplel/install-qt-action@a9c63c7c123f3069cff414e7e482d95dfa9d8125 # v4.4.1
         with:
+          # Qt 6.11 and newer have no msvc2022 kit on the Windows mirror
+          # (aqt cannot list it), and the QML needs 6.10 or newer
           version: 6.10.3
           arch: win64_msvc2022_64
           modules: qtshadertools qtwebsockets
@@ -95,21 +116,44 @@ jobs:
             throw 'libraries missing from the zip'
           }
 
+      - name: test the encrypted credential store on Windows
+        shell: pwsh
+        run: |
+          . ./tools/build-windows.ps1
+          Initialize-Msvc | Out-Host
+          $cache = Get-ChildItem "$env:RUNNER_TEMP\build\*\swiftify\CMakeCache.txt" | Select-Object -First 1
+          if (-not $cache) { throw 'Application build directory not found' }
+          $build = $cache.DirectoryName
+          $deps = Join-Path (Split-Path -Parent $build) 'deps\bin'
+          $env:PATH = "$deps;$env:QT_ROOT_DIR\bin;$env:PATH"
+          cmake -S . -B $build -DBUILD_TESTING=ON
+          if ($LASTEXITCODE -ne 0) { throw 'Vault test configuration failed' }
+          cmake --build $build --parallel 4 --target tst_vault
+          if ($LASTEXITCODE -ne 0) { throw 'Vault test build failed' }
+          ctest --test-dir $build --output-on-failure -R '^tst_vault$'
+          if ($LASTEXITCODE -ne 0) { throw 'Vault tests failed' }
+
       - name: package
         shell: pwsh
-        run: >
-          Compress-Archive -Path "$env:RUNNER_TEMP\${{ steps.version.outputs.name }}"
-          -DestinationPath "${{ steps.version.outputs.name }}.zip"
+        run: python tools/package-portable.py --root "$env:RUNNER_TEMP\${{ steps.version.outputs.name }}" --target windows-x86_64 --out dist
+
+      - name: updater tests
+        shell: bash
+        run: |
+          cargo test --locked --manifest-path tools/update-helper/Cargo.toml
+          cargo test --locked --manifest-path spotify-core/Cargo.toml --no-default-features --features capi vault::tests
+          python tests/check_update_tools.py
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: windows
-          path: ${{ steps.version.outputs.name }}.zip
+          path: dist/*.zip
           if-no-files-found: error
 
   linux:
     # the oldest supported runner, so the tarball runs on older distros too
     runs-on: ubuntu-22.04
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -121,26 +165,14 @@ jobs:
             exit 1
           fi
 
-      # clang 18 from llvm's own repository, as ubuntu 22.04 stops at clang 15.
-      # its key is checked against the fingerprint llvm publishes
-      - name: llvm
-        run: |
-          curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key -o "$RUNNER_TEMP/llvm.asc"
-          gpg --show-keys --with-colons "$RUNNER_TEMP/llvm.asc" \
-            | grep -q '^fpr:::::::::6084F3CF814B57C1CF12EFD515CF4D18AF4F7421:$' \
-            || { echo "llvm's apt key does not match its fingerprint" >&2; exit 1; }
-          gpg --dearmor < "$RUNNER_TEMP/llvm.asc" | sudo tee /usr/share/keyrings/llvm.gpg > /dev/null
-          echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] https://apt.llvm.org/jammy/ llvm-toolchain-jammy-18 main" \
-            | sudo tee /etc/apt/sources.list.d/llvm.list
-
       # build and bundling dependencies. the xcb, wayland and vulkan libraries
       # are what qt's plugins link, linuxdeploy has to find them to bundle them
       - name: packages
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            g++-12 clang-18 ninja-build pkg-config \
-            libpulse-dev libasound2-dev libssl-dev libsecret-1-dev \
+            g++-12 clang-15 ninja-build pkg-config \
+            libpulse-dev libasound2-dev libssl-dev \
             libgl1-mesa-dev libegl1-mesa-dev libxkbcommon-dev libxkbcommon-x11-0 \
             libfontconfig1-dev libfreetype-dev libdbus-1-dev \
             libwayland-dev libwayland-egl1 libvulkan1 \
@@ -149,7 +181,7 @@ jobs:
 
       - uses: jurplel/install-qt-action@a9c63c7c123f3069cff414e7e482d95dfa9d8125 # v4.4.1
         with:
-          version: 6.12.0
+          version: ${{ env.QT_VERSION }}
           arch: linux_gcc_64
           # soloist talks to spotify's soloist over websockets
           modules: qtshadertools qtwebsockets
@@ -157,68 +189,156 @@ jobs:
 
       # clang held to gcc 12's standard library, so it still runs on older
       # distros. gcc 12 miscompiles some coroutines, and the tarball it built
-      # corrupted its heap on linux
+      # corrupted its heap on linux. ubuntu 22.04 has clang 15 at the most
+      # (upstream's clang 18 needs ubuntu 24.04), and clang 15 predates
+      # --gcc-install-dir; it picks the newest installed gcc on its own,
+      # which is the g++-12 installed above
       - name: build
         env:
-          CC: clang-18
-          CXX: clang++-18
-          CFLAGS: --gcc-install-dir=/usr/lib/gcc/x86_64-linux-gnu/12
-          CXXFLAGS: --gcc-install-dir=/usr/lib/gcc/x86_64-linux-gnu/12
+          CC: clang-15
+          CXX: clang++-15
         run: ./tools/build-linux-tarball.sh --qt "$QT_ROOT_DIR" --out dist
+
+      - name: updater tests
+        run: |
+          cargo test --locked --manifest-path tools/update-helper/Cargo.toml
+          cargo test --locked --manifest-path spotify-core/Cargo.toml --no-default-features --features capi vault::tests
+          python3 tests/check_update_tools.py
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: linux
-          path: dist/*.tar.gz
+          path: dist/*.zip
           if-no-files-found: error
 
   macos:
-    # apple silicon with xcode 27. the icon uses icon composer features xcode
-    # 26's actool can't open. the image is still a preview
-    runs-on: xcode-27
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
       - name: version
         run: |
           version="$(sed -n '/^project(Swiftify/,/VERSION/s/^ *VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)"
           if [[ "$GITHUB_REF_TYPE" == tag && "$GITHUB_REF_NAME" != "v$version" ]]; then
-            echo "the tag $GITHUB_REF_NAME does not match the version $version in CMakeLists.txt" >&2
+            echo "tag does not match CMakeLists.txt" >&2
             exit 1
           fi
-
       - uses: jurplel/install-qt-action@a9c63c7c123f3069cff414e7e482d95dfa9d8125 # v4.4.1
         with:
-          version: 6.12.0
-          host: mac
-          target: desktop
+          version: ${{ env.QT_VERSION }}
           arch: clang_64
           modules: qtshadertools qtwebsockets
           cache: true
+      # Keep the release identity consistent. Runtime credentials use the
+      # encrypted vault, not a keychain, regardless of this signing certificate.
+      # without the secret the app is signed ad hoc, as a pull request's is
+      - name: import the signing identity
+        env:
+          MACOS_SIGNING_P12: ${{ secrets.MACOS_SIGNING_P12 }}
+          MACOS_SIGNING_PASSWORD: ${{ secrets.MACOS_SIGNING_PASSWORD }}
+          MACOS_SIGNING_IDENTITY: ${{ vars.MACOS_SIGNING_IDENTITY }}
+        run: |
+          if [[ -z "$MACOS_SIGNING_P12" || -z "$MACOS_SIGNING_IDENTITY" ]]; then
+            echo 'No signing identity: the app is signed ad hoc.'
+            exit 0
+          fi
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          password="$(uuidgen)"
+          echo "$MACOS_SIGNING_P12" | base64 --decode > "$RUNNER_TEMP/signing.p12"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          security import "$RUNNER_TEMP/signing.p12" -k "$keychain" -P "$MACOS_SIGNING_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain" >/dev/null
+          # the runner is thrown away afterwards, so its keychain list may be rewritten
+          existing="$(security list-keychains -d user | tr -d '"' | xargs)"
+          security list-keychains -d user -s "$keychain" $existing
+          rm -f "$RUNNER_TEMP/signing.p12"
+          echo "SWIFTIFY_CODESIGN_IDENTITY=$MACOS_SIGNING_IDENTITY" >> "$GITHUB_ENV"
 
-      - name: build
-        run: ./tools/build-macos-dmg.sh --qt "$QT_ROOT_DIR" --out dist
-
+      - name: build and package
+        env:
+          SWIFTIFY_BUILD_ROOT: ${{ runner.temp }}/swiftify-build
+          MACOSX_DEPLOYMENT_TARGET: '13.0'
+        run: bash tools/build-macos-portable.sh
+      - name: updater tests
+        run: |
+          cargo test --locked --manifest-path tools/update-helper/Cargo.toml
+          cargo test --locked --manifest-path spotify-core/Cargo.toml --no-default-features --features capi vault::tests
+          python3 tests/check_update_tools.py
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: macos
-          path: dist/*.dmg
+          name: ${{ matrix.runner }}
+          path: dist/*.zip
           if-no-files-found: error
 
+  # a release is made for every version in CMakeLists.txt that has none yet, once
+  # all four builds pass on main (or when its v<version> tag is pushed)
   release:
-    if: github.ref_type == 'tag'
+    if: github.ref_type == 'tag' || (github.ref == 'refs/heads/main' && github.event_name == 'push')
     needs: [windows, linux, macos]
     runs-on: ubuntu-24.04
+    environment: release
     permissions:
       contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: decide the release
+        id: release
+        run: |
+          version="$(sed -n '/^project(Swiftify/,/VERSION/s/^ *VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)"
+          tag="v$version"
+          if [[ "$GITHUB_REF_TYPE" == tag && "$GITHUB_REF_NAME" != "$tag" ]]; then
+            echo "the tag $GITHUB_REF_NAME does not match the version $version in CMakeLists.txt" >&2
+            exit 1
+          fi
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "$tag is already released; raise the version in CMakeLists.txt for a new release."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: steps.release.outputs.publish == 'true'
         with:
           path: dist
           merge-multiple: true
 
-      # a draft, so the notes are written and it is published by hand
-      - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
-        with:
-          draft: true
-          files: dist/*
+      # Dependency installation must not inherit the private signing seed.
+      - name: prepare signing tool
+        if: steps.release.outputs.publish == 'true' && vars.SWIFTIFY_UPDATE_PUBLIC_KEY != ''
+        run: |
+          python3 -m venv "$RUNNER_TEMP/update-signing"
+          "$RUNNER_TEMP/update-signing/bin/python" -m pip install 'cryptography==49.0.0'
+
+      - name: sign update manifests
+        if: steps.release.outputs.publish == 'true'
+        env:
+          SWIFTIFY_UPDATE_SIGNING_KEY: ${{ secrets.SWIFTIFY_UPDATE_SIGNING_KEY }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          if [[ -n "$SWIFTIFY_UPDATE_PUBLIC_KEY" || -n "$SWIFTIFY_UPDATE_SIGNING_KEY" ]]; then
+            test -n "$SWIFTIFY_UPDATE_PUBLIC_KEY" && test -n "$SWIFTIFY_UPDATE_SIGNING_KEY"
+            "$RUNNER_TEMP/update-signing/bin/python" tools/sign-updates.py dist
+          else
+            echo 'No update key configured: publishing archives without OTA manifests.'
+          fi
+
+      # published at once: the in-app updater only sees published, non-draft releases
+      - name: publish
+        if: steps.release.outputs.publish == 'true'
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: >
+          gh release create "$RELEASE_TAG" dist/*
+          --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA"
+          --title "Swiftify ${RELEASE_TAG#v}" --generate-notes --latest

@@ -3,6 +3,7 @@
 #include "app/Settings.h"
 #include "playback/PlaybackController.h"
 #include "spotify/CredentialStore.h"
+#include "spotify/OAuthFlow.h"
 #include "spotify/SpotifySession.h"
 #include "system/DiscordPresence.h"
 
@@ -209,6 +210,17 @@ private slots:
         SpotifySession session(&core, &credentials, &network, &errors);
         PlaybackController player(&core, &session, &settings, &errors);
         DiscordPresence presence(&player, &settings, nullptr, [&] { return QStringList {server.fullServerName()}; });
+        // playback is signed in, as it is once a launch has restored it
+        credentials.items.insert(CredentialStore::Account::Playback,
+                                 {QString::fromLatin1(OAuthFlow::kPlaybackClientId), QStringLiteral("refresh"),
+                                  OAuthFlow::kPlaybackAuthorizationVersion, QStringLiteral("stored-login"), {}, {}});
+        session.setInitialLibraryLoader({});
+        session.restoreSavedSessions();
+        std::shared_ptr<swiftify::testing::PendingCall> connect;
+        QTRY_VERIFY(std::any_of(core.pending.cbegin(), core.pending.cend(), [](const auto &call) { return call->name == QLatin1StringView("connectStored"); }));
+        connect = core.take(QStringLiteral("connectStored"));
+        connect->succeed(QStringLiteral("stored-login"));
+        QTRY_VERIFY(session.isConnected());
         QVERIFY(!presence.connected());
         QCoreApplication::processEvents();
         QVERIFY(!server.hasPendingConnections());
@@ -240,14 +252,14 @@ private slots:
         song.name = QStringLiteral("Я"); // one UTF-16 unit must be padded for Discord
         song.artists = QStringLiteral("Исполнитель");
         song.albumName = QStringLiteral("Альбом");
-        song.uri = QUrl::fromLocalFile(directory.filePath(QStringLiteral("private.flac"))).toString();
+        song.uri = QStringLiteral("spotify:track:0123456789abcdefghijKL");
         song.artworkUrl = QUrl(QStringLiteral("https://private.example/cover?token=secret"));
         song.durationMs = 200000;
         core.duration = song.durationMs;
         player.play(song, {song});
-        QTRY_VERIFY(!core.pending.isEmpty());
-        const auto call = core.take(QStringLiteral("playFile"));
-        QVERIFY(call);
+        std::shared_ptr<swiftify::testing::PendingCall> call;
+        QTRY_VERIFY(std::any_of(core.pending.cbegin(), core.pending.cend(), [](const auto &queued) { return queued->name == QLatin1StringView("playTrack"); }));
+        call = core.take(QStringLiteral("playTrack"));
         call->succeed();
         QTRY_VERIFY(player.isPlaying());
         QTRY_VERIFY(read());
@@ -334,13 +346,13 @@ private slots:
         Song song;
         song.name = QStringLiteral("Test Song");
         song.artists = QStringLiteral("Artist");
-        song.uri = QUrl::fromLocalFile(rig.directory.filePath(QStringLiteral("test.flac"))).toString();
+        song.uri = QStringLiteral("spotify:track:test");
         song.durationMs = 120000;
         rig.core.duration = song.durationMs;
 
         rig.player.play(song, {song});
         if (!rig.core.pending.isEmpty()) {
-            if (const auto call = rig.core.take(QStringLiteral("playFile"))) call->succeed();
+            if (const auto call = rig.core.take(QStringLiteral("playTrack"))) call->succeed();
         }
         QVERIFY(!rig.presence.inactivityTimerActive());
 
@@ -389,14 +401,25 @@ private slots:
         Song song;
         song.name = QStringLiteral("Track A");
         song.artists = QStringLiteral("Artist A");
-        song.uri = QUrl::fromLocalFile(directory.filePath(QStringLiteral("track-a.flac"))).toString();
+        song.uri = QStringLiteral("spotify:track:a");
         song.durationMs = 200000;
         core.duration = song.durationMs;
+
+        // a spotify song needs a connected playback session, as at launch
+        credentials.items.insert(CredentialStore::Account::Playback,
+                                 {QString::fromLatin1(OAuthFlow::kPlaybackClientId), QStringLiteral("refresh"),
+                                  OAuthFlow::kPlaybackAuthorizationVersion, QStringLiteral("stored-login"), {}, {}});
+        session.setInitialLibraryLoader({});
+        session.restoreSavedSessions();
+        QTRY_VERIFY(std::any_of(core.pending.cbegin(), core.pending.cend(),
+                                [](const auto &call) { return call->name == QLatin1StringView("connectStored"); }));
+        core.take(QStringLiteral("connectStored"))->succeed(QStringLiteral("stored-login"));
+        QTRY_VERIFY(session.isConnected());
 
         // Start playback
         player.play(song, {song});
         QTRY_VERIFY(!core.pending.isEmpty());
-        const auto call = core.take(QStringLiteral("playFile"));
+        const auto call = core.take(QStringLiteral("playTrack"));
         QVERIFY(call);
         call->succeed();
         QTRY_VERIFY(player.isPlaying());

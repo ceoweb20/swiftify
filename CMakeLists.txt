@@ -41,6 +41,20 @@ endif()
 option(SWIFTIFY_DESKTOP_INTEGRATION "Build the Linux desktop integration" ${SWIFTIFY_IS_LINUX})
 # spotify soloist plays spotify's songs; it is not optional, and its binary is
 # downloaded at runtime rather than shipped, as spotify's terms require.
+option(SWIFTIFY_BUILD_UPDATER "Build the standalone signed-update installer" ON)
+set(SWIFTIFY_UPDATE_REPOSITORY "ceoweb20/swiftify" CACHE STRING "GitHub owner/name whose published releases are offered by in-app updates")
+if(NOT SWIFTIFY_UPDATE_REPOSITORY MATCHES "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+    message(FATAL_ERROR "SWIFTIFY_UPDATE_REPOSITORY must look like owner/name")
+endif()
+# the public half of the key this repository signs its releases with. a build may
+# name another with -DSWIFTIFY_UPDATE_PUBLIC_KEY=, or an empty one to turn updates off
+set(SWIFTIFY_UPDATE_PUBLIC_KEY "90725820cdaeca8d87b6980100b0b925e2087c5fce723c2995ecc9a9a319093c" CACHE STRING "Ed25519 update verification key (64 hex digits); empty disables OTA")
+if(NOT SWIFTIFY_UPDATE_PUBLIC_KEY STREQUAL "")
+    string(LENGTH "${SWIFTIFY_UPDATE_PUBLIC_KEY}" update_key_length)
+    if(NOT update_key_length EQUAL 64 OR NOT SWIFTIFY_UPDATE_PUBLIC_KEY MATCHES "^[0-9a-fA-F]+$")
+        message(FATAL_ERROR "SWIFTIFY_UPDATE_PUBLIC_KEY must be an Ed25519 public key (64 hex digits)")
+    endif()
+endif()
 
 find_package(Qt6 6.10 REQUIRED COMPONENTS
     Core Gui Network Concurrent Qml Quick QuickControls2 ShaderTools)
@@ -57,7 +71,6 @@ if(SWIFTIFY_DESKTOP_INTEGRATION)
     pkg_check_modules(PULSE REQUIRED IMPORTED_TARGET libpulse)
 endif()
 find_package(Qt6 6.10 REQUIRED COMPONENTS WebSockets)
-find_package(Qt6Keychain REQUIRED)
 if(WIN32)
     find_package(Qt6 6.10 REQUIRED COMPONENTS Widgets)
 endif()
@@ -272,7 +285,9 @@ target_compile_definitions(swiftify_app PUBLIC
     $<$<BOOL:${SWIFTIFY_DESKTOP_INTEGRATION}>:SWIFTIFY_DESKTOP_INTEGRATION>
     $<$<TARGET_EXISTS:Qt6::DBus>:SWIFTIFY_HAS_DBUS>)
 target_compile_definitions(swiftify_app PRIVATE
-    SWIFTIFY_BUILD_FONT_DIRECTORY="${SWIFTIFY_FONT_DIRECTORY}")
+    SWIFTIFY_BUILD_FONT_DIRECTORY="${SWIFTIFY_FONT_DIRECTORY}"
+    SWIFTIFY_UPDATE_PUBLIC_KEY="${SWIFTIFY_UPDATE_PUBLIC_KEY}"
+    SWIFTIFY_UPDATE_REPOSITORY="${SWIFTIFY_UPDATE_REPOSITORY}")
 target_link_libraries(swiftify_app PUBLIC Qt6::WebSockets)
 if(TARGET Qt6::DBus)
     target_link_libraries(swiftify_app PUBLIC Qt6::DBus)
@@ -289,7 +304,6 @@ endif()
 target_link_libraries(swiftify_app PUBLIC
     Qt6::Core Qt6::Gui Qt6::Network Qt6::Concurrent Qt6::Qml Qt6::Quick Qt6::QuickControls2
     QCoro6::Core QCoro6::Network
-    qt6keychain
     material_color_utilities
     spotify_core)
 
@@ -324,6 +338,26 @@ if(WIN32)
     unset(CMAKE_REQUIRED_LIBRARIES)
     if(SWIFTIFY_HAVE_SMTC)
         target_compile_definitions(swiftify_app PRIVATE SWIFTIFY_HAVE_SMTC)
+        set(CMAKE_REQUIRED_LIBRARIES runtimeobject)
+        check_cxx_source_compiles([=[
+            #include <windows.h>
+            #ifdef __MINGW32__
+            #define ____FIReference_1_boolean_INTERFACE_DEFINED__
+            #endif
+            #include <windows.media.h>
+            int main()
+            {
+                ABI::Windows::Media::ISystemMediaTransportControls2 *controls = nullptr;
+                ABI::Windows::Media::ISystemMediaTransportControlsTimelineProperties *timeline = nullptr;
+                return controls || timeline ? 1 : 0;
+            }
+        ]=] SWIFTIFY_HAVE_SMTC_TIMELINE)
+        unset(CMAKE_REQUIRED_LIBRARIES)
+        if(SWIFTIFY_HAVE_SMTC_TIMELINE)
+            target_compile_definitions(swiftify_app PRIVATE SWIFTIFY_HAVE_SMTC_TIMELINE)
+        else()
+            message(WARNING "These Windows SDK headers lack the SMTC timeline interfaces; widget duration needs a newer SDK or MSVC.")
+        endif()
     else()
         message(WARNING "This toolchain's windows.media.h has no SystemMediaTransportControls, so Swiftify is "
             "building without the Windows media controls (media overlay, lock screen, media keys). "
@@ -333,6 +367,34 @@ endif()
 
 qt_add_executable(swiftify src/main.cpp)
 target_link_libraries(swiftify PRIVATE swiftify_app swiftify_appplugin)
+if(SWIFTIFY_BUILD_UPDATER)
+    set(update_directory ${CMAKE_CURRENT_BINARY_DIR}/update-helper)
+    # Corrosion discovers Rust in its own scope; its cached target and imported
+    # tools also work when Rust_CARGO_TARGET was not explicitly supplied.
+    set(update_rust_target ${Rust_CARGO_TARGET_CACHED})
+    set(update_binary ${update_directory}/${update_rust_target}/release/swiftify-update-helper${CMAKE_EXECUTABLE_SUFFIX})
+    file(GENERATE OUTPUT ${update_directory}/configuration.txt
+        CONTENT "${PROJECT_VERSION}\n${SWIFTIFY_UPDATE_PUBLIC_KEY}\n${update_rust_target}\n")
+    add_custom_command(OUTPUT ${update_binary}
+        COMMAND ${CMAKE_COMMAND} -E env
+            "SWIFTIFY_RELEASE_VERSION=${PROJECT_VERSION}"
+            "SWIFTIFY_UPDATE_PUBLIC_KEY=${SWIFTIFY_UPDATE_PUBLIC_KEY}"
+            "RUSTC=$<TARGET_FILE:Rust::Rustc>"
+            $<TARGET_FILE:Rust::Cargo> build --release --locked
+                --manifest-path ${CMAKE_CURRENT_SOURCE_DIR}/tools/update-helper/Cargo.toml
+                --target ${update_rust_target} --target-dir ${update_directory}
+        DEPENDS tools/update-helper/Cargo.toml tools/update-helper/Cargo.lock
+            tools/update-helper/src/main.rs ${update_directory}/configuration.txt
+        VERBATIM)
+    add_custom_target(swiftify_update_helper DEPENDS ${update_binary})
+    add_dependencies(swiftify swiftify_update_helper)
+    add_custom_command(TARGET swiftify POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${update_binary} $<TARGET_FILE_DIR:swiftify>
+        COMMENT "Installing the standalone update helper")
+    if(NOT APPLE)
+        install(PROGRAMS ${update_binary} DESTINATION ${CMAKE_INSTALL_BINDIR})
+    endif()
+endif()
 if(SWIFTIFY_IS_LINUX)
     target_link_libraries(swiftify PRIVATE Qt6::Widgets)
 endif()
@@ -354,12 +416,17 @@ endif()
 # icon, and an identifier apart from the swift app's (com.addenator.Swiftify)
 if(APPLE)
     set(SWIFTIFY_ICON_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/packaging/icons)
+    option(SWIFTIFY_COMPILE_APP_ICON "Use Xcode's icon composer asset compiler (requires a recent Xcode)" ON)
     # the swift app's icon composer icon, compiled as xcode compiles it: an
     # asset catalog that macos 26 draws with its glass and its dark and tinted
     # looks, and an .icns for older systems. without xcode's actool, an .icns
     # made from the rendered pngs instead.
-    execute_process(COMMAND xcrun --find actool
-        OUTPUT_VARIABLE SWIFTIFY_ACTOOL OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+    if(SWIFTIFY_COMPILE_APP_ICON)
+        execute_process(COMMAND xcrun --find actool
+            OUTPUT_VARIABLE SWIFTIFY_ACTOOL OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+    else()
+        set(SWIFTIFY_ACTOOL "")
+    endif()
     if(SWIFTIFY_ACTOOL)
         set(SWIFTIFY_ICON_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/icon)
         file(GLOB SWIFTIFY_ICON_PARTS LIST_DIRECTORIES false CONFIGURE_DEPENDS ${SWIFTIFY_ICON_SOURCE}/swiftify.icon/*
@@ -417,10 +484,14 @@ if(APPLE)
     # and the font in with it, so the whole app checks out. a folder synced by
     # icloud tags files with finder and file-provider attributes, which
     # codesign refuses to seal, so they go first.
-    # ad hoc by default. an identity of one's own keeps the signature's
-    # requirement the same from build to build, so the keychain hands over
-    # the stored logins without asking again after each one
+    # Ad hoc by default; release builds may use a consistent signing identity.
+    # Credentials use the encrypted vault and do not depend on this identity.
     set(SWIFTIFY_CODESIGN_IDENTITY "-" CACHE STRING "codesign identity for the app bundle; - signs ad hoc")
+    if(SWIFTIFY_BUILD_UPDATER)
+        add_custom_command(TARGET swiftify POST_BUILD
+            COMMAND codesign --force --sign ${SWIFTIFY_CODESIGN_IDENTITY} $<TARGET_FILE_DIR:swiftify>/swiftify-update-helper
+            COMMENT "Signing the update helper before sealing the bundle")
+    endif()
     add_custom_command(TARGET swiftify POST_BUILD
         COMMAND xattr -cr $<TARGET_BUNDLE_DIR:swiftify>
         COMMAND codesign --force --sign ${SWIFTIFY_CODESIGN_IDENTITY} $<TARGET_BUNDLE_DIR:swiftify>

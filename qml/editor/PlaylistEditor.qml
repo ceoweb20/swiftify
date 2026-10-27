@@ -7,15 +7,10 @@ import Swiftify
 // from the carousel, either a photo framed in the cropper or one of ten
 // designs drawn from the playlist's own colours, then the name, the
 // description and whether it is public. nothing reaches spotify until Save.
-// a playlist of music files on this computer (local) is kept here instead,
-// and is nobody's to see but the person's: it has no public switch.
 StyledDialog {
     id: root
 
     property bool creating: true
-    property bool local: false
-    /// the song a new local playlist starts with, or null
-    property var firstSong: null
     property playlist playlist
     /// the design picked in the carousel; -1 while the photo, or nothing, is
     property int selectedDesign: -1
@@ -29,22 +24,11 @@ StyledDialog {
 
     function openForCreate() {
         creating = true
-        local = false
-        firstSong = null
-        reset("", "", false)
-    }
-
-    function openForCreateLocal(first: var) {
-        creating = true
-        local = true
-        firstSong = first
         reset("", "", false)
     }
 
     function openForEdit(target: playlist) {
         creating = false
-        local = target.isLocal
-        firstSong = null
         playlist = target
         reset(target.name, target.description, target.isPublic)
     }
@@ -74,11 +58,7 @@ StyledDialog {
             cover = pickedCover
         }
         saving = true
-        if (local) {
-            Library.saveLocalPlaylist(creating, nameField.text.trim(), descriptionField.text, cover, firstSong)
-        } else {
-            Library.savePlaylist(creating, nameField.text.trim(), descriptionField.text, publicSwitch.checked, cover)
-        }
+        Library.savePlaylist(creating, nameField.text.trim(), descriptionField.text, publicSwitch.checked, cover)
     }
 
     headline: creating ? qsTr("New Playlist") : qsTr("Edit Playlist")
@@ -284,7 +264,6 @@ iconShape: "bun"
     Item {
         width: parent.width
         height: 36
-        visible: !root.local
 
         StyledText {
             anchors.left: parent.left

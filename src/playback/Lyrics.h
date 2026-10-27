@@ -22,10 +22,6 @@ struct Lyrics {
     QList<LyricLine> lines;
 
     static std::optional<Lyrics> fromJson(const QByteArray &json);
-    /// an .lrc file's lines: "[01:02.50]words", timed when they carry times
-    static std::optional<Lyrics> fromLrc(const QString &text);
-    /// the .lrc kept beside a music file, with the same name
-    static std::optional<Lyrics> besideFile(const QString &musicPath);
     /// the line playing at `positionMs`, by binary search. -1 before the first
     /// line, and always for unsynchronised lyrics.
     int lineIndex(quint32 positionMs) const;

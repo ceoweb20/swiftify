@@ -3,8 +3,7 @@
 a spotify player for desktop, built with Qt Quick on top of a Rust core that
 wraps [librespot](https://github.com/librespot-org/librespot). it follows
 Material 3 Expressive (heavy inspo from end4) and has an immersive player,
-synced lyrics, visualizers, an equalizer, and local files with local playlists
-where u can edit the tracks metadata.
+synced lyrics, visualizers and an equalizer.
 ![Alt text](/assets/home.png)
 this apps purpose is to replace spotifys heavy webview client, but its also mostly eyecandy lol
 it runs significantly lighter than the spotify client.
@@ -106,15 +105,19 @@ For more verbose logging run swiftify with `QT_LOGGING_RULES="swiftify.discord.d
 
 ## Prebuilt builds
 
-[releases](https://github.com/shredos67/swiftify/releases) have windows and linux x86_64 builds,
-and a macos dmg for apple silicon.
+The release workflow produces Windows/Linux x86_64 and macOS Apple Silicon/Intel
+packages. A pushed version tag publishes them under
+[releases](https://github.com/ceoweb20/swiftify/releases).
 
 - **windows.** unzip it anywhere and run `bin\swiftify.exe`.
 - **linux.** unpack it anywhere and run `bin/swiftify`. it brings its own Qt, but needs
-  alsa and libsecret, which pretty much every desktop already has.
-- **macos.** needs macos 14.4 or newer. open the dmg and drag swiftify into applications.
-  its signed ad hoc, so the first launch gets blocked, open it anyway from system settings ›
-  privacy & security, or run `xattr -dr com.apple.quarantine /Applications/Swiftify.app`.
+  the system audio libraries described below.
+- **macOS.** choose your architecture, unzip and move `Swiftify.app` to a writable
+  application directory. Ad-hoc builds are not notarized; macOS may require approval.
+
+Keep the extracted portable tree together. In-app installation is only available
+in updater-enabled builds, in a user-writable installation; system installations
+should use their package manager.
 
 ## Building from source
 
@@ -146,6 +149,18 @@ RPC uses local IPC and automatically reconnects when Discord starts again. There
 is no additional SDK or dependency. Local file paths and private cover URLs are
 never included. The RPC protocol has automated tests against a fake local Discord
 server; testing the real Discord status requires a valid application ID and Discord.
+
+### Spotify Connect (scrobbling)
+
+By default swiftify shows up in Spotify as a connect device called "Swiftify" and
+tells your account what it plays, so a scrobbling bot, or any other app that reads
+your current playback, sees the song, its position and whether it is paused. the
+name and the switch are in **Settings → Playback → Spotify Connect**.
+
+it only reports: the sound is still played by swiftify's own players, so crossfade
+and the equalizer work as before, and other Spotify apps can not control swiftify
+or move playback to it. a song shows up once it starts to play. if spotify refuses
+the connection, playback carries on without it.
 
 Translations use Qt `qsTr` / `qsTranslate` and an embedded UTF-8 catalog at
 `translations/ru.json`; no additional Linguist tools are required. Russian plural
@@ -195,10 +210,83 @@ Spotify tracks are not silently replaced with another song; Play reports the usu
 loading error. Invalid snapshots are ignored. Extremely large queues keep up to
 2,000 entries around the current occurrence and up to 100 history entries.
 
+### Playlist collections (Web API experiment)
+
+**Collections / Подборки** combines the saved/followed playlists returned by
+`GET /v1/me/playlists`, playlist contexts from the last 50 tracks returned by
+`GET /v1/me/player/recently-played`, and playlist links you add manually. It is
+not the Spotify Home/Made For You feed and cannot enumerate every personalized mix.
+
+Accepts full `https://open.spotify.com/playlist/...` links (including localized
+`intl-...` paths) and `spotify:playlist:...` URIs. Share query parameters are
+discarded. Links are resolved only through `GET /v1/playlists/{id}`; supplied URLs
+and short-link redirects are never fetched. Local links are account-scoped and
+do not follow/unfollow or change playlists on Spotify. Up to 30 links and 20
+distinct recent playlist contexts are resolved per explicit refresh, with short
+in-memory metadata caching and rate-limit backoff. There is no background polling.
+
+Only documented Web API calls are added: no browser impersonation, JS assets,
+query hashes, private home/browse endpoints or rootlist scraping. Unsupported
+DJ/Jam/app contexts are ignored. If metadata is denied or absent, the entry is
+marked unavailable rather than resolved through an undocumented fallback.
+
+**Playback is unchanged:** opening a metadata-approved playlist delegates to
+Swiftify's existing playlist player, including its existing librespot integration.
+The public API restricts contents of playlists not owned/collaborated on by the
+user; this experiment does not claim that all playback is implemented through
+the public Web API. "Open in Spotify" remains available for unavailable entries.
+
+### Full-screen visualizers
+
+**Settings → Visualizer → Full-screen player visualizer** controls the immersive
+bars/wave, artwork ring and the live spectrum behind the equalizer independently
+of the player-bar and track-list meters. The same switch is available at the top
+of the full-screen Sound panel. The global visualizer switch still takes priority.
+Decorative progress-bar shapes and the live background have their own settings.
+
+### Saved logins without Keychain
+
+From 0.17.0, Spotify logins are stored in an **encrypted file**, not Keychain or
+another OS credential backend. Create a separate vault password (at least 12
+characters) and sign in to Spotify once again. Old Keychain entries are left
+untouched; the app never attempts to read them. Each launch asks for the vault
+password once; reopening the window and refreshing tokens do not ask again.
+
+The key stays only in memory. There is no plaintext fallback or forgotten-password
+recovery. OTA updates preserve the encrypted file. See [credential vault details,
+migration, limitations and recovery](docs/credential-vault.md).
+
+### Portable builds and updates
+
+GitHub Actions builds macOS (Apple Silicon and Intel), Windows x64 and Linux x64
+portable packages. When all four builds pass on `main` and `CMakeLists.txt` names a
+version that has no release yet, that release is published with the packages and
+signed update manifests. Pushing a `v<version>` tag does the same. The portable packages look for new releases once a day and install a verified one
+by themselves, restarting once nothing is playing (**Settings → About → Updates**;
+both switches can be turned off). System/package-manager installations are not
+overwritten.
+
+Releases are signed with this repository's own Ed25519 key, and the macOS packages with
+a certificate of its own (not notarized, so a browser download needs right-click → Open
+once). See [release/update setup, trust model and limitations](docs/updates.md).
+
+### Saving the current song and Windows widgets
+
+The heart beside the current track in the bottom player and full-screen player
+uses the same Spotify saved-song state as track menus. It stays synchronized
+across both players, and ignores duplicate clicks while Spotify is updating the library. Saving still requires a connected Spotify
+library with the existing saved-song permissions.
+
+Windows builds with a sufficiently recent SMTC SDK also publish track duration
+and position through the media-session timeline, not just taskbar progress.
+Widgets using the Windows media-session API can read these values; other/custom
+widget integrations may need their own support. Runtime verification on Windows
+is still required.
+
 ### Build requirements
 
 - Qt 6.10 or newer: Qt Base, Qt Declarative, Qt Shader Tools and Qt WebSockets
-- QtKeychain and QCoro 0.10 or newer, both built for Qt 6
+- QCoro 0.10 or newer, built for Qt 6
 - CMake 3.24 or newer, Ninja, and a C++20 compiler
 - Rust (stable, from [rustup](https://rustup.rs))
 
@@ -214,11 +302,11 @@ build, drop that and run `ctest --test-dir build` if u want them.
 u need [homebrew](https://brew.sh) and apple's command line tools (`xcode-select --install`, or full xcode). then:
 
 ```sh
-brew install qtbase qtdeclarative qtshadertools qtwebsockets qtkeychain qcoro6 cmake ninja
+brew install qtbase qtdeclarative qtshadertools qtwebsockets qcoro6 cmake ninja
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 source "$HOME/.cargo/env"
 
-git clone https://github.com/shredos67/swiftify.git
+git clone https://github.com/ceoweb20/swiftify.git
 cd swiftify
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
 cmake --build build
@@ -234,7 +322,7 @@ dark and tinted looks; with just the command line tools it's built from the PNGs
 on arch either build a proper package, which installs to `/usr`:
 
 ```sh
-git clone https://github.com/shredos67/swiftify.git
+git clone https://github.com/ceoweb20/swiftify.git
 cd swiftify/packaging/arch
 makepkg -si
 ```
@@ -242,9 +330,9 @@ or use cmake:
 
 ```sh
 # replace with your package manager if not on arch
-sudo pacman -S --needed git qt6-base qt6-declarative qt6-shadertools qt6-wayland qt6-websockets qtkeychain-qt6 qcoro libpulse alsa-lib openssl cmake ninja rust pkgconf
+sudo pacman -S --needed git qt6-base qt6-declarative qt6-shadertools qt6-wayland qt6-websockets qcoro libpulse alsa-lib openssl cmake ninja rust pkgconf
 
-git clone https://github.com/shredos67/swiftify.git
+git clone https://github.com/ceoweb20/swiftify.git
 cd swiftify
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DCMAKE_INSTALL_PREFIX="$HOME/.local"
 cmake --build build
@@ -256,11 +344,11 @@ compatibility patches automatically:
 
 ```sh
 sudo apt-get install git qt6-base-dev qt6-declarative-dev qt6-shader-baker \
-    qt6-shadertools-dev qt6-wayland qt6-websockets-dev qtkeychain-qt6-dev qcoro-qt6-dev \
+    qt6-shadertools-dev qt6-wayland qt6-websockets-dev qcoro-qt6-dev \
     libpulse-dev libasound2-dev libssl-dev cmake ninja-build pkg-config
 # install rust from https://rustup.rs if you dont have it
 
-git clone https://github.com/shredos67/swiftify.git
+git clone https://github.com/ceoweb20/swiftify.git
 cd swiftify
 ./tools/build-debian.sh
 ```
@@ -268,21 +356,20 @@ cd swiftify
 or with `--install-deps` to install the dependencies automatically:
 
 ```sh
-git clone https://github.com/shredos67/swiftify.git
+git clone https://github.com/ceoweb20/swiftify.git
 cd swiftify
 ./tools/build-debian.sh --install-deps
 ```
 
-anywhere else, install the same reqs (Qt 6.10+ with D-Bus, OpenGL and Wayland, QtKeychain
-and QCoro for Qt 6, libpulse, plus the ALSA, OpenSSL and pkg-config dev packages), then
+anywhere else, install the same reqs (Qt 6.10+ with D-Bus, OpenGL and Wayland,
+QCoro for Qt 6, libpulse, plus the ALSA, OpenSSL and pkg-config dev packages), then
 run the cmake commands above. if you have Qt 6.8 or 6.9, use `tools/build-debian.sh` which
 applies the necessary compatibility patches.
 
 `cmake --install` drops `swiftify` in `~/.local/bin` (make sure that's on your `PATH`)
 and the desktop entry, icons and fonts in `~/.local/share`. 
 
-your login gets saved in the secret service through QtKeychain, so u need something
-providing one: gnome-keyring, kwallet or keepassxc.
+Logins use the password-protected vault on Linux too; no secret-service daemon is needed.
 
 on linux it also hooks into MPRIS (media keys, `playerctl`, shell media widgets),
 logind (pauses before the machine sleeps), pipewire/pulseaudio device changes, and
@@ -300,7 +387,7 @@ workload, or Qt for *MinGW 64-bit* with its matching MinGW toolchain.
 then run this in Windows PowerShell:
 
 ```powershell
-git clone https://github.com/shredos67/swiftify.git
+git clone https://github.com/ceoweb20/swiftify.git
 Set-Location swiftify
 .\tools\build-windows.ps1
 ```

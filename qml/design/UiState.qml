@@ -116,11 +116,6 @@ QtObject {
         }
     }
     signal createPlaylistRequested()
-    /// a new playlist of music files on this computer, starting with
-    /// `first` when that is a song (or null)
-    signal createLocalPlaylistRequested(var first)
-    /// a music file of one's own, to edit what its tags say
-    signal editLocalTrackRequested(song song)
     signal editPlaylistRequested()
     signal deletePlaylistRequested(playlist playlist)
     signal settingsRequested()
@@ -148,6 +143,12 @@ QtObject {
     function goToArtist(song: song) {
         immersiveOpen = false
         Library.goToArtist(song)
+    }
+
+    /// one of a song's artists, as chosen from the names on the player
+    function openArtist(artist: artist) {
+        immersiveOpen = false
+        Library.selectArtist(artist)
     }
 
     /// connecting for the first time (SetupView) is under way: it shows

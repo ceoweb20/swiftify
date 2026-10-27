@@ -4,9 +4,8 @@ import Swiftify
 
 // the settings themselves (SwiftifySettingsView), one page per rail
 // destination: what the visualizers and the backdrop cost, the sleep fade and
-// audio quality, the folders of music of the person's own, how the app fits
-// the desktop, how much it moves and draws, the
-// spotify logins, and about. every change applies at once.
+// audio quality, how the app fits the desktop, how much it moves and draws,
+// the spotify logins, and about. every change applies at once.
 Item {
     id: root
 
@@ -191,6 +190,30 @@ Item {
             visible: root.page === 2
 
             ContentSection {
+                title: qsTr("Spotify Connect")
+                symbol: "cast"
+
+                ConfigSwitch {
+                    objectName: "spotifyConnectSwitch"
+                    text: qsTr("Show Swiftify as a Spotify Connect device")
+                    checked: Settings.spotifyConnect
+                    onToggledTo: (checked) => Settings.spotifyConnect = checked
+                }
+                OutlinedTextField {
+                    x: 8
+                    width: Math.min(460, parent.width - 16)
+                    placeholder: qsTr("Device name")
+                    enabled: Settings.spotifyConnect
+                    text: Settings.connectDeviceName
+                    onAccepted: Settings.connectDeviceName = text
+                    onTextEdited: if (text.trim().length > 0) Settings.connectDeviceName = text
+                }
+                NoteText {
+                    text: qsTr("Spotify, and anything watching your account such as a scrobbling bot, sees what Swiftify plays. Other Spotify apps cannot control Swiftify.")
+                }
+            }
+
+            ContentSection {
                 title: qsTr("Crossfade")
                 symbol: "play_circle"
 
@@ -267,94 +290,6 @@ Item {
 
         Page {
             visible: root.page === 3
-
-            ContentSection {
-                title: qsTr("Local Files")
-                symbol: "folder_open"
-
-                MusicPicker {
-                    id: musicPicker
-                }
-
-                Repeater {
-                    model: LocalFiles.sources
-
-                    Item {
-                        id: source
-
-                        required property string modelData
-
-                        width: parent ? parent.width : 0
-                        height: 48
-
-                        MaterialSymbol {
-                            id: sourceSymbol
-                            x: 12
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: source.modelData.match(/\.[A-Za-z0-9]{2,4}$/) ? "audio_file" : "folder"
-                            iconSize: 20
-                            color: Appearance.colors.onSurfaceVariant
-                        }
-                        StyledText {
-                            anchors.left: sourceSymbol.right
-                            anchors.leftMargin: 12
-                            anchors.right: removeSource.left
-                            anchors.rightMargin: 8
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: source.modelData
-                            elide: Text.ElideMiddle
-                        }
-                        IconButton {
-                            id: removeSource
-                            anchors.right: parent.right
-                            anchors.rightMargin: 4
-                            anchors.verticalCenter: parent.verticalCenter
-                            symbol: "close"
-                            size: 32
-                            iconSize: 18
-                            tooltip: qsTr("Remove")
-                            onClicked: LocalFiles.removeSource(source.modelData)
-                        }
-                    }
-                }
-
-                Flow {
-                    x: 8
-                    width: parent.width - 16
-                    spacing: 8
-                    topPadding: LocalFiles.sources.length > 0 ? 4 : 0
-                    bottomPadding: 8
-
-                    TextButton {
-                        variant: TextButton.Tonal
-                        symbol: "create_new_folder"
-                        text: qsTr("Add Folder")
-                        onClicked: musicPicker.pickFolder()
-                    }
-                    TextButton {
-                        variant: TextButton.Text
-                        symbol: "audio_file"
-                        text: qsTr("Add Files")
-                        onClicked: musicPicker.pickFiles()
-                    }
-                    TextButton {
-                        variant: TextButton.Text
-                        symbol: "refresh"
-                        text: LocalFiles.scanning ? qsTr("Looking…") : qsTr("Look Again")
-                        enabled: LocalFiles.sources.length > 0 && !LocalFiles.scanning
-                        onClicked: LocalFiles.rescan()
-                    }
-                }
-
-                NoteText {
-                    text: qsTr("each songs title, artists, album and cover come from its own tags, and a .lrc file ")
-                          + qsTr("beside a song gives its lyrics. you can also drop files or folders onto the window")
-                }
-            }
-        }
-
-        Page {
-            visible: root.page === 4
 
             ContentSection {
                 title: qsTr("Language")
@@ -503,7 +438,7 @@ Item {
         }
 
         Page {
-            visible: root.page === 5
+            visible: root.page === 4
 
             ContentSection {
                 title: qsTr("Motion")
@@ -544,7 +479,7 @@ Item {
         // the logins: who is signed in, the library's and playback's state,
         // connecting them again, and logging out
         Page {
-            visible: root.page === 6
+            visible: root.page === 5
 
             ContentSection {
                 title: qsTr("Account")
@@ -619,7 +554,7 @@ Item {
                     }
                 }
                 NoteText {
-                    text: qsTr("forgets both logins on this computer, local files stay of course")
+                    text: qsTr("forgets both logins on this computer")
                 }
 
                 StyledDialog {
@@ -865,7 +800,76 @@ Item {
         }
 
         Page {
-            visible: root.page === 7
+            visible: root.page === 6
+
+            ContentSection {
+                title: qsTr("Updates")
+                symbol: "system_update"
+
+                ConfigSwitch {
+                    text: qsTr("Check for updates automatically")
+                    enabled: Updates.supported
+                    checked: Updates.automatic
+                    onToggledTo: (checked) => Updates.automatic = checked
+                }
+                ConfigSwitch {
+                    objectName: "installUpdatesAutomatically"
+                    text: qsTr("Install updates automatically")
+                    enabled: Updates.supported && Updates.automatic
+                    checked: Updates.installAutomatically
+                    onToggledTo: (checked) => Updates.installAutomatically = checked
+                }
+                NoteText {
+                    text: qsTr("Looks for new Swiftify releases on GitHub once a day. A verified update installs by itself, and Swiftify restarts, once nothing has played for a little while. Turn the second switch off to confirm each update yourself.")
+                }
+                NoteText {
+                    objectName: "updateStatus"
+                    text: qsTranslate("Updates", Updates.status)
+                }
+                NoteText {
+                    visible: Updates.busy && Updates.progress > 0
+                    text: qsTr("Downloaded %1%").arg(Math.round(Updates.progress * 100))
+                }
+                Flow {
+                    x: 8
+                    width: parent.width - 16
+                    spacing: 8
+
+                    TextButton {
+                        objectName: "checkForUpdates"
+                        text: qsTr("Check for updates")
+                        enabled: Updates.supported && !Updates.busy
+                        onClicked: Updates.check()
+                    }
+                    TextButton {
+                        objectName: "installUpdate"
+                        text: qsTr("Download and install")
+                        visible: Updates.available
+                        enabled: !Updates.busy
+                        onClicked: updateDialog.open()
+                    }
+                }
+                StyledDialog {
+                    id: updateDialog
+                    headline: qsTr("Install Swiftify %1?").arg(Updates.latestVersion)
+                    symbol: "system_update"
+                    body: qsTr("Swiftify will download and verify the update, stop playback, replace this portable installation and restart. Your library and settings are kept. Do not move the application during installation.")
+                    buttons: [
+                        TextButton {
+                            text: qsTr("Install and restart")
+                            onClicked: {
+                                updateDialog.accept()
+                                Updates.install()
+                            }
+                        },
+                        TextButton {
+                            variant: TextButton.Text
+                            text: qsTr("Cancel")
+                            onClicked: updateDialog.close()
+                        }
+                    ]
+                }
+            }
 
             ContentSection {
                 title: qsTr("Debugging")

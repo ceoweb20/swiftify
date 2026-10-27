@@ -30,11 +30,10 @@ Item {
         case Library.Page.Playlists: return playlistsPage
         case Library.Page.Personalized: return personalizedPage
         case Library.Page.PinnedPlaylists: return pinnedPage
+        case Library.Page.Collections: return collectionsPage
         case Library.Page.Playlist: return playlistPage
         case Library.Page.Album: return albumPage
         case Library.Page.Artist: return artistPage
-        case Library.Page.LocalFiles: return localFilesPage
-        case Library.Page.LocalTracks: return localTracksPage
         case Library.Page.Stats: return statsPage
         default: return homePage
         }
@@ -203,11 +202,10 @@ Item {
     Component { id: savedPage; SavedSongsView {} }
     Component { id: playlistsPage; PlaylistsView {} }
     Component { id: personalizedPage; PlaylistsView { personalized: true } }
+    Component { id: collectionsPage; CollectionsView {} }
     Component { id: pinnedPage; PlaylistsView { pinnedOnly: true } }
     Component { id: playlistPage; PlaylistView {} }
     Component { id: albumPage; AlbumView {} }
     Component { id: artistPage; ArtistView {} }
-    Component { id: localFilesPage; LocalFilesView {} }
-    Component { id: localTracksPage; LocalTracksView {} }
     Component { id: statsPage; StatsView {} }
 }

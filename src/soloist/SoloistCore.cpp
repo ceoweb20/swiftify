@@ -417,26 +417,13 @@ void SoloistCore::followRemote()
         m_expectedUri = m_itemUri;
         m_expectedStarted = false;
         m_endAtMs = 0;
-        if (m_localActive) {
-            try {
-                m_fallback->pause();
-            } catch (const SpotifyError &) {
-            }
-            m_localActive = false;
-            try {
-                m_fallback->setVolume(m_routed ? 1.0f : m_volume);
-            } catch (const SpotifyError &) {
-            }
-        }
         playRouted();
         gate(false);
         m_reportedPlaying = true;
         emit remoteTrackStarted(songFromItem());
         return;
     }
-    // a file of the person's own playing leaves soloist paused, which is
-    // not a pause anyone pressed
-    if (m_localActive || !(m_status == Status::Playing || m_status == Status::Paused)) {
+    if (!(m_status == Status::Playing || m_status == Status::Paused)) {
         return;
     }
     const bool playing = m_status == Status::Playing;
@@ -486,7 +473,7 @@ Song SoloistCore::songFromItem() const
 
 bool SoloistCore::skipRemote(bool forward)
 {
-    if (!m_remote || m_localActive) {
+    if (!m_remote) {
         return false;
     }
     send(forward ? QStringLiteral("skip_next") : QStringLiteral("skip_prev"));
@@ -608,7 +595,7 @@ void SoloistCore::gate(bool closed)
     m_gated = closed;
     m_gatedAtMs = nowMs();
     try {
-        m_fallback->setVolume(closed ? 0.0f : (m_localActive ? m_volume : 1.0f));
+        m_fallback->setVolume(closed ? 0.0f : 1.0f);
     } catch (const SpotifyError &) {
     }
 }
@@ -688,17 +675,6 @@ QCoro::Task<> SoloistCore::playTrack(QString spotifyUri)
         throw SpotifyError(SpotifyError::Kind::Superseded, QStringLiteral("superseded"));
     }
 
-    if (m_localActive) {
-        try {
-            m_fallback->pause();
-        } catch (const SpotifyError &) {
-        }
-        m_localActive = false;
-        try {
-            m_fallback->setVolume(m_routed ? 1.0f : m_volume);
-        } catch (const SpotifyError &) {
-        }
-    }
     m_expectedUri = spotifyUri;
     m_expectedStarted = false;
     m_endOfTrack = false;
@@ -767,7 +743,7 @@ QCoro::Task<> SoloistCore::crossfadeTrack(QString spotifyUri, quint32)
     // cutting it short.
     const quint64 resets = m_resets;
     const quint64 request = ++m_requests;
-    while (!m_localActive && m_expectedStarted && m_itemUri == m_expectedUri && !endReached()
+    while (m_expectedStarted && m_itemUri == m_expectedUri && !endReached()
            && m_status != Status::Idle) {
         co_await waitForChange(200);
         throwIfReset(resets);
@@ -778,40 +754,16 @@ QCoro::Task<> SoloistCore::crossfadeTrack(QString spotifyUri, quint32)
     co_await playTrack(spotifyUri);
 }
 
-QCoro::Task<> SoloistCore::playFile(QString path)
-{
-    ++m_requests;
-    stopSoloist();
-    m_expectedUri.clear();
-    m_expectedStarted = false;
-    m_endOfTrack = false;
-    m_endAtMs = 0;
-    m_remote = false;
-    gate(false);
-    m_localActive = true;
-    try {
-        m_fallback->setVolume(m_volume);
-    } catch (const SpotifyError &) {
-    }
-    co_await m_fallback->playFile(path);
-}
-
 QCoro::Task<> SoloistCore::restartAudioOutput()
 {
-    if (m_localActive || m_routed) {
+    if (m_routed) {
         co_await m_fallback->restartAudioOutput();
-    }
-    if (m_routed && !m_localActive) {
         playRouted();
     }
 }
 
 void SoloistCore::play()
 {
-    if (m_localActive) {
-        m_fallback->play();
-        return;
-    }
     if (!m_socketOpen) {
         throw SpotifyError(SpotifyError::Kind::Core, m_failure.isEmpty() ? QStringLiteral("Soloist isn't running.") : m_failure);
     }
@@ -822,19 +774,11 @@ void SoloistCore::play()
 
 void SoloistCore::pause()
 {
-    if (m_localActive) {
-        m_fallback->pause();
-        return;
-    }
     stopSoloist();
 }
 
 void SoloistCore::seek(quint32 positionMs)
 {
-    if (m_localActive) {
-        m_fallback->seek(positionMs);
-        return;
-    }
     send(QStringLiteral("seek"), {{QStringLiteral("position_ms"), qint64(positionMs)}});
     // shown at once; soloist's position_sync confirms it
     m_anchorPositionMs = positionMs;
@@ -848,7 +792,7 @@ void SoloistCore::setVolume(float volume)
     m_volume = std::clamp(volume, 0.0f, 1.0f);
     try {
         // held at nothing while the gap between songs is gated; otherwise unity gain for routed soloist
-        m_fallback->setVolume(m_gated ? 0.0f : (m_routed && !m_localActive ? 1.0f : m_volume));
+        m_fallback->setVolume(m_gated ? 0.0f : (m_routed ? 1.0f : m_volume));
     } catch (const SpotifyError &) {
     }
     send(QStringLiteral("set_volume"), {{QStringLiteral("volume"), soloistVolume()}});
@@ -856,14 +800,11 @@ void SoloistCore::setVolume(float volume)
 
 bool SoloistCore::audioOutputStalled() const
 {
-    return (m_localActive || m_routed) && m_fallback->audioOutputStalled();
+    return m_routed && m_fallback->audioOutputStalled();
 }
 
 quint32 SoloistCore::playbackPositionMs() const
 {
-    if (m_localActive) {
-        return m_fallback->playbackPositionMs();
-    }
     // an end not yet taken reads as the end, even once soloist has started
     // the song over; with the clock stopped for the last moments, the time
     // still runs on toward the end
@@ -878,14 +819,11 @@ quint32 SoloistCore::playbackPositionMs() const
 
 quint32 SoloistCore::playbackDurationMs() const
 {
-    return m_localActive ? m_fallback->playbackDurationMs() : quint32(m_durationMs);
+    return quint32(m_durationMs);
 }
 
 bool SoloistCore::takeEndOfTrack()
 {
-    if (m_localActive) {
-        return m_fallback->takeEndOfTrack();
-    }
     if (!m_endOfTrack && endReached()) {
         m_endOfTrack = true;
     }
@@ -927,7 +865,6 @@ void SoloistCore::reset()
     m_expectedStarted = false;
     m_endOfTrack = false;
     m_endAtMs = 0;
-    m_localActive = false;
     m_remote = false;
     m_reportedPlaying.reset();
     gate(false);
@@ -1002,7 +939,8 @@ void SoloistCore::setSpectrumEnabled(bool enabled)
 
 int SoloistCore::spectrumLevels(float *out, int capacity) const
 {
-    return m_fallback->spectrumLevels(out, capacity);
+    // unrouted, soloist's audio goes straight to pipewire, past the analyser
+    return m_routed ? m_fallback->spectrumLevels(out, capacity) : 0;
 }
 
 } // namespace swiftify

@@ -245,7 +245,7 @@ private slots:
         QTRY_COMPARE(window->property("immersiveReveal").toReal(), 0.0);
         const auto settings = rig.show(QStringLiteral("SettingsPages"));
         QVERIFY(settings);
-        settings->setProperty("page", 4);
+        settings->setProperty("page", 3);
         auto *selector = settings->findChild<QQuickItem *>(QStringLiteral("windowControlsMode"));
         QVERIFY(selector && selector->isVisible());
         QCOMPARE(selector->property("currentIndex").toInt(), 1);

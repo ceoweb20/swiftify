@@ -7,6 +7,7 @@
 #include "playback/PlaybackController.h"
 #include "playback/PlaybackState.h"
 #include "spotify/CredentialStore.h"
+#include "spotify/OAuthFlow.h"
 #include "spotify/SpotifySession.h"
 #if defined(SWIFTIFY_HAS_DBUS) && defined(Q_OS_LINUX)
 #include "system/dbus/Mpris.h"
@@ -30,9 +31,7 @@ Song makeSong(const QString &name)
     Song song;
     song.name = name;
     song.artists = QStringLiteral("Artist");
-    // a music file of one's own: it plays from disk, with no network, which
-    // none of these rules depend on
-    song.uri = QUrl::fromLocalFile(QStringLiteral("/music/") + name + QStringLiteral(".flac")).toString();
+    song.uri = QStringLiteral("spotify:track:") + name.leftJustified(22, u'0');
     song.durationMs = 200'000;
     return song;
 }
@@ -67,13 +66,42 @@ private:
         explicit Rig(const QString &path = {})
             : settings(path.isEmpty() ? directory.filePath(QStringLiteral("swiftify.conf")) : path)
         {
+            // playback is signed in, as it is once a launch has restored it
+            credentials.items.insert(CredentialStore::Account::Playback,
+                                     {QString::fromLatin1(OAuthFlow::kPlaybackClientId), QStringLiteral("refresh"),
+                                      OAuthFlow::kPlaybackAuthorizationVersion, QStringLiteral("stored-login"), {}, {}});
+            session.setInitialLibraryLoader({});
+            session.restoreSavedSessions();
+            std::shared_ptr<swiftify::testing::PendingCall> connect;
+            QTRY_VERIFY(std::any_of(core.pending.cbegin(), core.pending.cend(), [](const auto &call) { return call->name == QLatin1StringView("connectStored"); }));
+            connect = core.take(QStringLiteral("connectStored"));
+            connect->succeed(QStringLiteral("stored-login"));
+            QTRY_VERIFY(session.isConnected());
+        }
+
+        ~Rig()
+        {
+            // what is still waiting on the core finishes, cancelled, while
+            // the player it belongs to is still here
+            core.reset();
+            settle();
+        }
+
+        /// the core connects again, as it does before a second try
+        void reconnect()
+        {
+            settle();
+            const auto call = core.take(QStringLiteral("connectStored"));
+            QVERIFY(call);
+            call->succeed(QStringLiteral("stored-login"));
+            settle();
         }
 
         /// lets the song the player asked for finish loading
         void finishLoading()
         {
             settle();
-            const auto call = core.take(QStringLiteral("playFile"));
+            const auto call = core.take(QStringLiteral("playTrack"));
             QVERIFY(call);
             call->succeed();
             settle();
@@ -89,6 +117,20 @@ private:
     };
 
 private slots:
+    void connectDeviceSettingsReachTheCore()
+    {
+        Rig rig;
+        // on by default, under the app's own name
+        QVERIFY(rig.core.connectEnabled);
+        QCOMPARE(rig.core.connectName, QStringLiteral("Swiftify"));
+        rig.settings.setConnectDeviceName(QStringLiteral("  Kitchen  "));
+        QCOMPARE(rig.core.connectName, QStringLiteral("Kitchen"));
+        rig.settings.setConnectDeviceName(QStringLiteral("   "));
+        QCOMPARE(rig.core.connectName, QStringLiteral("Kitchen"));
+        rig.settings.setSpotifyConnect(false);
+        QVERIFY(!rig.core.connectEnabled);
+    }
+
     void lastTrackQueueAndPositionSurviveRestartWithoutStartingSound()
     {
         QTemporaryDir directory;
@@ -318,7 +360,11 @@ private slots:
         Rig rig;
         const QList<Song> queue = makeQueue(1);
         rig.player.play(queue[0], queue);
-        rig.core.take(QStringLiteral("playFile"))->fail(QStringLiteral("no such track"));
+        rig.settle();
+        // a second try, on a connection made again, before it gives up
+        rig.core.take(QStringLiteral("playTrack"))->fail(QStringLiteral("no such track"));
+        rig.reconnect();
+        rig.core.take(QStringLiteral("playTrack"))->fail(QStringLiteral("no such track"));
         rig.settle();
         QVERIFY(!rig.player.isPlaying());
         QVERIFY(rig.core.log.contains(QStringLiteral("pause")));
@@ -333,8 +379,8 @@ private slots:
         // something other than a song, a reconnect for a download, replaced
         // the request in the core before it made any sound
         rig.settle();
-        rig.core.take(QStringLiteral("playFile"))->fail(QString::fromLatin1(SWIFTIFY_CORE_SUPERSEDED));
-        rig.settle();
+        rig.core.take(QStringLiteral("playTrack"))->fail(QString::fromLatin1(SWIFTIFY_CORE_SUPERSEDED));
+        rig.reconnect();
         QVERIFY(rig.player.isLoading());
         QVERIFY(rig.errors.message().isEmpty());
         // the song is still the one wanted, so it is asked for again
@@ -375,7 +421,9 @@ private slots:
         rig.finishLoading();
         rig.player.skipForward();
         rig.settle();
-        rig.core.take(QStringLiteral("playFile"))->fail(QString::fromLatin1(SWIFTIFY_CORE_UNAVAILABLE));
+        rig.core.take(QStringLiteral("playTrack"))->fail(QString::fromLatin1(SWIFTIFY_CORE_UNAVAILABLE));
+        rig.reconnect();
+        rig.core.take(QStringLiteral("playTrack"))->fail(QString::fromLatin1(SWIFTIFY_CORE_UNAVAILABLE));
         rig.finishLoading();
         QVERIFY(rig.player.isPlaying());
         QVERIFY(rig.player.currentSong().isSameInstance(queue[2]));
@@ -396,7 +444,9 @@ private slots:
         rig.finishLoading();
         rig.player.skipBackward();
         rig.settle();
-        rig.core.take(QStringLiteral("playFile"))->fail(QString::fromLatin1(SWIFTIFY_CORE_UNAVAILABLE));
+        rig.core.take(QStringLiteral("playTrack"))->fail(QString::fromLatin1(SWIFTIFY_CORE_UNAVAILABLE));
+        rig.reconnect();
+        rig.core.take(QStringLiteral("playTrack"))->fail(QString::fromLatin1(SWIFTIFY_CORE_UNAVAILABLE));
         rig.finishLoading();
         QVERIFY(rig.player.currentSong().isSameInstance(queue[0]));
     }
@@ -407,11 +457,39 @@ private slots:
         const QList<Song> queue = makeQueue(1);
         rig.player.play(queue[0], queue);
         rig.settle();
-        rig.core.take(QStringLiteral("playFile"))->fail(QString::fromLatin1(SWIFTIFY_CORE_UNAVAILABLE));
+        // the lyrics of the asked song have no bearing on its load
+        rig.core.take(QStringLiteral("lyrics"))->fail(QStringLiteral("no lyrics"));
+        rig.core.take(QStringLiteral("playTrack"))->fail(QString::fromLatin1(SWIFTIFY_CORE_UNAVAILABLE));
+        rig.reconnect();
+        rig.core.take(QStringLiteral("playTrack"))->fail(QString::fromLatin1(SWIFTIFY_CORE_UNAVAILABLE));
         rig.settle();
         QVERIFY(!rig.player.isPlaying());
         QVERIFY(rig.core.pending.isEmpty());
         QCOMPARE(rig.errors.message(), QString::fromLatin1(SWIFTIFY_CORE_UNAVAILABLE));
+    }
+
+    void aRefusedAudioKeyStopsInsteadOfBurningTheQueue()
+    {
+        Rig rig;
+        const QList<Song> queue = makeQueue(3);
+        rig.player.play(queue[0], queue);
+        rig.settle();
+        rig.core.take(QStringLiteral("lyrics"))->fail(QStringLiteral("no lyrics"));
+        rig.finishLoading();
+        rig.player.skipForward();
+        rig.settle();
+        rig.core.take(QStringLiteral("lyrics"))->fail(QStringLiteral("no lyrics"));
+        rig.core.take(QStringLiteral("playTrack"))->fail(QString::fromLatin1(SWIFTIFY_CORE_AUDIO_KEY_REFUSED));
+        rig.settle();
+        // spotify refuses the account, not the song: no reconnect and second
+        // try, no skip that marks the song unplayable and burns the queue,
+        // and the banner explains what helps
+        QVERIFY(!rig.player.isPlaying());
+        QVERIFY(rig.core.pending.isEmpty());
+        QVERIFY(rig.player.currentSong().isSameInstance(queue[1]));
+        QVERIFY(rig.player.currentSong().isPlayable);
+        QVERIFY(!rig.errors.message().isEmpty());
+        QVERIFY(rig.errors.message() != QString::fromLatin1(SWIFTIFY_CORE_AUDIO_KEY_REFUSED));
     }
 
     void seekingNeverStartsSound()
@@ -449,7 +527,8 @@ private slots:
         QVERIFY(!rig.core.sounding);
         // play loads it again from the start
         rig.player.resume();
-        QVERIFY(rig.core.take(QStringLiteral("playFile")));
+        rig.settle();
+        QVERIFY(rig.core.take(QStringLiteral("playTrack")));
     }
 
     void aStaleEndOfTrackDoesNotSkipMidSong()
@@ -481,7 +560,8 @@ private slots:
 
         rig.player.resume();
         rig.core.take(QStringLiteral("restartAudioOutput"))->succeed();
-        rig.settle();
+        // whatever took the device may have dropped the session too
+        rig.reconnect();
         rig.finishLoading();
         QVERIFY(rig.core.log.contains(QStringLiteral("seek 42000")));
         QVERIFY(rig.player.isPlaying());
@@ -644,14 +724,13 @@ private slots:
     void lyricsFollowThePosition()
     {
         Rig rig;
-        // a file with a .lrc beside it
-        Song song = makeSong(QStringLiteral("sung"));
-        song.uri = QUrl::fromLocalFile(rig.directory.filePath(QStringLiteral("sung.flac"))).toString();
-        QFile lyrics(rig.directory.filePath(QStringLiteral("sung.lrc")));
-        QVERIFY(lyrics.open(QIODevice::WriteOnly));
-        lyrics.write("[00:01.00]one\n[00:05.00]two\n");
-        lyrics.close();
+        const Song song = makeSong(QStringLiteral("sung"));
         rig.player.play(song, {song});
+        rig.settle();
+        const auto sung = rig.core.take(QStringLiteral("lyrics"));
+        QVERIFY(sung);
+        sung->succeed(QStringLiteral(
+            R"({"syncType":"lineSynced","lines":[{"startTimeMs":1000,"words":"one"},{"startTimeMs":5000,"words":"two"}]})"));
         rig.settle();
         QVERIFY(rig.player.hasLyrics());
         QCOMPARE(rig.player.activeLyricIndex(), -1);
@@ -666,6 +745,10 @@ private slots:
         Rig rig;
         const QList<Song> queue = makeQueue(1);
         rig.player.play(queue[0], queue);
+        rig.settle();
+        const auto asked = rig.core.take(QStringLiteral("lyrics"));
+        QVERIFY(asked);
+        asked->fail(QStringLiteral("no lyrics"));
         rig.settle();
         QVERIFY(!rig.player.hasLyrics());
         QCOMPARE(rig.player.lyricsMessage(), QStringLiteral("i mean i guess bro"));
@@ -697,7 +780,7 @@ private slots:
         QVERIFY(rig.player.isLoading());
         QVERIFY(!rig.player.isPlaying());
         QVERIFY(!rig.player.isLoadingLyrics() || !rig.core.take(QStringLiteral("lyrics")));
-        for (const QString &call : {QStringLiteral("playTrack"), QStringLiteral("playFile"),
+        for (const QString &call : {QStringLiteral("playTrack"), QStringLiteral("connectStored"),
                                     QStringLiteral("connect"), QStringLiteral("lyrics")}) {
             QVERIFY2(!rig.core.take(call), qPrintable(call));
         }

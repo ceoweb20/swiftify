@@ -15,8 +15,7 @@ StyledDialog {
     headline: qsTr("Delete “%1”?").arg(playlist.name)
 symbol: "delete"
 iconShape: "ghostish"
-    body: playlist.isLocal ? qsTr("This deletes the playlist from this computer. Its music files stay where they are.")
-                           : qsTr("This removes the playlist from your Spotify library.")
+    body: qsTr("This removes the playlist from your Spotify library.")
 
     buttons: [
         TextButton {

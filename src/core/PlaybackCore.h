@@ -38,7 +38,6 @@ public:
     virtual void preloadTrack(const QString &spotifyUri, bool preloadStandby) = 0;
     virtual QCoro::Task<> crossfadeTrack(QString spotifyUri, quint32 durationMs) = 0;
     /// a music file of the person's own, from anywhere on disk
-    virtual QCoro::Task<> playFile(QString path) = 0;
     virtual QCoro::Task<> restartAudioOutput() = 0;
     virtual QCoro::Task<QString> lyricsJson(QString spotifyUri) = 0;
     /// a playlist's songs read through the session, shaped like the web api's
@@ -57,6 +56,11 @@ public:
     virtual float volume() const = 0;
     virtual void setStreamQuality(int kbps) = 0;
     virtual void setVolumeNormalization(bool enabled) = 0;
+    /// to show as a Spotify Connect device called `name` once playback
+    /// connects, and report what plays to the account (a scrobbling bot sees
+    /// it). the device cannot be controlled from other Spotify apps; a core
+    /// that is such a device already ignores this
+    virtual void setConnectDevice(bool enabled, const QString &name) { Q_UNUSED(enabled) Q_UNUSED(name) }
     /// keeps streamed songs in `path`, up to `limitBytes`; both apply the
     /// next time playback connects
     virtual void setAudioCache(const QString &path, qint64 limitBytes) = 0;

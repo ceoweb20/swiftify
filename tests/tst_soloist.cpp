@@ -421,23 +421,6 @@ private slots:
         QVERIFY(m_soloist->commandNames().contains(QStringLiteral("play")));
     }
 
-    void localFilesPlayThroughTheRustCore()
-    {
-        QCoro::waitFor(m_core->playTrack(QStringLiteral("spotify:track:a")));
-        auto file = m_core->playFile(QStringLiteral("/music/song.flac"));
-        // the spotify song stops for it
-        QTRY_VERIFY(m_soloist->commandNames().contains(QStringLiteral("pause")));
-        const auto call = m_fallback->take(QStringLiteral("playFile"));
-        QVERIFY(call);
-        QCOMPARE(call->argument, QStringLiteral("/music/song.flac"));
-        call->succeed();
-        QCoro::waitFor(file);
-        m_fallback->duration = 1234;
-        QCOMPARE(m_core->playbackDurationMs(), 1234u);
-        m_core->pause();
-        QVERIFY(m_fallback->log.contains(QStringLiteral("pause")));
-    }
-
     void detectsSoloistAndApiKey()
     {
         qputenv("SWIFTIFY_SOLOIST", m_program.toUtf8());
@@ -518,20 +501,12 @@ private slots:
         QCOMPARE(m_core->volume(), 0.63f);
     }
 
-    void spectrumLevelsForwardsToFallback()
+    void spectrumLevelsNeedARoute()
     {
+        // without a pipewire route the analyser never hears soloist's audio
         m_fallback->musicLevels = true;
         float levels[48]{};
-        const int count = m_core->spectrumLevels(levels, 48);
-        QCOMPARE(count, 48);
-        bool hasNonZero = false;
-        for (float level : levels) {
-            if (level > 0.0f) {
-                hasNonZero = true;
-                break;
-            }
-        }
-        QVERIFY(hasNonZero);
+        QCOMPARE(m_core->spectrumLevels(levels, 48), 0);
     }
 
 private:

@@ -4,8 +4,6 @@ import Swiftify
 
 // SongOptionsContent: save, go to album or artist, queue, and add to
 // or remove from a playlist. one instance per window, opened at the pointer.
-// a file of the person's own is nothing spotify knows: it queues, shows
-// where it is kept, and goes in playlists made on this computer.
 StyledMenu {
     id: root
 
@@ -13,19 +11,16 @@ StyledMenu {
     property bool allowsPlaylistRemoval: false
     readonly property bool saved: Library.savedRevision >= 0 && Library.isSaved(song.uri)
     property var editablePlaylists: []
-    readonly property bool local: song.isLocalFile
 
     function openFor(target: song, allowsRemoval: bool) {
         song = target
         allowsPlaylistRemoval = allowsRemoval
-        editablePlaylists = target.isLocalFile ? LocalFiles.playlistChoices() : Library.editablePlaylists()
+        editablePlaylists = Library.editablePlaylists()
         popup()
     }
 
     StyledMenuItem {
         id: saveItem
-        visible: !root.local
-        height: visible ? implicitHeight : 0
         text: root.saved ? qsTr("Remove from Songs") : qsTr("Save to Songs")
         symbol: root.saved ? "star" : "star"
         onTriggered: {
@@ -35,33 +30,16 @@ StyledMenu {
             Library.toggleSaved(root.song)
         }
     }
+    StyledMenuSeparator {}
     StyledMenuItem {
-        visible: root.local
-        height: visible ? implicitHeight : 0
-        text: qsTr("Edit Info…")
-        symbol: "edit_note"
-        onTriggered: UiState.editLocalTrackRequested(root.song)
-    }
-    StyledMenuItem {
-        visible: root.local
-        height: visible ? implicitHeight : 0
-        text: App.macOS ? qsTr("Show in Finder") : qsTr("Show in Folder")
-        symbol: "folder_open"
-        onTriggered: App.openUrl(root.song.uri.substring(0, root.song.uri.lastIndexOf("/")))
-    }
-    StyledMenuSeparator {
-        visible: !root.local
-        height: visible ? implicitHeight : 0
-    }
-    StyledMenuItem {
-        visible: !root.local && root.song.albumName.length > 0
+        visible: root.song.albumName.length > 0
         height: visible ? implicitHeight : 0
         text: qsTr("Go to Album")
         symbol: "album"
         onTriggered: UiState.goToAlbum(root.song)
     }
     StyledMenuItem {
-        visible: !root.local && root.song.artists.length > 0
+        visible: root.song.artists.length > 0
         height: visible ? implicitHeight : 0
         text: qsTr("Go to Artist")
         symbol: "person"
@@ -98,20 +76,6 @@ StyledMenu {
 
             onObjectAdded: (index, object) => addMenu.insertItem(index, object as StyledMenuItem)
             onObjectRemoved: (index, object) => addMenu.removeItem(object as StyledMenuItem)
-        }
-
-        // spotify's playlists hold spotify's songs, and a file starts a
-        // playlist of files
-        StyledMenuSeparator {
-            visible: root.local && root.editablePlaylists.length > 0
-            height: visible ? implicitHeight : 0
-        }
-        StyledMenuItem {
-            visible: root.local
-            height: visible ? implicitHeight : 0
-            text: qsTr("New Playlist…")
-            symbol: "add"
-            onTriggered: UiState.createLocalPlaylistRequested(root.song)
         }
     }
 

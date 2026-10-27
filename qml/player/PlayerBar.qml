@@ -320,9 +320,18 @@ Item {
                         }
                     }
                 }
+                ArtistNames {
+                    objectName: "playerArtists"
+                    width: parent.width
+                    visible: Player.hasSong
+                    song: Player.currentSong
+                    color: root.scheme.onSurfaceVariant
+                    hoverColor: root.scheme.onSurface
+                }
                 StyledText {
                     width: parent.width
-                    text: Player.hasSong ? Player.currentSong.artists : qsTr("Choose something to play")
+                    visible: !Player.hasSong
+                    text: qsTr("Choose something to play")
                     elide: Text.ElideRight
                     font.pixelSize: Appearance.fontSize.smaller
                     color: root.scheme.onSurfaceVariant
@@ -424,6 +433,14 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         spacing: root.tiny ? 0 : 6
         z: 3
+
+        SaveSongButton {
+            objectName: "playerBarSaveSong"
+            anchors.verticalCenter: parent.verticalCenter
+            scheme: root.scheme
+            size: root.buttonSize
+            iconSize: root.tiny ? 18 : 20
+        }
 
         IconButton {
             anchors.verticalCenter: parent.verticalCenter

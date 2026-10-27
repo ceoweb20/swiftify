@@ -113,8 +113,7 @@ Item {
 
                 MaterialSymbol {
                     anchors.verticalCenter: parent.verticalCenter
-                    text: root.kind === "ALBUM" ? "album" : root.kind === "ARTIST" ? "person"
-                        : root.kind === "LOCAL FILES" ? "folder" : "queue_music"
+                    text: root.kind === "ALBUM" ? "album" : root.kind === "ARTIST" ? "person" : "queue_music"
                     iconSize: 15
                     fill: 1
                     color: Appearance.colors.onPrimaryContainer

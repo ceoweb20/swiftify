@@ -3,8 +3,11 @@ import QtQuick
 import QtQuick.Templates as T
 import Swiftify
 
-// a genre to explore: a two-colour gradient with a big faint shape of its
-// own cut off by the corner, its symbol on it, turning when hovered.
+// a genre to explore, in material 3 expressive: a tonal container tinted with
+// the genre's colour, two of material's shapes along its foot, one big and
+// carrying the symbol, one small, and the name over them in heavy type. hovered, the
+// shapes turn and spring up and the card's edge runs to scallops, as a
+// cover's does.
 T.AbstractButton {
     id: root
 
@@ -13,23 +16,30 @@ T.AbstractButton {
     property color startColor
     property color endColor
 
-    readonly property list<string> shapes: ["flower", "cookie9", "clover4", "sunny", "puffy", "ghostish", "bun",
-                                            "heart", "softBoom", "pixelCircle", "clover8", "gem", "arch", "fan"]
-    /// the genre's own shape, from its name
-    readonly property string shape: {
-        let hash = 0
+    readonly property list<string> bigShapes: ["cookie9", "flower", "clover8", "softBurst", "cookie12", "puffy",
+                                               "sunny", "cookie7"]
+    readonly property list<string> smallShapes: ["cookie4", "clover4", "sunny", "pill", "softBurst", "diamond"]
+    readonly property real hash: {
+        let value = 0
         for (let index = 0; index < name.length; ++index) {
-            hash = (hash * 31 + name.charCodeAt(index)) >>> 0
+            value = (value * 31 + name.charCodeAt(index)) >>> 0
         }
-        return shapes[hash % shapes.length]
+        return value
     }
+    /// the genre's own shapes, from its name
+    readonly property string shape: bigShapes[hash % bigShapes.length]
+    readonly property string accentShape: smallShapes[(hash >>> 3) % smallShapes.length]
+    /// the container: the surface with a little of the genre's colour in it
+    readonly property color container: Qt.tint(Appearance.colors.surfaceContainerHigh, Qt.alpha(startColor, 0.2))
+    /// what sits on a shape in the genre's colour
+    readonly property color ink: Qt.darker(startColor, 3)
 
     implicitWidth: Appearance.sizes.cardSize
     implicitHeight: 112
     hoverEnabled: true
     // click focus would let other mouse buttons grab and press it
     focusPolicy: Qt.TabFocus
-    scale: down ? 0.95 : (hovered ? 1.03 : 1)
+    scale: down ? 0.96 : (hovered ? 1.03 : 1)
 
     Behavior on scale {
         enabled: !Appearance.performanceMode
@@ -39,37 +49,53 @@ T.AbstractButton {
     background: Item {
         SoftShadow {
             anchors.fill: parent
-            radius: Appearance.sizes.artworkRadius
-            blur: root.hovered ? 12 : 6
-            offset: Qt.vector2d(0, root.hovered ? 6 : 3)
-            color: Qt.rgba(0, 0, 0, root.hovered ? 0.2 : 0.1)
+            radius: Appearance.rounding.large
+            blur: root.hovered ? 12 : 4
+            offset: Qt.vector2d(0, root.hovered ? 6 : 2)
+            color: Qt.rgba(0, 0, 0, root.hovered ? 0.22 : 0.1)
         }
 
-        // hovered, its edge turns to running scallops, as a cover's does
         WavyClip {
             anchors.fill: parent
-            radius: Appearance.sizes.artworkRadius
+            radius: Appearance.rounding.large
             wavy: root.hovered
 
             Rectangle {
                 anchors.fill: parent
-                radius: Appearance.sizes.artworkRadius
-                gradient: Gradient {
-                    orientation: Gradient.Horizontal
-                    GradientStop { position: 0; color: root.startColor }
-                    GradientStop { position: 1; color: root.endColor }
+                radius: Appearance.rounding.large
+                color: root.container
+
+                // the small shape, in the second colour, springs up when hovered
+                MaterialShape {
+                    x: parent.width - 124
+                    y: parent.height - 46
+                    width: 34
+                    height: 34
+                    shape: root.accentShape
+                    color: root.endColor
+                    scale: root.hovered ? 1.2 : 1
+                    spinAngle: root.hovered ? -50 : -10
+
+                    Behavior on scale {
+                        enabled: !Appearance.performanceMode
+                        Bounce {}
+                    }
+                    Behavior on spinAngle {
+                        enabled: !Appearance.performanceMode
+                        Bounce {}
+                    }
                 }
 
+                // the big one is cut by the corner, with the symbol in it
                 MaterialShape {
-                    x: parent.width - 100
-                    y: -16
-                    width: 136
-                    height: 136
+                    x: parent.width - 80
+                    y: parent.height - 72
+                    width: 112
+                    height: 112
                     shape: root.shape
-                    color: Qt.rgba(1, 1, 1, 0.16)
-                    // cut off by the card's edge, round corner and all
-                    parentClipRadius: Appearance.sizes.artworkRadius
-                    spinAngle: root.hovered ? 34 : 8
+                    color: root.startColor
+                    parentClipRadius: Appearance.rounding.large
+                    spinAngle: root.hovered ? 40 : 6
 
                     Behavior on spinAngle {
                         enabled: !Appearance.performanceMode
@@ -78,14 +104,19 @@ T.AbstractButton {
 
                     MaterialSymbol {
                         anchors.centerIn: parent
-                        anchors.horizontalCenterOffset: -8
-                        anchors.verticalCenterOffset: 8
+                        anchors.horizontalCenterOffset: -14
+                        anchors.verticalCenterOffset: -14
                         text: root.symbol
-                        iconSize: 50
+                        iconSize: 36
                         fill: 1
                         weight: 600
-                        rotation: 10
-                        color: Qt.rgba(1, 1, 1, 0.34)
+                        rotation: root.hovered ? -8 : 0
+                        color: root.ink
+
+                        Behavior on rotation {
+                            enabled: !Appearance.performanceMode
+                            Bounce {}
+                        }
                     }
                 }
             }
@@ -95,45 +126,18 @@ T.AbstractButton {
     contentItem: Item {
         StyledText {
             anchors.left: parent.left
-            anchors.bottom: parent.bottom
-            anchors.margins: 14
-                text: qsTranslate("Genres", root.name)
-            color: "white"
+            anchors.top: parent.top
+            anchors.right: parent.right
+            anchors.margins: 16
+            text: qsTranslate("Genres", root.name)
+            elide: Text.ElideRight
+            color: Appearance.colors.onSurface
             font.pixelSize: Appearance.fontSize.larger
-            font.weight: Font.Bold
+            font.weight: Font.Black
         }
     }
-
-    // leans a few degrees toward the pointer while hovered, on a spring
-    property real tiltAcross: pointer.hovered && !Appearance.performanceMode
-                              ? (pointer.point.position.x / Math.max(1, width) - 0.5) * 12 : 0
-    property real tiltDown: pointer.hovered && !Appearance.performanceMode
-                            ? (0.5 - pointer.point.position.y / Math.max(1, root.height)) * 10 : 0
-
-    Behavior on tiltAcross {
-        SpringAnimation { spring: 4; damping: 0.3; epsilon: 0.01 }
-    }
-    Behavior on tiltDown {
-        SpringAnimation { spring: 4; damping: 0.3; epsilon: 0.01 }
-    }
-
-    transform: [
-        Rotation {
-            origin.x: root.width / 2
-            origin.y: root.height / 2
-            axis { x: 0; y: 1; z: 0 }
-            angle: root.tiltAcross
-        },
-        Rotation {
-            origin.x: root.width / 2
-            origin.y: root.height / 2
-            axis { x: 1; y: 0; z: 0 }
-            angle: root.tiltDown
-        }
-    ]
 
     HoverHandler {
-        id: pointer
         cursorShape: Qt.PointingHandCursor
     }
 }
