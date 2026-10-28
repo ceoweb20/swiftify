@@ -271,6 +271,9 @@ jobs:
           security set-keychain-settings -lut 21600 "$keychain"
           security unlock-keychain -p "$password" "$keychain"
           security import "$RUNNER_TEMP/signing.p12" -k "$keychain" -P "$MACOS_SIGNING_PASSWORD" -T /usr/bin/codesign
+          # an Apple-issued identity needs its intermediate to build the chain
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/wwdr-g3.cer" https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer
+          security import "$RUNNER_TEMP/wwdr-g3.cer" -k "$keychain" || true
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain" >/dev/null
           # the runner is thrown away afterwards, so its keychain list may be rewritten
           existing="$(security list-keychains -d user | tr -d '"' | xargs)"
@@ -278,10 +281,14 @@ jobs:
           rm -f "$RUNNER_TEMP/signing.p12"
           echo "SWIFTIFY_CODESIGN_IDENTITY=$MACOS_SIGNING_IDENTITY" >> "$GITHUB_ENV"
 
+      # lays out the drag-to-install window without scripting Finder
+      - name: installer tools
+        run: python3 -m pip install 'dmgbuild==1.6.7'
       - name: build and package
         env:
           SWIFTIFY_BUILD_ROOT: ${{ runner.temp }}/swiftify-build
           MACOSX_DEPLOYMENT_TARGET: '13.0'
+          SWIFTIFY_REQUIRE_STYLED_DMG: '1'
         run: bash tools/build-macos-portable.sh
       - name: updater tests
         run: |

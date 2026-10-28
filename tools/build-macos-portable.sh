@@ -48,7 +48,10 @@ codesign --force --deep --sign "$IDENTITY" "$APP"
 codesign --verify --deep --strict "$APP"
 requirement="$(codesign -d -r- "$APP" 2>&1 | grep designated || true)"
 echo "$requirement"
-if [[ "$IDENTITY" != "-" && "$requirement" != *"certificate root"* ]]; then
+# A self-signed identity pins its root certificate; an Apple-issued one pins
+# its leaf and carries a Team ID, which keeps the Keychain partition the same
+# across updates instead of changing with every build's code hash.
+if [[ "$IDENTITY" != "-" && "$requirement" != *"certificate root"* && "$requirement" != *"anchor apple generic"* ]]; then
     echo "the app was not signed with the stable identity" >&2
     exit 1
 fi

@@ -48,6 +48,70 @@ def create_dmg(staging, destination, scratch):
             return
 
 
+DMG_ART = SOURCE / "packaging/macos/dmg"
+# Finder's window content and where it puts the two icons, in points; the
+# background art leaves these spots and the label strip under them clear.
+DMG_WINDOW = (660, 420)
+DMG_APP_SLOT = (180, 210)
+DMG_APPLICATIONS_SLOT = (480, 210)
+
+
+def create_styled_dmg(app, destination, scratch):
+    """The drag-to-install window: our background, the app on the left, an
+    Applications alias on the right and the app icon on the volume. dmgbuild
+    writes Finder's layout directly, so no Finder scripting is needed on CI."""
+    import dmgbuild
+
+    background = scratch / "background.png"
+    shutil.copy(DMG_ART / "background.png", background)
+    # found beside it and merged into a HiDPI background
+    shutil.copy(DMG_ART / "background@2x.png", scratch / "background@2x.png")
+    settings = {
+        "format": "UDZO",
+        "filesystem": "HFS+",
+        "files": [str(app)],
+        "symlinks": {"Applications": "/Applications"},
+        "icon": str(app / "Contents/Resources/swiftify.icns"),
+        "background": str(background),
+        "window_rect": ((200, 160), DMG_WINDOW),
+        "default_view": "icon-view",
+        "show_status_bar": False,
+        "show_tab_view": False,
+        "show_toolbar": False,
+        "show_pathbar": False,
+        "show_sidebar": False,
+        "show_icon_preview": False,
+        "arrange_by": None,
+        "icon_size": 128,
+        "text_size": 13,
+        "label_pos": "bottom",
+        "hide_extensions": [app.name],
+        "icon_locations": {app.name: DMG_APP_SLOT, "Applications": DMG_APPLICATIONS_SLOT},
+    }
+    for attempt in range(1, 4):
+        image = scratch / f"installer-{attempt}.dmg"
+        try:
+            dmgbuild.build_dmg(str(image), "BetterSwiftify", settings=settings, detach_retries=10)
+        except Exception as error:
+            if attempt == 3 or "busy" not in str(error).lower():
+                raise
+            print(f"DMG device temporarily busy; retrying ({attempt}/3).", file=sys.stderr)
+            time.sleep(5 * attempt)
+        else:
+            os.replace(image, destination)
+            return
+
+
+def styled_dmg_available():
+    if not (DMG_ART / "background.png").is_file():
+        return False
+    try:
+        import dmgbuild  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
 def package(root, target, output, iscc=None):
     root = root.resolve(strict=True)
     output = output.resolve()
@@ -61,9 +125,15 @@ def package(root, target, output, iscc=None):
             scratch = Path(temporary)
             staging = scratch / "contents"
             staging.mkdir()
-            subprocess.run(["ditto", str(root), str(staging / "Swiftify.app")], check=True)
-            (staging / "Applications").symlink_to("/Applications")
-            create_dmg(staging, destination, scratch)
+            app = staging / "Swiftify.app"
+            subprocess.run(["ditto", str(root), str(app)], check=True)
+            if styled_dmg_available():
+                create_styled_dmg(app, destination, scratch)
+            elif os.environ.get("SWIFTIFY_REQUIRE_STYLED_DMG"):
+                raise RuntimeError("dmgbuild and the installer art are required for the release DMG")
+            else:
+                (staging / "Applications").symlink_to("/Applications")
+                create_dmg(staging, destination, scratch)
     elif target == "windows-x86_64":
         if not (root / "bin/swiftify.exe").is_file():
             raise ValueError("A deployed Windows application tree is required")

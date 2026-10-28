@@ -5,6 +5,7 @@ import io
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 import tempfile
 import unittest
@@ -62,10 +63,51 @@ class UpdateToolsTest(unittest.TestCase):
                     self.assertEqual(command[command.index("-fs") + 1], "HFS+")
                     Path(command[-1]).write_bytes(b"dmg")
                 return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
-            with patch.object(installer.subprocess, "run", side_effect=create_image):
+            with patch.object(installer.subprocess, "run", side_effect=create_image), \
+                    patch.object(installer, "styled_dmg_available", return_value=False):
                 result = installer.package(root, "macos-aarch64", output)
             self.assertEqual([call[0] for call in calls], ["ditto", "hdiutil"])
             self.assertEqual(result.suffix, ".dmg")
+
+    @unittest.skipIf(os.name == "nt", "the styled DMG is built on macOS")
+    def test_macos_release_dmg_uses_the_installer_layout(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "swiftify.app"
+            (root / "Contents/MacOS").mkdir(parents=True)
+            (root / "Contents/MacOS/swiftify").write_bytes(b"fixture")
+            output = Path(temporary) / "dist"
+            builds = []
+            def build_dmg(filename, volume_name, settings, **kwargs):
+                builds.append((volume_name, settings))
+                # the HiDPI art is found beside the background while it builds
+                self.assertTrue((Path(settings["background"]).parent / "background@2x.png").is_file())
+                Path(filename).write_bytes(b"styled dmg")
+            fake = type(sys)("dmgbuild")
+            fake.build_dmg = build_dmg
+            def copy_app(command, check, **kwargs):
+                Path(command[-1], "Contents").mkdir(parents=True)
+                return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+            with patch.dict(sys.modules, {"dmgbuild": fake}), \
+                    patch.object(installer.subprocess, "run", side_effect=copy_app):
+                result = installer.package(root, "macos-aarch64", output)
+            self.assertEqual(result.read_bytes(), b"styled dmg")
+            volume, settings = builds[0]
+            self.assertEqual(volume, "BetterSwiftify")
+            self.assertEqual(settings["symlinks"], {"Applications": "/Applications"})
+            self.assertEqual(settings["icon_locations"]["Applications"], installer.DMG_APPLICATIONS_SLOT)
+            self.assertEqual(settings["icon_locations"]["Swiftify.app"], installer.DMG_APP_SLOT)
+            self.assertEqual(Path(settings["background"]).name, "background.png")
+
+    def test_release_build_refuses_an_unstyled_dmg(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "swiftify.app"
+            (root / "Contents/MacOS").mkdir(parents=True)
+            (root / "Contents/MacOS/swiftify").write_bytes(b"fixture")
+            with patch.object(installer, "styled_dmg_available", return_value=False), \
+                    patch.object(installer.subprocess, "run"), \
+                    patch.dict(os.environ, {"SWIFTIFY_REQUIRE_STYLED_DMG": "1"}):
+                with self.assertRaises(RuntimeError):
+                    installer.package(root, "macos-aarch64", Path(temporary) / "dist")
 
     def test_busy_dmg_creation_is_retried_with_a_new_image_path(self):
         with tempfile.TemporaryDirectory() as temporary:
