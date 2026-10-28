@@ -213,6 +213,31 @@ private slots:
         QCOMPARE(page->property("contentY").toReal(), notch);
     }
 
+    void theImmersivePlayerHasItsOwnShapes()
+    {
+        Rig rig;
+        rig.settings.setPerformanceMode(true);
+        rig.playSomething();
+        const auto player = rig.show(QStringLiteral("ImmersivePlayer"));
+        QVERIFY(player);
+        auto *stickers = player->findChild<QQuickItem *>(QStringLiteral("immersiveStickers"));
+        QVERIFY(stickers);
+        QVERIFY(stickers->isVisible());
+        QCOMPARE(stickers->property("key").toString(), rig.player.currentSong().albumName);
+        const auto shapes = [&] {
+            int count = 0;
+            for (auto *child : stickers->childItems()) {
+                count += child->inherits("swiftify::MaterialShapeItem");
+            }
+            return count;
+        };
+        QCOMPARE(shapes(), 6);
+        // with no shapes there are none
+        rig.settings.setNoShapes(true);
+        Rig::settle();
+        QCOMPARE(shapes(), 0);
+    }
+
     void restoredShapesDecorateThePages()
     {
         Rig rig;
@@ -491,7 +516,7 @@ private slots:
         QTest::addColumn<bool>("populated");
         QTest::addColumn<int>("width");
         for (const auto *type : {"HomeView", "SearchView", "PlaylistsView", "PinnedPlaylists", "PersonalizedPlaylists", "SavedSongsView", "AlbumView",
-                                 "PlaylistView", "ArtistView", "StatsView", "SetupView", "StartupView"}) {
+                                 "PlaylistView", "ArtistView", "StatsView", "SetupView", "StartupView", "ImmersivePlayer"}) {
             for (bool populated : {false, true}) {
                 for (int width : {1280, 720}) {
                     QTest::addRow("%s-%s-%d", type, populated ? "data" : "empty", width)
@@ -569,6 +594,7 @@ private slots:
             }
             if (type == QStringLiteral("SearchView")) rig.library.setSearchQuery(QStringLiteral("night"));
             if (type == QStringLiteral("StatsView")) QTRY_COMPARE(rig.stats.plays(), songs.size());
+            if (type == QStringLiteral("ImmersivePlayer")) rig.playSomething();
         }
         const bool pinned = type == QStringLiteral("PinnedPlaylists");
         const bool personalized = type == QStringLiteral("PersonalizedPlaylists");

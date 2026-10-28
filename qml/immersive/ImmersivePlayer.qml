@@ -328,6 +328,19 @@ FocusScope {
         shown: root.visible
     }
 
+    // big faint shapes over the cover's colours, a scatter of their own for
+    // each album; they turn with the music on the shared spin clock
+    Stickers {
+        objectName: "immersiveStickers"
+        anchors.fill: parent
+        key: Player.currentSong.albumName.length > 0 ? Player.currentSong.albumName : Player.currentSong.name
+        count: 6
+        minimumSize: 140
+        maximumSize: Math.max(260, Math.min(root.width, root.height) * 0.4)
+        scheme: root.scheme
+        strength: 0.75
+    }
+
     HoverHandler {
         id: activityTracker
         objectName: "activityTracker"
