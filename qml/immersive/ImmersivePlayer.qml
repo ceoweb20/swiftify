@@ -568,6 +568,7 @@ FocusScope {
         // Sound is taller than the panel on short windows, so it scrolls
         Flickable {
             id: soundScroll
+            PageWheelHandler { page: soundScroll }
             contentHeight: soundPanel.implicitHeight + 24
             boundsBehavior: Flickable.StopAtBounds
             clip: true

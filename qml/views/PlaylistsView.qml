@@ -34,6 +34,7 @@ GridView {
     boundsBehavior: Flickable.StopAtBounds
     reuseItems: true
     ScrollBar.vertical: StyledScrollBar { topPadding: 3 + Appearance.sizes.topBarHeight }
+    PageWheelHandler { page: root }
 
     // the new-playlist tile comes first on the full grid
     model: source.count + leading
@@ -54,6 +55,14 @@ GridView {
             color: Appearance.colors.surfaceContainerHigh
             border.width: 1
             border.color: Qt.alpha(Appearance.colors.outlineVariant, 0.4)
+
+            Stickers {
+                anchors.fill: parent
+                key: root.personalized ? "personalized" : root.pinnedOnly ? "pinned" : "playlists"
+                count: 4
+                maximumSize: 150
+                clipRadius: headingPanel.radius
+            }
 
             TitleText {
                 id: heading

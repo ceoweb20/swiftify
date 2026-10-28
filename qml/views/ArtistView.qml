@@ -6,6 +6,7 @@ import Swiftify
 // an artist (ArtistDetailView): top songs, then albums and singles
 Flickable {
     id: root
+    PageWheelHandler { page: root }
 
     // pages run up under the top bar, which floats over them with no
     // background of its own; they start below it

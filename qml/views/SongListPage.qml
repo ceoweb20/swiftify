@@ -31,6 +31,7 @@ ListView {
     cacheBuffer: 600
     bottomMargin: Appearance.sizes.playerBarClearance
     ScrollBar.vertical: StyledScrollBar { topPadding: 3 + Appearance.sizes.topBarHeight }
+    PageWheelHandler { page: root }
 
     header: Column {
         width: root.width

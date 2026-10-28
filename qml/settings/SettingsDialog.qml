@@ -68,6 +68,7 @@ T.Popup {
 
         Flickable {
             id: railScroller
+            PageWheelHandler { page: railScroller }
             objectName: "settingsRail"
             x: 16
             y: 84
@@ -157,6 +158,25 @@ T.Popup {
             color: Qt.alpha(Appearance.colors.outlineVariant, 0.35)
         }
 
+        // each page's own faint shapes behind its heading; the band ends where
+        // the cards begin, so they never sit under a card
+        Item {
+            x: railScroller.x + railScroller.width + 13
+            width: parent.width - x
+            height: scroller.y
+            clip: true
+
+            Stickers {
+                width: parent.width
+                height: parent.height + 24
+                key: root.titles[root.page]
+                count: 4
+                minimumSize: 56
+                maximumSize: 120
+                clipRadius: 28
+            }
+        }
+
         TitleText {
             x: scroller.x
             y: 24
@@ -167,9 +187,10 @@ T.Popup {
         }
 
         // A single clipped viewport keeps section cards away from the sheet's
-        // rounded edge and the fixed header. No decorative layer sits under cards.
+        // rounded edge and the fixed header.
         Flickable {
             id: scroller
+            PageWheelHandler { page: scroller }
             objectName: "settingsContentViewport"
             x: railScroller.x + railScroller.width + 24
             y: 88

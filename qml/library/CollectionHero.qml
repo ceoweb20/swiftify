@@ -26,6 +26,15 @@ Item {
     implicitHeight: stacked ? artworkSize + details.implicitHeight + 100
                             : Math.max(artworkSize, details.implicitHeight) + 80
 
+    // the collection's own scatter of faint shapes, behind it all
+    Stickers {
+        anchors.fill: parent
+        key: root.kind + root.title
+        count: 5
+        minimumSize: 80
+        maximumSize: 230
+    }
+
     Item {
         id: artworkBox
         // how the page host finds it, to fly its cover home on the way back

@@ -28,6 +28,7 @@ Item {
 
     ListView {
         id: list
+        PageWheelHandler { page: list }
         anchors.fill: parent
         Reveal.shown: Player.hasSong || Player.upNext.count > 0
         model: Player.upNext

@@ -14,6 +14,7 @@ Flickable {
     contentHeight: Math.max(height, column.y + column.implicitHeight + 36)
     boundsBehavior: Flickable.StopAtBounds
     ScrollBar.vertical: StyledScrollBar { topPadding: 3 + Appearance.sizes.topBarHeight }
+    PageWheelHandler { page: root }
 
     component Step: Row {
         id: step
@@ -58,6 +59,13 @@ Flickable {
                 font.pixelSize: Appearance.fontSize.smallie
             }
         }
+    }
+
+    Stickers {
+        width: root.width
+        height: Math.max(root.height, column.y + column.height)
+        key: "setup"
+        count: 6
     }
 
     Rectangle {

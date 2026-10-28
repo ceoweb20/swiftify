@@ -28,6 +28,9 @@ Column {
     property bool nearScreen: onScreen
     /// where the row was scrolled to, kept while its cards are gone
     property real scrolled: 0
+    /// the page's own wheel scrolling, which a vertical wheel over the row
+    /// is handed to, so it glides as it does anywhere else on the page
+    property PageWheelHandler pageScroller: null
 
     signal seeAll()
 
@@ -96,6 +99,10 @@ Column {
                             // even when this handler rejects it. Route it to the
                             // enclosing page instead of letting the shelf take it.
                             event.accepted = true
+                            if (root.pageScroller) {
+                                root.pageScroller.scrollWithWheel(event)
+                                return
+                            }
                             let ancestor = root.parent
                             while (ancestor) {
                                 const page = ancestor as Flickable

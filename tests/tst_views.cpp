@@ -169,6 +169,67 @@ private:
     using Rig = swiftify::testing::ViewRig;
 
 private slots:
+    void mouseWheelNotchesGlideAndTouchpadsScrollDirectly()
+    {
+        Rig rig;
+        QQmlComponent component(&rig.engine);
+        component.setData("import QtQuick\nimport Swiftify\n"
+                          "Flickable { id: page; width: 400; height: 300; contentHeight: 3000;"
+                          " boundsBehavior: Flickable.StopAtBounds;"
+                          " property alias wheel: wheel; PageWheelHandler { id: wheel; page: page } }", QUrl());
+        std::unique_ptr<QQuickItem> page(qobject_cast<QQuickItem *>(component.create()));
+        QVERIFY2(page, qPrintable(component.errorString()));
+        page->setParentItem(rig.window->contentItem());
+        Rig::settle();
+        const QPointF at(200, 150);
+        const auto mouseNotch = [&](int angle) {
+            QWheelEvent wheel(at, at, {}, QPoint(0, angle), Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
+            QCoreApplication::sendEvent(rig.window.get(), &wheel);
+        };
+        const qreal notch = page->property("wheel").value<QObject *>()->property("notch").toReal();
+
+        // a notch does not jump: the page glides there
+        mouseNotch(-120);
+        Rig::settle();
+        QVERIFY2(page->property("contentY").toReal() < notch, qPrintable(QString::number(page->property("contentY").toReal())));
+        // the next notch extends the same glide instead of starting over
+        mouseNotch(-120);
+        QTRY_COMPARE(page->property("contentY").toReal(), 2 * notch);
+
+        // a touchpad's pixel deltas are already smooth, so they apply at once
+        QWheelEvent pixels(at, at, QPoint(0, -37), {}, Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
+        QCoreApplication::sendEvent(rig.window.get(), &pixels);
+        QCOMPARE(page->property("contentY").toReal(), 2 * notch + 37);
+
+        // the glide stops at the page's ends
+        page->setProperty("contentY", 0);
+        mouseNotch(120);
+        QTest::qWait(300);
+        QCOMPARE(page->property("contentY").toReal(), 0.0);
+
+        // performance mode moves at once
+        rig.settings.setPerformanceMode(true);
+        mouseNotch(-120);
+        QCOMPARE(page->property("contentY").toReal(), notch);
+    }
+
+    void restoredShapesDecorateThePages()
+    {
+        Rig rig;
+        rig.settings.setPerformanceMode(true);
+        for (const auto *type : {"HomeView", "SearchView", "StatsView", "PlaylistsView", "SetupView", "StartupView"}) {
+            const auto page = rig.show(QString::fromLatin1(type));
+            QVERIFY(page);
+            int stickers = 0;
+            const std::function<void(QQuickItem *)> walk = [&](QQuickItem *item) {
+                stickers += QString::fromLatin1(item->metaObject()->className()).startsWith(QLatin1StringView("Stickers"));
+                for (auto *child : item->childItems()) walk(child);
+            };
+            walk(page.get());
+            QVERIFY2(stickers > 0, type);
+        }
+    }
+
     void scrollingTitlesStayCenteredAfterFontMetricsChange_data()
     {
         QTest::addColumn<bool>("performance");

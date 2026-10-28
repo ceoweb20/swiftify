@@ -35,6 +35,7 @@ Item {
 
     ListView {
         id: list
+        PageWheelHandler { page: list }
         anchors.fill: parent
         Reveal.shown: !Player.loadingLyrics && Player.hasLyrics
         model: Player.lyrics

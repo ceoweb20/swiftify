@@ -5,6 +5,26 @@ import Swiftify
 // while the saved login is checked (SpotifyStartupLoadingView)
 Item {
     Rectangle {
+        anchors.horizontalCenter: parent.horizontalCenter
+        y: -height / 2
+        width: parent.width * 1.4
+        height: width
+        radius: width / 2
+        gradient: Gradient {
+            orientation: Gradient.Vertical
+            GradientStop { position: 0.5; color: Qt.rgba(Appearance.colors.primary.r, Appearance.colors.primary.g, Appearance.colors.primary.b, 0.16) }
+            GradientStop { position: 1; color: "transparent" }
+        }
+        opacity: 0.8
+    }
+
+    Stickers {
+        anchors.fill: parent
+        key: "startup"
+        count: 6
+    }
+
+    Rectangle {
         id: panel
         objectName: "startupStatusPanel"
         anchors.centerIn: parent

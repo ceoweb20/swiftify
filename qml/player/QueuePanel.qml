@@ -22,6 +22,7 @@ Item {
 
     ListView {
         id: list
+        PageWheelHandler { page: list }
         anchors.fill: parent
         anchors.topMargin: header.y + header.height + 10
         leftMargin: 12

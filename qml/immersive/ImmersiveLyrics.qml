@@ -42,6 +42,7 @@ Item {
 
     ListView {
         id: list
+        PageWheelHandler { page: list }
         objectName: "immersiveLyricsList"
         anchors.fill: parent
         Reveal.shown: !Player.loadingLyrics && Player.hasLyrics

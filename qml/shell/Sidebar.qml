@@ -19,6 +19,7 @@ Item {
 
     ListView {
         id: list
+        PageWheelHandler { page: list }
         anchors.fill: parent
         anchors.bottomMargin: settingsButton.height + 16
         clip: true

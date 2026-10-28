@@ -14,7 +14,10 @@ Flickable {
     contentWidth: width
     flickableDirection: Flickable.VerticalFlick
 
-    PageWheelHandler { page: root }
+    PageWheelHandler {
+        id: pageWheel
+        page: root
+    }
 
     readonly property real margin: Appearance.sizes.pageMargin
     readonly property real innerWidth: width - 2 * margin
@@ -196,6 +199,7 @@ Flickable {
 
         // --- the heading and what it shows ------------------------------------------
         Rectangle {
+            id: toolbarPanel
             objectName: "statsToolbarPanel"
             x: root.margin
             width: root.innerWidth
@@ -204,6 +208,14 @@ Flickable {
             color: Appearance.colors.surfaceContainerHigh
             border.width: 1
             border.color: Qt.alpha(Appearance.colors.outlineVariant, 0.4)
+
+            Stickers {
+                anchors.fill: parent
+                key: "stats"
+                count: 5
+                maximumSize: 170
+                clipRadius: toolbarPanel.radius
+            }
 
             Column {
                 id: toolbarContent
@@ -536,6 +548,7 @@ Flickable {
         // --- top artists and albums -----------------------------------------------------------
         Shelf {
             id: artistsShelf
+            pageScroller: pageWheel
             readonly property bool shown: Stats.topArtists.count > 0
             width: root.width
             onScreen: root.reaches(column.y + y, height, 0)
@@ -576,6 +589,7 @@ Flickable {
 
         Shelf {
             id: albumsShelf
+            pageScroller: pageWheel
             readonly property bool shown: Stats.topAlbums.count > 0
             width: root.width
             onScreen: root.reaches(column.y + y, height, 0)

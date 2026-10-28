@@ -13,7 +13,10 @@ Flickable {
     contentWidth: width
     flickableDirection: Flickable.VerticalFlick
 
-    PageWheelHandler { page: root }
+    PageWheelHandler {
+        id: pageWheel
+        page: root
+    }
 
     readonly property real margin: Appearance.sizes.pageMargin
     readonly property bool empty: Library.searchQuery.trim().length === 0
@@ -30,6 +33,13 @@ Flickable {
 
     Genres {
         id: genres
+    }
+
+    Stickers {
+        width: root.width
+        height: 220
+        key: "search"
+        count: 4
     }
 
     Column {
@@ -229,6 +239,7 @@ Flickable {
             }
 
             Shelf {
+                pageScroller: pageWheel
                 width: root.width
                 onScreen: root.reaches(column.y + results.y + y, height, 0)
                 nearScreen: root.reaches(column.y + results.y + y, height, root.height / 2)
@@ -251,6 +262,7 @@ Flickable {
             }
 
             Shelf {
+                pageScroller: pageWheel
                 width: root.width
                 onScreen: root.reaches(column.y + results.y + y, height, 0)
                 nearScreen: root.reaches(column.y + results.y + y, height, root.height / 2)
@@ -275,6 +287,7 @@ Flickable {
             }
 
             Shelf {
+                pageScroller: pageWheel
                 width: root.width
                 onScreen: root.reaches(column.y + results.y + y, height, 0)
                 nearScreen: root.reaches(column.y + results.y + y, height, root.height / 2)

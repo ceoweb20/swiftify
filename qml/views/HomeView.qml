@@ -13,7 +13,10 @@ Flickable {
     contentWidth: width
     flickableDirection: Flickable.VerticalFlick
 
-    PageWheelHandler { page: root }
+    PageWheelHandler {
+        id: pageWheel
+        page: root
+    }
 
     readonly property real margin: Appearance.sizes.pageMargin
     readonly property bool hasSpotlight: Player.hasSong || Library.recentlyPlayed.count > 0
@@ -40,6 +43,14 @@ Flickable {
 
     Genres {
         id: genres
+    }
+
+    // a few faint shapes behind the page's heading
+    Stickers {
+        width: root.width
+        height: 260
+        key: "home"
+        count: 5
     }
 
     Column {
@@ -385,6 +396,7 @@ Flickable {
 
 
         Shelf {
+            pageScroller: pageWheel
             width: root.width
             onScreen: root.reaches(column.y + y, height, 0)
             nearScreen: root.reaches(column.y + y, height, root.height / 2)
@@ -410,6 +422,7 @@ Flickable {
         }
 
         Shelf {
+            pageScroller: pageWheel
             width: root.width
             onScreen: root.reaches(column.y + y, height, 0)
             nearScreen: root.reaches(column.y + y, height, root.height / 2)
@@ -435,6 +448,7 @@ Flickable {
         }
 
         Shelf {
+            pageScroller: pageWheel
             width: root.width
             onScreen: root.reaches(column.y + y, height, 0)
             nearScreen: root.reaches(column.y + y, height, root.height / 2)
@@ -461,6 +475,7 @@ Flickable {
         }
 
         Shelf {
+            pageScroller: pageWheel
             width: root.width
             onScreen: root.reaches(column.y + y, height, 0)
             nearScreen: root.reaches(column.y + y, height, root.height / 2)
@@ -485,6 +500,7 @@ Flickable {
         }
 
         Shelf {
+            pageScroller: pageWheel
             width: root.width
             onScreen: root.reaches(column.y + y, height, 0)
             nearScreen: root.reaches(column.y + y, height, root.height / 2)
@@ -507,6 +523,7 @@ Flickable {
         }
 
         Shelf {
+            pageScroller: pageWheel
             width: root.width
             onScreen: root.reaches(column.y + y, height, 0)
             nearScreen: root.reaches(column.y + y, height, root.height / 2)
