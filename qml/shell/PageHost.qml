@@ -172,6 +172,11 @@ Item {
         // every page changes between setup and the library
         function onNeedsSetupChanged() { root.rebuild(Library.historyDepth + 1) }
     }
+    Connections {
+        target: Appearance
+        function onPerformanceModeChanged() { if (Appearance.performanceMode) enterMotion.complete() }
+        function onReduceMotionChanged() { if (Appearance.reduceMotion) enterMotion.complete() }
+    }
 
     Component {
         id: slotComponent
@@ -183,15 +188,15 @@ Item {
 
     ParallelAnimation {
         id: enterMotion
+        objectName: "pageEntrance"
         NumberAnimation { id: fade; property: "opacity"; from: 0; to: 1; duration: Appearance.duration(210); easing.type: Easing.OutCubic }
         NumberAnimation {
             id: rise
             property: "y"
-            from: 14
+            from: Appearance.reduceMotion ? 0 : 8
             to: 0
-            duration: Appearance.motion(400)
-            easing.type: Easing.BezierSpline
-            easing.bezierCurve: Appearance.curves.emphasizedDecel
+            duration: Appearance.motion(260)
+            easing.type: Easing.OutCubic
         }
     }
 

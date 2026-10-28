@@ -459,10 +459,11 @@ if(APPLE)
             COMMAND ${CMAKE_COMMAND} -E copy ${SWIFTIFY_ICON_SOURCE}/swiftify-256.png ${SWIFTIFY_ICONSET}/icon_256x256.png
             COMMAND ${CMAKE_COMMAND} -E copy ${SWIFTIFY_ICON_SOURCE}/swiftify-512.png ${SWIFTIFY_ICONSET}/icon_256x256@2x.png
             COMMAND ${CMAKE_COMMAND} -E copy ${SWIFTIFY_ICON_SOURCE}/swiftify-512.png ${SWIFTIFY_ICONSET}/icon_512x512.png
+            COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/resources/swiftify-icon.png ${SWIFTIFY_ICONSET}/icon_512x512@2x.png
             COMMAND iconutil --convert icns --output ${SWIFTIFY_ICNS} ${SWIFTIFY_ICONSET}
             DEPENDS ${SWIFTIFY_ICON_SOURCE}/swiftify-32.png ${SWIFTIFY_ICON_SOURCE}/swiftify-64.png
                 ${SWIFTIFY_ICON_SOURCE}/swiftify-128.png ${SWIFTIFY_ICON_SOURCE}/swiftify-256.png
-                ${SWIFTIFY_ICON_SOURCE}/swiftify-512.png
+                ${SWIFTIFY_ICON_SOURCE}/swiftify-512.png ${CMAKE_CURRENT_SOURCE_DIR}/resources/swiftify-icon.png
             COMMENT "Making the app icon")
         set(SWIFTIFY_ICON_FILES ${SWIFTIFY_ICNS})
     endif()

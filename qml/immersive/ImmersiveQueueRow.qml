@@ -53,11 +53,13 @@ T.AbstractButton {
             spacing: 3
 
             ScrollingText {
+                objectName: "immersiveQueueTitle"
                 width: parent.width
                 text: root.song.name
                 horizontalAlignment: Text.AlignLeft
                 font.pixelSize: Appearance.fontSize.small
-                font.weight: root.current ? Font.Bold : Font.DemiBold
+                font.weight: Font.Bold
+                rounded: true
                 color: root.current ? "white" : Qt.rgba(1, 1, 1, 0.84)
                 running: root.current || root.hovered
             }

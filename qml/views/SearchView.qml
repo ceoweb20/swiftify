@@ -10,6 +10,10 @@ Flickable {
     // pages run up under the top bar, which floats over them with no
     // background of its own; they start below it
     topMargin: Appearance.sizes.topBarHeight
+    contentWidth: width
+    flickableDirection: Flickable.VerticalFlick
+
+    PageWheelHandler { page: root }
 
     readonly property real margin: Appearance.sizes.pageMargin
     readonly property bool empty: Library.searchQuery.trim().length === 0
@@ -28,13 +32,6 @@ Flickable {
         id: genres
     }
 
-    Stickers {
-        width: root.width
-        height: 220
-        key: "search"
-        count: 4
-    }
-
     Column {
         id: column
         y: 24
@@ -45,20 +42,30 @@ Flickable {
         Column {
             width: root.width
             Reveal.shown: root.empty
+            Reveal.scaleFrom: 1
+            Reveal.duration: Appearance.duration(220)
+            Reveal.overshoot: 0
 
             Item {
+                objectName: "searchHistoryHeading"
                 x: root.margin
                 width: root.width - 2 * root.margin
                 height: 48
                 Reveal.shown: Library.searchHistory.count > 0
+                Reveal.scaleFrom: 1
+                Reveal.duration: Appearance.duration(220)
+                Reveal.overshoot: 0
 
                 TitleText {
+                    width: Math.max(0, clearHistory.x - x - 12)
                     anchors.verticalCenter: parent.verticalCenter
                     text: qsTr("Played from Search")
                     font.pixelSize: Appearance.fontSize.title
                     font.weight: Font.Bold
+                    elide: Text.ElideRight
                 }
                 TextButton {
+                    id: clearHistory
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
                     variant: TextButton.Text
@@ -79,25 +86,31 @@ Flickable {
                 }
             }
 
-            StyledText {
+            TitleText {
+                objectName: "searchBrowseHeading"
                 x: root.margin
-                topPadding: Library.searchHistory.count > 0 ? 26 : 0
-                bottomPadding: 18
+                width: root.width - 2 * root.margin
+                topPadding: Library.searchHistory.count > 0 ? 24 : 0
+                bottomPadding: 16
                 text: qsTr("Browse Categories")
-                font.pixelSize: 32
-                font.weight: Font.Bold
+                font.pixelSize: Appearance.fontSize.headline
+                wrapMode: Text.Wrap
             }
 
             Flow {
+                id: categories
                 x: root.margin
                 width: root.width - 2 * root.margin
                 spacing: 16
+                readonly property int columns: Math.max(1, Math.floor((width + spacing) / 192))
+                readonly property real tileWidth: (width - spacing * (columns - 1)) / columns
 
                 Repeater {
                     model: genres.featured
 
                     GenreCard {
                         required property var modelData
+                        width: categories.tileWidth
                         name: modelData.name
                         symbol: modelData.symbol
                         startColor: modelData.start
@@ -113,6 +126,9 @@ Flickable {
             width: root.width
             height: 360
             Reveal.shown: !root.empty && Library.searchIsCatchphrase
+            Reveal.scaleFrom: 1
+            Reveal.duration: Appearance.duration(220)
+            Reveal.overshoot: 0
 
             Column {
                 anchors.centerIn: parent
@@ -145,6 +161,9 @@ Flickable {
             width: root.width
             height: 280
             Reveal.shown: !root.empty && !Library.searchIsCatchphrase && Library.searching
+            Reveal.scaleFrom: 1
+            Reveal.duration: Appearance.duration(220)
+            Reveal.overshoot: 0
 
             Column {
                 anchors.centerIn: parent
@@ -161,9 +180,13 @@ Flickable {
             width: root.width
             height: 360
             Reveal.shown: !root.empty && !Library.searchIsCatchphrase && !Library.searching && !Library.hasSearchResults
+            Reveal.scaleFrom: 1
+            Reveal.duration: Appearance.duration(220)
+            Reveal.overshoot: 0
 
             EmptyState {
                 anchors.centerIn: parent
+                width: Math.min(420, parent.width - 2 * root.margin)
                 symbol: "search_off"
                 title: qsTr("No Results for “%1”").arg(Library.searchQuery.trim())
                 description: qsTr("Check the spelling or try a new search.")
@@ -175,15 +198,22 @@ Flickable {
             id: results
             width: root.width
             Reveal.shown: !root.empty && !Library.searchIsCatchphrase && !Library.searching && Library.hasSearchResults
+            Reveal.scaleFrom: 1
+            Reveal.duration: Appearance.duration(220)
+            Reveal.overshoot: 0
             spacing: 0
 
             TitleText {
+                objectName: "searchSongsHeading"
                 x: root.margin
+                width: root.width - 2 * root.margin
                 Reveal.shown: Library.searchSongs.count > 0
+                Reveal.scaleFrom: 1
+                Reveal.duration: Appearance.duration(220)
+                Reveal.overshoot: 0
                 bottomPadding: 10
                 text: qsTr("Songs")
                 font.pixelSize: Appearance.fontSize.title
-                font.weight: Font.Bold
             }
 
             Repeater {
@@ -203,6 +233,9 @@ Flickable {
                 onScreen: root.reaches(column.y + results.y + y, height, 0)
                 nearScreen: root.reaches(column.y + results.y + y, height, root.height / 2)
                 Reveal.shown: Library.searchAlbums.count > 0
+                Reveal.scaleFrom: 1
+                Reveal.duration: Appearance.duration(220)
+                Reveal.overshoot: 0
                 topPadding: 28
                 title: qsTr("Albums")
                 symbol: "album"
@@ -222,6 +255,9 @@ Flickable {
                 onScreen: root.reaches(column.y + results.y + y, height, 0)
                 nearScreen: root.reaches(column.y + results.y + y, height, root.height / 2)
                 Reveal.shown: Library.searchArtists.count > 0
+                Reveal.scaleFrom: 1
+                Reveal.duration: Appearance.duration(220)
+                Reveal.overshoot: 0
                 topPadding: 28
                 title: qsTr("Artists")
                 symbol: "person"
@@ -243,6 +279,9 @@ Flickable {
                 onScreen: root.reaches(column.y + results.y + y, height, 0)
                 nearScreen: root.reaches(column.y + results.y + y, height, root.height / 2)
                 Reveal.shown: Library.searchPlaylists.count > 0
+                Reveal.scaleFrom: 1
+                Reveal.duration: Appearance.duration(220)
+                Reveal.overshoot: 0
                 topPadding: 28
                 title: qsTr("Playlists")
                 symbol: "queue_music"

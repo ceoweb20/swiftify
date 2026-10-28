@@ -3,8 +3,8 @@ import QtQuick
 import Swiftify
 
 // the head of a playlist, album, artist or favourites page: glowing artwork
-// on a soft burst in its own colour, beside a kind chip, the title, a
-// description and the facts as chips, with the page's buttons underneath.
+// beside its title and compact facts, with the page's actions underneath.
+// Artwork keeps its own flight coordinates.
 Item {
     id: root
 
@@ -15,7 +15,7 @@ Item {
     property string fallbackKey: title
     property string description
     property string facts
-    property real titleSize: 34
+    property real titleSize: Appearance.fontSize.display
     property alias actions: actionSlot.data
     property alias artwork: artworkSlot.data
     readonly property real sideArtworkSpace: width - 2 * Appearance.sizes.pageMargin - 24 - 220
@@ -25,15 +25,6 @@ Item {
 
     implicitHeight: stacked ? artworkSize + details.implicitHeight + 100
                             : Math.max(artworkSize, details.implicitHeight) + 80
-
-    // the collection's own scatter of faint shapes, behind it all
-    Stickers {
-        anchors.fill: parent
-        key: root.kind + root.title
-        count: 5
-        minimumSize: 80
-        maximumSize: 230
-    }
 
     Item {
         id: artworkBox
@@ -97,14 +88,14 @@ Item {
         y: root.stacked ? artworkBox.y + artworkBox.height + 20
                         : 40 + Math.max(0, artworkBox.height - implicitHeight)
         width: Math.max(0, root.width - x - Appearance.sizes.pageMargin)
-        spacing: 9
+        spacing: 10
 
         // the kind, as a chip with a symbol
         Rectangle {
             width: Math.min(parent.width, kindRow.implicitWidth + 20)
             height: 26
             radius: height / 2
-            color: Appearance.colors.primaryContainer
+            color: Appearance.colors.secondaryContainer
 
             Row {
                 id: kindRow
@@ -116,7 +107,7 @@ Item {
                     text: root.kind === "ALBUM" ? "album" : root.kind === "ARTIST" ? "person" : "queue_music"
                     iconSize: 15
                     fill: 1
-                    color: Appearance.colors.onPrimaryContainer
+                    color: Appearance.colors.onSecondaryContainer
                 }
                 StyledText {
                     anchors.verticalCenter: parent.verticalCenter
@@ -124,7 +115,7 @@ Item {
                     font.pixelSize: Appearance.fontSize.smallest
                     font.weight: Font.Bold
                     font.letterSpacing: 0.8
-                    color: Appearance.colors.onPrimaryContainer
+                    color: Appearance.colors.onSecondaryContainer
                 }
             }
         }
@@ -135,7 +126,7 @@ Item {
             maximumLineCount: 2
             wrapMode: Text.Wrap
             elide: Text.ElideRight
-            font.pixelSize: root.titleSize
+            font.pixelSize: root.stacked ? Math.min(root.titleSize, Appearance.fontSize.headline) : root.titleSize
             font.weight: Font.Bold
         }
 
@@ -167,7 +158,7 @@ Item {
                     width: Math.min(parent.width, factText.implicitWidth + 18)
                     height: 24
                     radius: height / 2
-                    color: Appearance.colors.surfaceContainerHigh
+                    color: Appearance.colors.surfaceContainerLow
 
                     StyledText {
                         id: factText

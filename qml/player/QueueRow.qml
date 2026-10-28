@@ -44,12 +44,12 @@ T.AbstractButton {
             anchors.verticalCenter: parent.verticalCenter
             spacing: 2
 
-            StyledText {
+            TitleText {
+                objectName: "queueRowTitle"
                 width: parent.width
                 text: root.song.name
                 elide: Text.ElideRight
                 font.pixelSize: Appearance.fontSize.smallie
-                font.weight: root.current ? Font.DemiBold : Font.Normal
                 color: root.current ? root.scheme.primary : root.scheme.onSurface
             }
             StyledText {

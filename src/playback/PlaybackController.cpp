@@ -7,6 +7,7 @@
 #include "playback/PlaybackState.h"
 
 #include <QCoreApplication>
+#include <QElapsedTimer>
 #include <QLoggingCategory>
 #include <QQmlEngine>
 #include <QRandomGenerator>
@@ -657,6 +658,11 @@ QCoro::Task<> PlaybackController::runStartPlayback(Song song, CancelToken token,
     bool unavailable = false;
     bool audioKeyRefused = false;
     bool cancelled = false;
+    QElapsedTimer started;
+    started.start();
+    qint64 connectionMs = 0;
+    int attempts = 0;
+    const quint64 request = m_crossfadeSerial;
     try {
         setStatus(QStringLiteral("Loading"));
         m_errors->clear();
@@ -681,7 +687,10 @@ QCoro::Task<> PlaybackController::runStartPlayback(Song song, CancelToken token,
             m_audioOutputNeedsRestart = false;
         }
 
+        qCDebug(lcPlayer) << "Playback request" << request << "checking connection";
         co_await m_session->ensureFreshPlaybackConnection();
+        connectionMs = started.elapsed();
+        qCDebug(lcPlayer) << "Playback request" << request << "requesting audio after" << connectionMs << "ms";
         // another song may have been chosen while the connection was
         // checked. starting this one now would play it under that one,
         // or in its place
@@ -691,11 +700,14 @@ QCoro::Task<> PlaybackController::runStartPlayback(Song song, CancelToken token,
         try {
             if (crossfadeDurationMs > 0) {
                 try {
+                    ++attempts;
                     co_await m_core->crossfadeTrack(song.uri, crossfadeDurationMs);
                 } catch (const SpotifyError &error) {
                     // a refused key is the account's, not the crossfade's:
                     // a normal load would only ask spotify for it again
                     if (error.kind() == SpotifyError::Kind::Superseded
+                        || error.kind() == SpotifyError::Kind::RateLimited
+                        || error.kind() == SpotifyError::Kind::Unavailable
                         || error.kind() == SpotifyError::Kind::AudioKeyRefused) {
                         throw;
                     }
@@ -704,21 +716,28 @@ QCoro::Task<> PlaybackController::runStartPlayback(Song song, CancelToken token,
                     fallbackFromCrossfade = true;
                 }
             } else {
+                ++attempts;
                 co_await m_core->playTrack(song.uri);
             }
         } catch (const SpotifyError &error) {
-            // reconnecting does not change a refused audio key: a retry would
-            // only ask spotify for a key it has just refused
-            if (error.kind() == SpotifyError::Kind::AudioKeyRefused) {
+            // A refused key or unavailable track is not a broken connection.
+            // Reconnecting and loading the same track again only delays the
+            // fallback/error or the next playable song.
+            if (error.kind() == SpotifyError::Kind::AudioKeyRefused
+                || error.kind() == SpotifyError::Kind::RateLimited
+                || error.kind() == SpotifyError::Kind::Unavailable) {
                 throw;
             }
             retry = true;
         }
         if (fallbackFromCrossfade && !retry) {
             try {
+                ++attempts;
                 co_await m_core->playTrack(song.uri);
             } catch (const SpotifyError &error) {
-                if (error.kind() == SpotifyError::Kind::AudioKeyRefused) {
+                if (error.kind() == SpotifyError::Kind::AudioKeyRefused
+                    || error.kind() == SpotifyError::Kind::RateLimited
+                    || error.kind() == SpotifyError::Kind::Unavailable) {
                     throw;
                 }
                 retry = true;
@@ -728,6 +747,7 @@ QCoro::Task<> PlaybackController::runStartPlayback(Song song, CancelToken token,
             throwIfCancelled(token);
             co_await m_session->ensureFreshPlaybackConnection(true);
             throwIfCancelled(token);
+            ++attempts;
             co_await m_core->playTrack(song.uri);
         }
         throwIfCancelled(token);
@@ -743,6 +763,11 @@ QCoro::Task<> PlaybackController::runStartPlayback(Song song, CancelToken token,
     }
 
     const bool withdrawn = cancelled || isCancelled(token) || !isCurrent(song);
+    if (started.elapsed() >= 2'000) {
+        qCInfo(lcPlayer) << "Slow playback request" << request << "total ms:" << started.elapsed()
+                        << "initial connection ms:" << connectionMs << "audio attempts:" << attempts
+                        << "withdrawn:" << withdrawn << "failed:" << !failure.isNull();
+    }
     if (withdrawn) {
         // the core started the song anyway, because nobody told it the request
         // had been withdrawn.

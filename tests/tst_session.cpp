@@ -61,6 +61,8 @@ public:
         emit finished();
     }
 
+    void setRetryAfter(const QByteArray &value) { setRawHeader("Retry-After", value); }
+
     void abort() override {}
     bool isSequential() const override { return true; }
     qint64 bytesAvailable() const override { return m_body.size() - m_offset + QIODevice::bytesAvailable(); }
@@ -96,6 +98,8 @@ public:
     QSet<QString> revokedLogins;
     /// the web api's answers by path. any other path is not found
     QHash<QString, QByteArray> api;
+    QHash<QString, int> apiStatus;
+    QHash<QString, QByteArray> apiRetryAfter;
     /// every web api call, as its method, path and query
     QStringList apiCalls;
 
@@ -127,7 +131,7 @@ protected:
                 query.isEmpty() ? QString() : u'?' + query);
             const auto found = api.constFind(request.url().path());
             return found == api.cend() ? reply(request, 404, R"({"error":{"status":404,"message":"Not found"}})")
-                                       : reply(request, 200, *found);
+                                       : reply(request, apiStatus.value(request.url().path(), 200), *found);
         }
         if (request.url().host() != QLatin1StringView(kHost)) {
             return QNetworkAccessManager::createRequest(operation, request, data);
@@ -175,6 +179,9 @@ private:
     QNetworkReply *reply(const QNetworkRequest &request, int status, const QByteArray &body)
     {
         auto *answer = new CannedReply(request, status, body, this);
+        if (apiRetryAfter.contains(request.url().path())) {
+            answer->setRetryAfter(apiRetryAfter.value(request.url().path()));
+        }
         if (holding) {
             m_held.append(answer);
         } else {
@@ -362,6 +369,93 @@ private:
     }
 
 private slots:
+    void webApiRateLimitBlocksOtherEndpointsWithoutRetrying()
+    {
+        FakeAccounts network;
+        WebApi api(&network);
+        const QString path = QStringLiteral("/v1/me/tracks");
+        network.api.insert(path, R"({"error":{"status":429,"message":"Too many requests"}})");
+        network.apiStatus.insert(path, 429);
+        network.apiRetryAfter.insert(path, "30");
+        try {
+            QCoro::waitFor(api.savedSongs(QStringLiteral("token")));
+            QFAIL("rate-limited request succeeded");
+        } catch (const SpotifyError &error) {
+            QCOMPARE(error.kind(), SpotifyError::Kind::RateLimited);
+            QCOMPARE(error.retryAfterSeconds(), 30);
+        }
+        QCOMPARE(network.apiCalls.size(), 1);
+        try {
+            QCoro::waitFor(api.profile(QStringLiteral("token")));
+            QFAIL("another endpoint ignored the cooldown");
+        } catch (const SpotifyError &error) {
+            QCOMPARE(error.kind(), SpotifyError::Kind::RateLimited);
+            QVERIFY(error.retryAfterSeconds() > 0);
+            QVERIFY(error.retryAfterSeconds() <= 30);
+        }
+        QCOMPARE(network.apiCalls.size(), 1);
+    }
+
+    void webApiRateLimitExpiresWithoutSchedulingRequests()
+    {
+        FakeAccounts network;
+        WebApi api(&network);
+        const QString path = QStringLiteral("/v1/me");
+        network.api.insert(path, R"({"error":{"status":429,"message":"Too many requests"}})");
+        network.apiStatus.insert(path, 429);
+        network.apiRetryAfter.insert(path, "1");
+        try {
+            QCoro::waitFor(api.profile(QStringLiteral("token")));
+            QFAIL("rate-limited request succeeded");
+        } catch (const SpotifyError &error) {
+            QCOMPARE(error.kind(), SpotifyError::Kind::RateLimited);
+        }
+        QTest::qWait(1100);
+        QCOMPARE(network.apiCalls.size(), 1);
+        network.apiStatus.remove(path);
+        network.api.insert(path, R"({"id":"listener","display_name":"Listener"})");
+        const auto profile = QCoro::waitFor(api.profile(QStringLiteral("token")));
+        QCOMPARE(profile.id, QStringLiteral("listener"));
+        QCOMPARE(network.apiCalls.size(), 2);
+    }
+
+    void libraryRateLimitDoesNotBlockAnAlreadyKnownTrack()
+    {
+        LibraryRig rig;
+        rig.storePlayback({}, QStringLiteral("stored-login"));
+        signIn(rig);
+        const auto connection = rig.core.take(QStringLiteral("connectStored"));
+        QVERIFY(connection);
+        connection->succeed(QStringLiteral("stored-login"));
+        QTRY_VERIFY(rig.session.isConnected());
+        const QString path = QStringLiteral("/v1/me");
+        rig.accounts.apiStatus.insert(path, 429);
+        rig.accounts.apiRetryAfter.insert(path, "30");
+        try {
+            QCoro::waitFor(rig.session.webApi().profile(QStringLiteral("access")));
+            QFAIL("rate-limited request succeeded");
+        } catch (const SpotifyError &error) {
+            QCOMPARE(error.kind(), SpotifyError::Kind::RateLimited);
+        }
+        const qsizetype requests = rig.accounts.apiCalls.size();
+        PlaybackController player(&rig.core, &rig.session, &rig.settings, &rig.errors);
+        rig.library.attachPlayer(&player);
+        Song song;
+        song.uri = QStringLiteral("spotify:track:known");
+        song.name = QStringLiteral("Known track");
+        rig.library.savedSongs()->setSongs({song});
+        player.playFromModel(rig.library.savedSongs(), 0);
+        settle();
+        const auto track = rig.core.take(QStringLiteral("playTrack"));
+        QVERIFY(track);
+        track->succeed();
+        QTRY_VERIFY(player.isPlaying());
+        QVERIFY(rig.session.isConnected());
+        QVERIFY(!rig.core.take(QStringLiteral("connectStored")));
+        QCOMPARE(rig.accounts.apiCalls.size(), requests);
+        rig.core.reset();
+    }
+
     void djMixStartsAQueueFromTheConnectedLibrary()
     {
         LibraryRig rig;

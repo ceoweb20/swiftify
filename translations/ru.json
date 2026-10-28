@@ -434,7 +434,7 @@
   "; updates when the file changes.": "; обновляется при изменении файла.",
   "automatically looks for Matugen JSON in common config and cache folders. an optional path overrides discovery.": "Автоматический поиск JSON Matugen в папках настроек и кэша. Указанный путь заменяет автопоиск.",
   "both cache and quality apply the next time playback connects": "Кэш и качество применятся при следующем подключении воспроизведения.",
-  "developed by addenator, the best programmer on earth": "Разработано addenator, лучшим программистом на Земле",
+  "developed by serenity": "Разработчик — serenity",
   "fading lowers the volume as the timer runs down and restores it once playback stops.": "Громкость уменьшается к концу таймера и восстанавливается после остановки.",
   "following ": "Используется ",
   "forgets both logins on this computer": "Оба входа на этом компьютере будут сброшены.",

@@ -34,8 +34,7 @@ ListView {
 
     header: Column {
         width: root.width
-        // under the rows, which sit at 1 and up: the hero's stickers reach
-        // down behind the first of them
+        // Keep the header behind the rows' hover lift.
         z: 0.5
 
         Loader {
@@ -47,7 +46,7 @@ ListView {
             x: root.margin
             width: root.width - 2 * root.margin
             height: 1
-            color: Appearance.colors.outlineVariant
+            color: Qt.alpha(Appearance.colors.outlineVariant, 0.5)
         }
 
         Item { width: 1; height: 12 }
@@ -56,6 +55,9 @@ ListView {
             width: root.width
             height: 240
             Reveal.shown: root.loading
+            Reveal.scaleFrom: 1
+            Reveal.duration: Appearance.duration(220)
+            Reveal.overshoot: 0
 
             Column {
                 anchors.centerIn: parent
@@ -72,9 +74,13 @@ ListView {
             width: root.width
             height: 280
             Reveal.shown: !root.loading && root.showsEmpty
+            Reveal.scaleFrom: 1
+            Reveal.duration: Appearance.duration(220)
+            Reveal.overshoot: 0
 
             EmptyState {
                 anchors.centerIn: parent
+                width: Math.min(420, parent.width - 2 * root.margin)
                 symbol: root.emptySymbol
                 title: root.emptyTitle
                 description: root.emptyDescription
@@ -84,9 +90,16 @@ ListView {
 
     delegate: SongRow {
         id: row
+        objectName: "collectionSongRow"
 
-        x: root.margin
-        width: root.width - 2 * root.margin
+        // Full-width delegates keep ListView's cross-axis origin stable;
+        // padding and background insets provide the visible page margin.
+        x: 0
+        width: root.width
+        leftPadding: root.margin + 14
+        rightPadding: root.margin + 14
+        leftInset: root.margin
+        rightInset: root.margin
         songs: root.songs
         allowsPlaylistRemoval: root.allowsPlaylistRemoval
 

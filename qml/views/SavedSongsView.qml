@@ -36,7 +36,7 @@ SongListPage {
             MaterialSymbol {
                 anchors.centerIn: parent
                 text: "favorite"
-                iconSize: 96
+                iconSize: Math.min(96, parent.width * 0.5)
                 fill: 1
                 color: Appearance.colors.onPrimary
             }

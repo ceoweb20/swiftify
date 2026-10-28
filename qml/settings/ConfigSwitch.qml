@@ -11,20 +11,22 @@ RippleButton {
     signal toggledTo(bool checked)
 
     width: parent ? parent.width : 0
-    implicitHeight: 52
+    implicitHeight: Math.max(52, caption.implicitHeight + 24)
     leftPadding: 12
     rightPadding: 12
     buttonRadius: Appearance.rounding.small
+    bounce: false
     onClicked: toggledTo(!checked)
 
     contentItem: Item {
         StyledText {
+            id: caption
             anchors.left: parent.left
             anchors.right: toggle.left
             anchors.rightMargin: 12
             anchors.verticalCenter: parent.verticalCenter
             text: root.text
-            elide: Text.ElideRight
+            wrapMode: Text.Wrap
         }
         StyledSwitch {
             id: toggle

@@ -46,7 +46,7 @@ Flickable {
             circular: true
             kind: "ARTIST"
             title: root.artist.name
-            titleSize: 38
+            titleSize: Appearance.fontSize.display
 
             actions: [
                 TextButton {
@@ -67,6 +67,9 @@ Flickable {
             width: root.width
             height: 240
             Reveal.shown: Library.loadingArtist
+            Reveal.scaleFrom: 1
+            Reveal.duration: Appearance.duration(220)
+            Reveal.overshoot: 0
 
             Column {
                 anchors.centerIn: parent
@@ -83,11 +86,16 @@ Flickable {
 
         TitleText {
             x: root.margin
+            width: root.width - 2 * root.margin
             Reveal.shown: Library.artistTopSongs.count > 0
+            Reveal.scaleFrom: 1
+            Reveal.duration: Appearance.duration(220)
+            Reveal.overshoot: 0
             bottomPadding: 10
             text: qsTr("Top Songs")
             font.pixelSize: Appearance.fontSize.title
             font.weight: Font.Bold
+            wrapMode: Text.Wrap
         }
 
         Repeater {
@@ -102,17 +110,25 @@ Flickable {
 
         TitleText {
             x: root.margin
+            width: root.width - 2 * root.margin
             Reveal.shown: !Library.loadingArtist
+            Reveal.scaleFrom: 1
+            Reveal.duration: Appearance.duration(220)
+            Reveal.overshoot: 0
             topPadding: 28
             bottomPadding: 14
             text: qsTr("Albums & Singles")
             font.pixelSize: Appearance.fontSize.title
             font.weight: Font.Bold
+            wrapMode: Text.Wrap
         }
 
         EmptyState {
             anchors.horizontalCenter: parent.horizontalCenter
             Reveal.shown: !Library.loadingArtist && Library.artistAlbums.count === 0
+            Reveal.scaleFrom: 1
+            Reveal.duration: Appearance.duration(220)
+            Reveal.overshoot: 0
             symbol: "album"
             title: qsTr("No Albums Found")
         }

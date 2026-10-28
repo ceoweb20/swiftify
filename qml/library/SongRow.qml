@@ -4,8 +4,8 @@ import QtQuick.Templates as T
 import Swiftify
 
 // one song in a list (SongListRow): number or play glyph, artwork, title and
-// artists, the star and more buttons, and the time. hovered, the card grows
-// a little on a spring, and it stays grown while its song is the one playing.
+// artists, the star and more buttons, and the time. Hovering lifts the row;
+// the current song is distinguished by its text and a quiet tint.
 T.AbstractButton {
     id: root
 
@@ -18,7 +18,7 @@ T.AbstractButton {
 
     readonly property bool isCurrent: Player.hasSong && Player.currentSong.instanceId === song.instanceId
     readonly property bool saved: Library.savedRevision >= 0 && Library.isSaved(song.uri)
-    readonly property bool expanded: hovered || isCurrent
+    readonly property bool expanded: hovered
 
     implicitHeight: 58
     hoverEnabled: true
@@ -38,12 +38,15 @@ T.AbstractButton {
     // of its rounded edge
     leftPadding: 14
     rightPadding: 14
+    topInset: 2
+    bottomInset: 2
 
     onClicked: Player.playFromModel(songs, index, fromSearch)
 
     background: Rectangle {
+        objectName: "songRowSurface"
         radius: 8
-        color: root.isCurrent ? Qt.alpha(Appearance.colors.primary, 0.07)
+        color: root.isCurrent ? Qt.alpha(Appearance.colors.primary, 0.06)
              : root.hovered ? Qt.alpha(Appearance.colors.onSurface, 0.05)
              : Qt.alpha(Appearance.colors.onSurface, 0)
 
@@ -183,12 +186,12 @@ T.AbstractButton {
                 width: parent.width
                 spacing: 5
 
-                StyledText {
+                TitleText {
+                    objectName: "songRowTitle"
                     width: Math.min(implicitWidth, parent.width - (explicitBadge.visible ? 20 : 0))
                     text: root.song.name
                     elide: Text.ElideRight
                     font.pixelSize: Appearance.fontSize.small
-                    font.weight: root.isCurrent ? Font.DemiBold : Font.Normal
                     color: root.isCurrent ? Appearance.colors.primary : Appearance.colors.onSurface
                 }
 

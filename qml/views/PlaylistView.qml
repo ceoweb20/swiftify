@@ -21,7 +21,11 @@ Item {
 
     EmptyState {
         anchors.centerIn: parent
+        width: Math.min(420, parent.width - 2 * Appearance.sizes.pageMargin)
         Reveal.shown: !root.playlist.valid
+        Reveal.scaleFrom: 1
+        Reveal.duration: Appearance.duration(220)
+        Reveal.overshoot: 0
         symbol: "queue_music"
         title: qsTr("Playlist Unavailable")
     }
@@ -29,6 +33,9 @@ Item {
     SongListPage {
         anchors.fill: parent
         Reveal.shown: root.playlist.valid
+        Reveal.scaleFrom: 1
+        Reveal.duration: Appearance.duration(220)
+        Reveal.overshoot: 0
         songs: Library.displayedPlaylistSongs
         loading: Library.loadingSongs
         allowsPlaylistRemoval: Library.selectedPlaylistEditable

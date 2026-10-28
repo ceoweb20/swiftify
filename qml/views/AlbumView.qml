@@ -21,6 +21,9 @@ SongListPage {
     songs: Library.albumSongs
     loading: Library.loadingSongs
     loadingText: qsTr("Loading album…")
+    showsEmpty: Library.albumSongs.count === 0
+    emptySymbol: "album"
+    emptyTitle: qsTranslate("PlaylistView", "No Songs")
 
     hero: CollectionHero {
         artworkUrl: root.album.artworkUrl

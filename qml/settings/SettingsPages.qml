@@ -16,7 +16,7 @@ Item {
 
     component Page: Column {
         width: parent ? parent.width : 0
-        spacing: 24
+        spacing: 16
     }
 
     /// a login's state: a label, and the state beside a dot that says
@@ -969,7 +969,8 @@ Item {
                         spacing: 2
 
                         StyledText {
-                            text: "Swiftify " + App.version
+                            objectName: "aboutAppName"
+                            text: "BetterSwiftify " + App.version
                             font.weight: Font.Medium
 
                             TapHandler {
@@ -980,7 +981,8 @@ Item {
                             }
                         }
                         StyledText {
-                            text: qsTr("developed by addenator, the best programmer on earth")
+                            objectName: "aboutDeveloper"
+                            text: qsTr("developed by serenity")
                             font.pixelSize: Appearance.fontSize.smaller
                             color: Appearance.colors.onSurfaceVariant
                         }

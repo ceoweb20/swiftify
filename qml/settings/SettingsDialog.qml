@@ -4,39 +4,32 @@ import QtQuick.Controls.Basic
 import QtQuick.Templates as T
 import Swiftify
 
-// settings, as a sheet over the window rather than a window of its own, laid
-// out like end4's settings app: a navigation rail on the left, and the chosen
-// page of settings beside it. escape, a click outside, or its close button
-// put it away.
 T.Popup {
     id: root
 
     property int page: 0
+    readonly property bool compact: width < 720
     readonly property list<string> titles: [qsTr("Visualizer"), qsTr("Background"), qsTr("Playback"), qsTr("Appearance"), qsTr("Performance"),
                                             qsTr("Account"), qsTr("About")]
-    readonly property list<string> symbols: ["graphic_eq", "wallpaper", "play_circle", "palette", "speed",
-                                             "account_circle", "info"]
+    readonly property list<string> symbols: ["graphic_eq", "wallpaper", "play_circle", "palette", "speed", "account_circle", "info"]
     readonly property list<string> shapes: ["sunny", "flower", "cookie9", "clover4", "gem", "cookie12", "heart"]
 
     parent: T.Overlay.overlay
     anchors.centerIn: parent
-    width: Math.min(860, parent ? parent.width - 48 : 860)
-    height: Math.min(640, parent ? parent.height - 48 : 640)
+    width: Math.min(980, parent ? parent.width - 32 : 980)
+    height: Math.min(720, parent ? parent.height - 32 : 720)
     modal: true
     focus: true
     closePolicy: T.Popup.CloseOnEscape | T.Popup.CloseOnPressOutside
     padding: 0
-    // drawn in the window: no window, render thread or buffers of its own
     popupType: T.Popup.Item
-
 
     enter: Transition {
         NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Appearance.duration(150) }
-        NumberAnimation { property: "scale"; from: 0.94; to: 1; duration: Appearance.motion(380); easing.type: Easing.BezierSpline; easing.bezierCurve: Appearance.curves.expressiveFastSpatial }
+        NumberAnimation { property: "scale"; from: 0.98; to: 1; duration: Appearance.motion(260); easing.type: Easing.OutCubic }
     }
     exit: Transition {
         NumberAnimation { property: "opacity"; to: 0; duration: Appearance.duration(120) }
-        NumberAnimation { property: "scale"; to: 0.97; duration: Appearance.duration(120) }
     }
 
     T.Overlay.modal: Rectangle {
@@ -44,37 +37,50 @@ T.Popup {
     }
 
     background: Rectangle {
-        radius: Appearance.rounding.large + 8
-        color: Appearance.colors.layer0
+        radius: 28
+        color: Appearance.colors.surfaceContainerLow
         border.width: 1
-        border.color: Appearance.colors.layer0Border
+        border.color: Qt.alpha(Appearance.colors.outlineVariant, 0.5)
     }
 
     contentItem: Item {
-        // the window's own close shortcut puts the settings away first
         Shortcut {
             sequences: [StandardKey.Close]
             enabled: root.opened
             onActivated: root.close()
         }
 
-        // a short window can't fit every destination, so the rail scrolls
+        TitleText {
+            x: 26
+            y: 24
+            visible: !root.compact
+            text: qsTr("Settings")
+            font.pixelSize: Appearance.fontSize.huge
+        }
+        MaterialSymbol {
+            x: 40
+            y: 27
+            visible: root.compact
+            text: "tune"
+            iconSize: 24
+            color: Appearance.colors.primary
+        }
+
         Flickable {
             id: railScroller
             objectName: "settingsRail"
-            x: 12
-            width: 104
-            height: parent.height
-            contentHeight: rail.implicitHeight + 32
+            x: 16
+            y: 84
+            width: root.compact ? 72 : 192
+            height: Math.max(0, parent.height - y - 16)
+            contentHeight: rail.implicitHeight + 16
             boundsBehavior: Flickable.StopAtBounds
             interactive: contentHeight > height
             clip: true
-
             ScrollBar.vertical: StyledScrollBar {}
 
             Column {
                 id: rail
-                y: 16
                 width: railScroller.width
                 spacing: 4
 
@@ -83,60 +89,59 @@ T.Popup {
 
                     delegate: RippleButton {
                         id: destination
-
                         required property int index
                         readonly property bool selected: root.page === index
 
                         width: rail.width
-                        implicitHeight: 64
-                        padding: 0
-                        colBackground: "transparent"
-                        colBackgroundHover: "transparent"
-                        rippleEnabled: false
+                        implicitHeight: 48
+                        leftPadding: 10
+                        rightPadding: 10
+                        text: root.titles[index]
+                        tooltip: root.compact ? text : ""
+                        buttonRadius: 14
+                        bounce: false
+                        colBackground: selected ? Appearance.colors.secondaryContainer : "transparent"
+                        colBackgroundHover: selected ? Appearance.colors.secondaryContainerHover : Appearance.colors.layer1Hover
                         onClicked: root.page = index
 
-                        contentItem: Column {
-                            spacing: 4
-
-                            // the selection is a pill behind the icon, which grows in
-                            Rectangle {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                width: 56
-                                height: 32
-                                radius: height / 2
-                                color: Qt.alpha(Appearance.colors.layer1Hover, !destination.selected && destination.hovered ? 1 : 0)
-
-                                Behavior on color {
-                                    ElementMoveFastColor {}
-                                }
+                        contentItem: Item {
+                            Item {
+                                id: icon
+                                width: 34
+                                height: 34
+                                x: root.compact ? (parent.width - width) / 2 : 0
+                                anchors.verticalCenter: parent.verticalCenter
 
                                 MaterialSymbol {
                                     anchors.centerIn: parent
-                                    Reveal.shown: !destination.selected
+                                    visible: !destination.selected
                                     text: root.symbols[destination.index]
-                                    iconSize: 22
+                                    iconSize: 21
                                     color: Appearance.colors.onSurfaceVariant
                                 }
                                 ShapeIcon {
                                     anchors.centerIn: parent
-                                    Reveal.shown: destination.selected
-                                    Reveal.overshoot: 2.4
-                                    size: 38
-                                    iconSize: 20
+                                    visible: destination.selected
+                                    size: 34
+                                    iconSize: 18
                                     shape: root.shapes[destination.index]
                                     symbol: root.symbols[destination.index]
-                                    hovered: destination.hovered
+                                    color: Appearance.colors.primary
+                                    iconColor: Appearance.colors.onPrimary
+                                    rotateOnHover: false
                                 }
                             }
                             StyledText {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                width: rail.width
-                                horizontalAlignment: Text.AlignHCenter
+                                anchors.left: icon.right
+                                anchors.leftMargin: 10
+                                anchors.right: parent.right
+                                anchors.verticalCenter: parent.verticalCenter
+                                visible: !root.compact
                                 elide: Text.ElideRight
-                                text: root.titles[destination.index]
-                                font.pixelSize: Appearance.fontSize.smaller
-                                font.weight: destination.selected ? Font.DemiBold : Font.Normal
-                                color: destination.selected ? Appearance.colors.onSurface : Appearance.colors.onSurfaceVariant
+                                text: destination.text
+                                font.pixelSize: Appearance.fontSize.smallie
+                                font.weight: destination.selected ? Font.DemiBold : Font.Medium
+                                color: destination.selected ? Appearance.colors.onSecondaryContainer : Appearance.colors.onSurfaceVariant
                             }
                         }
                     }
@@ -145,71 +150,73 @@ T.Popup {
         }
 
         Rectangle {
-            anchors.left: railScroller.right
-            anchors.leftMargin: 12
-            anchors.right: parent.right
-            anchors.rightMargin: 8
-            anchors.top: parent.top
-            anchors.topMargin: 8
-            anchors.bottom: parent.bottom
-            anchors.bottomMargin: 8
-            radius: Appearance.rounding.large
-            color: Appearance.colors.layer1
+            x: railScroller.x + railScroller.width + 12
+            y: 20
+            width: 1
+            height: parent.height - 40
+            color: Qt.alpha(Appearance.colors.outlineVariant, 0.35)
+        }
 
-            // each page's own scatter of faint shapes, kept inside the card
-            // and its rounding
-            Stickers {
-                anchors.fill: parent
-                anchors.margins: 6
-                key: root.titles[root.page]
-                count: 4
-                minimumSize: 90
-                maximumSize: 220
-                clipRadius: Appearance.rounding.large - 6
-            }
+        TitleText {
+            x: scroller.x
+            y: 24
+            width: Math.max(0, closeButton.x - x - 16)
+            text: root.titles[root.page]
+            elide: Text.ElideRight
+            font.pixelSize: Appearance.fontSize.headline
+        }
 
-            Flickable {
-                id: scroller
-                anchors.fill: parent
-                anchors.margins: 20
-                contentHeight: pages.implicitHeight
-                boundsBehavior: Flickable.StopAtBounds
-                clip: true
+        // A single clipped viewport keeps section cards away from the sheet's
+        // rounded edge and the fixed header. No decorative layer sits under cards.
+        Flickable {
+            id: scroller
+            objectName: "settingsContentViewport"
+            x: railScroller.x + railScroller.width + 24
+            y: 88
+            width: parent.width - x - 24
+            height: Math.max(0, parent.height - y - 24)
+            contentHeight: pages.implicitHeight + 16
+            boundsBehavior: Flickable.StopAtBounds
+            clip: true
+            ScrollBar.vertical: StyledScrollBar {}
 
-                SettingsPages {
-                    id: pages
-                    width: scroller.width
-                    page: root.page
-
-                    // a page arrives from a little below, as end4's pages do
-                    onPageChanged: {
-                        scroller.contentY = 0
-                        if (!Appearance.performanceMode) {
-                            arrive.restart()
-                        }
-                    }
-
-                    ParallelAnimation {
-                        id: arrive
-                        NumberAnimation { target: pages; property: "opacity"; from: 0; to: 1; duration: 220; easing.type: Easing.OutCubic }
-                        NumberAnimation { target: pages; property: "y"; from: 16; to: 0; duration: Appearance.motion(380); easing.type: Easing.BezierSpline; easing.bezierCurve: Appearance.curves.emphasizedDecel }
-                    }
+            SettingsPages {
+                id: pages
+                objectName: "settingsPages"
+                width: scroller.width - 10
+                page: root.page
+                onPageChanged: {
+                    scroller.cancelFlick()
+                    scroller.contentY = 0
+                    if (!Appearance.performanceMode) arrive.restart()
                 }
-
-                ScrollBar.vertical: StyledScrollBar {}
+                NumberAnimation {
+                    id: arrive
+                    objectName: "settingsPageArrival"
+                    target: pages
+                    property: "opacity"
+                    from: 0
+                    to: 1
+                    duration: Appearance.duration(160)
+                }
+                Connections {
+                    target: Appearance
+                    function onPerformanceModeChanged() { if (Appearance.performanceMode) arrive.complete() }
+                }
             }
         }
 
-        ToolbarButton {
+        IconButton {
+            id: closeButton
+            objectName: "settingsCloseButton"
             anchors.top: parent.top
-            anchors.topMargin: 18
+            anchors.topMargin: 20
             anchors.right: parent.right
-            anchors.rightMargin: 18
-            z: 2
-            shape: "cookie6"
+            anchors.rightMargin: 20
+            size: 36
             symbol: "close"
-            onClicked: root.close()
             tooltip: qsTr("Close")
+            onClicked: root.close()
         }
     }
 }

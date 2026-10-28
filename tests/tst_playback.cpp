@@ -415,8 +415,8 @@ private slots:
         rig.player.skipForward();
         rig.settle();
         rig.core.take(QStringLiteral("playTrack"))->fail(QString::fromLatin1(SWIFTIFY_CORE_UNAVAILABLE));
-        rig.reconnect();
-        rig.core.take(QStringLiteral("playTrack"))->fail(QString::fromLatin1(SWIFTIFY_CORE_UNAVAILABLE));
+        rig.settle();
+        QVERIFY(!rig.core.take(QStringLiteral("connectStored")));
         rig.finishLoading();
         QVERIFY(rig.player.isPlaying());
         QVERIFY(rig.player.currentSong().isSameInstance(queue[2]));
@@ -438,10 +438,30 @@ private slots:
         rig.player.skipBackward();
         rig.settle();
         rig.core.take(QStringLiteral("playTrack"))->fail(QString::fromLatin1(SWIFTIFY_CORE_UNAVAILABLE));
-        rig.reconnect();
-        rig.core.take(QStringLiteral("playTrack"))->fail(QString::fromLatin1(SWIFTIFY_CORE_UNAVAILABLE));
+        rig.settle();
+        QVERIFY(!rig.core.take(QStringLiteral("connectStored")));
         rig.finishLoading();
         QVERIFY(rig.player.currentSong().isSameInstance(queue[0]));
+    }
+
+    void anUnavailableCrossfadeSkipsWithoutReloadingTheSameSong()
+    {
+        Rig rig;
+        const QList<Song> queue = makeQueue(3);
+        rig.settings.setCrossfadeEnabled(true);
+        rig.player.play(queue[0], queue);
+        rig.finishLoading();
+        rig.core.duration = 200'000;
+        rig.core.position = 199'000;
+        QTRY_VERIFY(std::any_of(rig.core.pending.cbegin(), rig.core.pending.cend(), [](const auto &call) {
+            return call->name == QLatin1StringView("crossfadeTrack");
+        }));
+        rig.core.take(QStringLiteral("crossfadeTrack"))->fail(QString::fromLatin1(SWIFTIFY_CORE_UNAVAILABLE));
+        rig.settle();
+        QVERIFY(rig.player.currentSong().isSameInstance(queue[2]));
+        QVERIFY(!rig.core.take(QStringLiteral("connectStored")));
+        rig.finishLoading();
+        QVERIFY(rig.player.isPlaying());
     }
 
     void theLastSongThatWillNotLoadShowsWhy()
@@ -452,8 +472,6 @@ private slots:
         rig.settle();
         // the lyrics of the asked song have no bearing on its load
         rig.core.take(QStringLiteral("lyrics"))->fail(QStringLiteral("no lyrics"));
-        rig.core.take(QStringLiteral("playTrack"))->fail(QString::fromLatin1(SWIFTIFY_CORE_UNAVAILABLE));
-        rig.reconnect();
         rig.core.take(QStringLiteral("playTrack"))->fail(QString::fromLatin1(SWIFTIFY_CORE_UNAVAILABLE));
         rig.settle();
         QVERIFY(!rig.player.isPlaying());
@@ -483,6 +501,24 @@ private slots:
         QVERIFY(rig.player.currentSong().isPlayable);
         QVERIFY(!rig.errors.message().isEmpty());
         QVERIFY(rig.errors.message() != QString::fromLatin1(SWIFTIFY_CORE_AUDIO_KEY_REFUSED));
+    }
+
+    void aRateLimitedLoadDoesNotReconnectOrSkipTheQueue()
+    {
+        Rig rig;
+        const QList<Song> queue = makeQueue(3);
+        rig.player.play(queue[0], queue);
+        rig.settle();
+        const QString message = QStringLiteral("Spotify rate limit exceeded. Try again in 30 seconds.");
+        rig.core.take(QStringLiteral("playTrack"))->fail(SpotifyError(SpotifyError::Kind::RateLimited, message, 30, 429));
+        rig.settle();
+        QVERIFY(!rig.core.take(QStringLiteral("connectStored")));
+        QVERIFY(!rig.core.take(QStringLiteral("playTrack")));
+        QVERIFY(rig.player.currentSong().isSameInstance(queue[0]));
+        QVERIFY(rig.player.currentSong().isPlayable);
+        QVERIFY(!rig.player.isLoading());
+        QVERIFY(!rig.player.isPlaying());
+        QCOMPARE(rig.errors.message(), message);
     }
 
     void seekingNeverStartsSound()

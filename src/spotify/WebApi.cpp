@@ -10,9 +10,8 @@
 #include <QNetworkReply>
 #include <QSet>
 #include <QCoroNetworkReply>
-#include <QCoroTimer>
 
-#include <chrono>
+#include <algorithm>
 #include <exception>
 #include <memory>
 #include <vector>
@@ -51,6 +50,11 @@ QCoro::Task<QByteArray> WebApi::requestData(QUrl url, QByteArray method, QString
     if (url.scheme() != QLatin1StringView("https") || url.host() != QLatin1StringView("api.spotify.com")
         || !url.userInfo().isEmpty() || (url.port(-1) != -1 && url.port() != 443)) {
         throw SpotifyError(SpotifyError::Kind::InvalidUrl, QStringLiteral("Spotify returned an invalid API URL."));
+    }
+    if (!m_rateLimitUntil.hasExpired()) {
+        const int seconds = int((m_rateLimitUntil.remainingTime() + 999) / 1000);
+        throw SpotifyError(SpotifyError::Kind::RateLimited,
+                           QStringLiteral("Spotify rate limit exceeded. Try again in %1 seconds.").arg(seconds), seconds, 429);
     }
 
     QNetworkRequest request(url);
@@ -93,6 +97,13 @@ QCoro::Task<QByteArray> WebApi::requestData(QUrl url, QByteArray method, QString
     case 429: {
         bool ok = false;
         const int retryAfter = reply->rawHeader("Retry-After").toInt(&ok);
+        ok = ok && retryAfter >= 0;
+        // One 429 pauses this client's entire Web API, not just the failed
+        // endpoint. Other background loads must not keep extending the ban.
+        const qint64 delayMs = qint64(ok ? std::max(1, retryAfter) : 60) * 1000;
+        if (delayMs > m_rateLimitUntil.remainingTime()) {
+            m_rateLimitUntil.setRemainingTime(delayMs);
+        }
         throw SpotifyError(SpotifyError::Kind::RateLimited,
                            ok ? QStringLiteral("Spotify rate limit exceeded. Try again in %1 seconds.").arg(retryAfter)
                               : QStringLiteral("Spotify rate limit exceeded. Try again shortly."),
@@ -134,18 +145,6 @@ QCoro::Task<> WebApi::collectPages(QUrl firstUrl, QString accessToken,
 
 QCoro::Task<QJsonObject> WebApi::requestPage(QUrl url, QString accessToken)
 {
-    // set in the handler and waited out after it: there is no co_await in a catch
-    int retryAfter = 0;
-    try {
-        co_return (co_await requestJson(url, "GET", accessToken)).object();
-    } catch (const SpotifyError &error) {
-        // a short wait is worth it; a long one is the caller's to report
-        if (error.kind() != SpotifyError::Kind::RateLimited || error.retryAfterSeconds() > 10) {
-            throw;
-        }
-        retryAfter = std::max(1, error.retryAfterSeconds());
-    }
-    co_await QCoro::sleepFor(std::chrono::seconds(retryAfter));
     co_return (co_await requestJson(url, "GET", accessToken)).object();
 }
 

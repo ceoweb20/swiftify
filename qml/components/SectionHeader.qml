@@ -13,7 +13,7 @@ Item {
     property bool showsSeeAll: false
     signal seeAll()
 
-    implicitHeight: 40
+    implicitHeight: 44
     implicitWidth: titleText.x + titleText.implicitWidth
 
     HoverHandler {
@@ -25,7 +25,7 @@ Item {
         anchors.left: parent.left
         anchors.verticalCenter: parent.verticalCenter
         visible: root.symbol.length > 0
-        size: 34
+        size: 30
         iconSize: 18
         shape: root.iconShape
         symbol: root.symbol
@@ -35,12 +35,13 @@ Item {
     TitleText {
         id: titleText
         objectName: "sectionTitle"
-        x: badge.visible ? badge.width + 12 : 0
+        x: badge.visible ? badge.width + 10 : 0
         anchors.verticalCenter: parent.verticalCenter
         width: Math.min(implicitWidth, Math.max(0, (seeAll.visible ? seeAll.x - 12 : root.width) - x))
         text: root.title
         elide: Text.ElideRight
         font.pixelSize: root.width < 320 ? Appearance.fontSize.larger : Appearance.fontSize.title
+        font.weight: Font.Bold
     }
 
     WavyLine {

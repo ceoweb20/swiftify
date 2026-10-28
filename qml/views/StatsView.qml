@@ -11,6 +11,10 @@ Flickable {
     id: root
 
     topMargin: Appearance.sizes.topBarHeight
+    contentWidth: width
+    flickableDirection: Flickable.VerticalFlick
+
+    PageWheelHandler { page: root }
 
     readonly property real margin: Appearance.sizes.pageMargin
     readonly property real innerWidth: width - 2 * margin
@@ -18,6 +22,8 @@ Flickable {
     readonly property bool needsUsername: usesStatsFm && Stats.username.length === 0
     readonly property bool wide: innerWidth >= 860
     property bool allTracks: false
+    property bool motionReady: false
+    Component.onCompleted: motionReady = true
     readonly property list<string> periodNames: [qsTr("today"), qsTr("the last 4 weeks"), qsTr("the last 6 months"), qsTr("all time")]
     readonly property list<string> weekdayNames: {
         const names = []
@@ -80,6 +86,15 @@ Flickable {
         Library.showSearch()
     }
 
+    // Standalone animations own their jobs, so complete() can settle them
+    // synchronously when performance mode interrupts a state change.
+    function fadeState(item: Item, animation: NumberAnimation, shown: bool) {
+        animation.stop()
+        animation.to = shown ? 1 : 0
+        if (Appearance.performanceMode) item.opacity = animation.to
+        else animation.start()
+    }
+
     // a part of the page in a card of its own, a heading over what it holds
     component Card: Rectangle {
         id: card
@@ -88,20 +103,39 @@ Flickable {
         property string symbol
         property string iconShape: "cookie9"
         property string note
+        property bool shown: true
         default property alias content: body.data
+
+        visible: shown || opacity > 0
+        enabled: shown
+        opacity: 0
+        Component.onCompleted: opacity = shown ? 1 : 0
+        onShownChanged: if (root.motionReady) root.fadeState(card, cardFade, shown)
+        HoverFade {
+            id: cardFade
+            objectName: "statsCardFade"
+            target: card
+            property: "opacity"
+            duration: Appearance.duration(200)
+        }
+        Connections {
+            target: Appearance
+            function onPerformanceModeChanged() { if (Appearance.performanceMode) cardFade.complete() }
+        }
 
         width: parent ? parent.width : 0
         implicitHeight: body.y + body.implicitHeight + 20
         radius: 24
         color: Appearance.colors.surfaceContainerLow
         border.width: 0.75
-        border.color: Qt.rgba(1, 1, 1, 0.07)
+        border.color: Qt.alpha(Appearance.colors.outlineVariant, 0.35)
 
         Row {
             id: heading
             x: 20
             y: 18
-            spacing: 12
+            width: card.width - 40
+            spacing: 10
 
             ShapeIcon {
                 anchors.verticalCenter: parent.verticalCenter
@@ -110,38 +144,48 @@ Flickable {
                 shape: card.iconShape
                 symbol: card.symbol
             }
-            StyledText {
+            TitleText {
+                width: Math.max(0, heading.width - 42)
                 anchors.verticalCenter: parent.verticalCenter
                 text: card.title
-                font.pixelSize: Appearance.fontSize.larger
+                wrapMode: Text.Wrap
+                font.pixelSize: Appearance.fontSize.title
                 font.weight: Font.Bold
             }
         }
         StyledText {
-            anchors.right: parent.right
-            anchors.rightMargin: 20
-            anchors.verticalCenter: heading.verticalCenter
-            width: Math.min(implicitWidth, card.width - heading.width - 60)
+            id: cardNote
+            objectName: "statsCardNote"
+            x: 20
+            y: heading.y + heading.height + 6
+            width: card.width - 40
+            visible: card.note.length > 0
             text: card.note
-            elide: Text.ElideRight
-            horizontalAlignment: Text.AlignRight
+            wrapMode: Text.Wrap
             font.pixelSize: Appearance.fontSize.smaller
             color: Appearance.colors.onSurfaceVariant
         }
         Column {
             id: body
+            objectName: "statsCardBody"
             x: 20
-            y: heading.y + heading.height + 16
+            y: (card.note.length > 0 ? cardNote.y + cardNote.height : heading.y + heading.height) + 16
             width: card.width - 40
             spacing: 4
         }
     }
 
-    Stickers {
-        width: root.width
-        height: 260
-        key: "stats"
-        count: 5
+    Connections {
+        target: Appearance
+        function onPerformanceModeChanged() {
+            if (!Appearance.performanceMode) return
+            loadingFade.complete()
+            emptyFade.complete()
+            overviewFade.complete()
+            activityFade.complete()
+            artistsFade.complete()
+            albumsFade.complete()
+        }
     }
 
     Column {
@@ -151,85 +195,111 @@ Flickable {
         spacing: 24
 
         // --- the heading and what it shows ------------------------------------------
-        Column {
+        Rectangle {
+            objectName: "statsToolbarPanel"
             x: root.margin
             width: root.innerWidth
-            spacing: 6
+            implicitHeight: toolbarContent.implicitHeight + 40
+            radius: 24
+            color: Appearance.colors.surfaceContainerHigh
+            border.width: 1
+            border.color: Qt.alpha(Appearance.colors.outlineVariant, 0.4)
 
-            TitleText {
-                text: qsTr("Stats")
-                font.pixelSize: Appearance.fontSize.display
-                font.weight: Font.Bold
-                font.letterSpacing: -0.8
-            }
-            Row {
-                spacing: 10
+            Column {
+                id: toolbarContent
+                x: 20
+                y: 20
+                width: parent.width - 40
+                spacing: 16
 
-                ShapeIcon {
-                    anchors.verticalCenter: parent.verticalCenter
-                    size: 30
-                    iconSize: 17
-                    shape: root.usesStatsFm ? "softBurst" : "clamShell"
-                    symbol: root.usesStatsFm ? "query_stats" : "computer"
-                    color: Appearance.colors.tertiaryContainer
-                    iconColor: Appearance.colors.onTertiaryContainer
+                Column {
+                    width: parent.width
+                    spacing: 6
+
+                    TitleText {
+                        text: qsTr("Stats")
+                        font.pixelSize: Appearance.fontSize.display
+                        font.weight: Font.Bold
+                        font.letterSpacing: -0.8
+                    }
+                    Row {
+                        width: parent.width
+                        spacing: 10
+
+                        ShapeIcon {
+                            anchors.verticalCenter: parent.verticalCenter
+                            size: 30
+                            iconSize: 17
+                            shape: root.usesStatsFm ? "softBurst" : "clamShell"
+                            symbol: root.usesStatsFm ? "query_stats" : "computer"
+                            color: Appearance.colors.tertiaryContainer
+                            iconColor: Appearance.colors.onTertiaryContainer
+                        }
+                        StyledText {
+                            width: Math.max(0, parent.width - 40)
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: root.usesStatsFm
+                                  ? (Stats.profileName.length > 0 ? qsTr("%1 on stats.fm").arg(Stats.profileName) : qsTr("From stats.fm"))
+                                    + (Stats.isPlus ? " · Plus" : "")
+                                  : qsTr("Played in Swiftify") + " · " + (Stats.historyCount === 1 ? qsTr("%n play", "", Stats.historyCount) : qsTr("%n plays", "", Stats.historyCount))
+                                    + (Stats.tracking ? "" : " · " + qsTr("tracking paused"))
+                            color: Appearance.colors.onSurfaceVariant
+                            wrapMode: Text.Wrap
+                        }
+                    }
                 }
-                StyledText {
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: root.usesStatsFm
-                          ? (Stats.profileName.length > 0 ? qsTr("%1 on stats.fm").arg(Stats.profileName) : qsTr("From stats.fm"))
-                            + (Stats.isPlus ? " · Plus" : "")
-                          : qsTr("Played in Swiftify") + " · " + (Stats.historyCount === 1 ? qsTr("%n play", "", Stats.historyCount) : qsTr("%n plays", "", Stats.historyCount))
-                            + (Stats.tracking ? "" : " · " + qsTr("tracking paused"))
-                    color: Appearance.colors.onSurfaceVariant
-                }
-            }
-        }
 
-        Flow {
-            x: root.margin
-            width: root.innerWidth
-            spacing: 12
+                Flow {
+                    width: parent.width
+                    spacing: 12
 
-            SegmentedControl {
-                currentIndex: root.usesStatsFm ? 0 : 1
-                segments: [
-                    Segment { text: "stats.fm"; symbol: "query_stats" },
-                    Segment { text: qsTr("This computer"); symbol: "computer" }
-                ]
-                onActivated: (index) => Stats.source = index === 0 ? "statsfm" : "local"
-            }
-            SegmentedControl {
-                currentIndex: Stats.period
-                segments: [
-                    Segment { text: qsTr("Today") },
-                    Segment { text: qsTr("4 Weeks") },
-                    Segment { text: qsTr("6 Months") },
-                    Segment { text: qsTr("All Time") }
-                ]
-                onActivated: (index) => Stats.period = index
-            }
-            SegmentedControl {
-                currentIndex: Stats.rankByTime ? 1 : 0
-                segments: [
-                    Segment { symbol: "leaderboard"; tooltip: qsTr("Rank by plays") },
-                    Segment { symbol: "schedule"; tooltip: qsTr("Rank by listening time") }
-                ]
-                onActivated: (index) => Stats.rankByTime = index === 1
-            }
-            IconButton {
-                symbol: "refresh"
-                tooltip: qsTr("Refresh")
-                enabled: !Stats.loading && !root.needsUsername
-                onClicked: Stats.refresh()
-            }
-            IconButton {
-                visible: !root.usesStatsFm && Stats.historyCount > 0
-                symbol: "download"
-                tooltip: qsTr("Export listening history as CSV")
-                onClicked: {
-                    const path = Stats.exportHistory()
-                    UiState.toastRequested(path.length > 0 ? qsTr("Saved to %1").arg(path) : qsTr("Could not export the history"))
+                    SegmentedControl {
+                        trackColor: Appearance.colors.surfaceContainerLow
+                        segmentWidth: toolbarContent.width < 300 ? (toolbarContent.width - 2 * inset) / 2 : 0
+                        currentIndex: root.usesStatsFm ? 0 : 1
+                        segments: [
+                            Segment { text: "stats.fm"; symbol: "query_stats" },
+                            Segment { text: qsTr("This computer"); symbol: "computer" }
+                        ]
+                        onActivated: (index) => Stats.source = index === 0 ? "statsfm" : "local"
+                    }
+                    SegmentedControl {
+                        trackColor: Appearance.colors.surfaceContainerLow
+                        horizontalPadding: toolbarContent.width < 400 ? 8 : 14
+                        segmentWidth: toolbarContent.width < 400 ? (toolbarContent.width - 2 * inset) / 4 : 0
+                        currentIndex: Stats.period
+                        segments: [
+                            Segment { text: qsTr("Today"); tooltip: text },
+                            Segment { text: qsTr("4 Weeks"); tooltip: text },
+                            Segment { text: qsTr("6 Months"); tooltip: text },
+                            Segment { text: qsTr("All Time"); tooltip: text }
+                        ]
+                        onActivated: (index) => Stats.period = index
+                    }
+                    SegmentedControl {
+                        trackColor: Appearance.colors.surfaceContainerLow
+                        currentIndex: Stats.rankByTime ? 1 : 0
+                        segments: [
+                            Segment { symbol: "leaderboard"; tooltip: qsTr("Rank by plays") },
+                            Segment { symbol: "schedule"; tooltip: qsTr("Rank by listening time") }
+                        ]
+                        onActivated: (index) => Stats.rankByTime = index === 1
+                    }
+                    IconButton {
+                        symbol: "refresh"
+                        tooltip: qsTr("Refresh")
+                        enabled: !Stats.loading && !root.needsUsername
+                        onClicked: Stats.refresh()
+                    }
+                    IconButton {
+                        visible: !root.usesStatsFm && Stats.historyCount > 0
+                        symbol: "download"
+                        tooltip: qsTr("Export listening history as CSV")
+                        onClicked: {
+                            const path = Stats.exportHistory()
+                            UiState.toastRequested(path.length > 0 ? qsTr("Saved to %1").arg(path) : qsTr("Could not export the history"))
+                        }
+                    }
                 }
             }
         }
@@ -238,7 +308,8 @@ Flickable {
         Card {
             x: root.margin
             width: Math.min(root.innerWidth, 640)
-            visible: root.usesStatsFm && (root.needsUsername || Stats.errorMessage.length > 0)
+            objectName: "statsConnectionState"
+            shown: root.usesStatsFm && (root.needsUsername || Stats.errorMessage.length > 0)
             title: root.needsUsername ? qsTr("Connect stats.fm") : "stats.fm"
             symbol: "link"
             iconShape: "clover4"
@@ -289,14 +360,27 @@ Flickable {
                 text: qsTr("stats.fm sees what Spotify records as played. If songs played in Swiftify do not show up there, the stats from this computer still count them.")
                 wrapMode: Text.Wrap
                 font.pixelSize: Appearance.fontSize.smaller
-                color: Appearance.colors.outline
+                color: Appearance.colors.onSurfaceVariant
             }
         }
 
         Item {
+            id: loadingState
+            objectName: "statsLoadingState"
+            readonly property bool shown: Stats.loading && !Stats.hasData
             width: root.width
             height: 200
-            visible: Stats.loading && !Stats.hasData
+            visible: shown || opacity > 0
+            opacity: 0
+            Component.onCompleted: opacity = shown ? 1 : 0
+            onShownChanged: if (root.motionReady) root.fadeState(loadingState, loadingFade, shown)
+            HoverFade {
+                id: loadingFade
+                objectName: "statsLoadingFade"
+                target: loadingState
+                property: "opacity"
+                duration: Appearance.duration(180)
+            }
 
             Column {
                 anchors.centerIn: parent
@@ -310,9 +394,22 @@ Flickable {
         }
 
         EmptyState {
+            id: emptyState
+            objectName: "statsEmptyState"
+            readonly property bool shown: !Stats.loading && !Stats.hasData && !root.needsUsername && Stats.errorMessage.length === 0
             x: root.margin
             width: root.innerWidth
-            visible: !Stats.loading && !Stats.hasData && !root.needsUsername && Stats.errorMessage.length === 0
+            visible: shown || opacity > 0
+            opacity: 0
+            Component.onCompleted: opacity = shown ? 1 : 0
+            onShownChanged: if (root.motionReady) root.fadeState(emptyState, emptyFade, shown)
+            HoverFade {
+                id: emptyFade
+                objectName: "statsEmptyFade"
+                target: emptyState
+                property: "opacity"
+                duration: Appearance.duration(200)
+            }
             symbol: "insights"
             title: root.usesStatsFm ? qsTr("Nothing for %1").arg(root.periodNames[Stats.period]) : qsTr("No plays yet")
             description: root.usesStatsFm
@@ -327,9 +424,21 @@ Flickable {
         // --- the overview -------------------------------------------------------------------
         Flow {
             id: overview
+            objectName: "statsOverviewState"
+            readonly property bool shown: Stats.hasData
             x: root.margin
             width: root.innerWidth
-            visible: Stats.hasData
+            visible: shown || opacity > 0
+            opacity: 0
+            Component.onCompleted: opacity = shown ? 1 : 0
+            onShownChanged: if (root.motionReady) root.fadeState(overview, overviewFade, shown)
+            HoverFade {
+                id: overviewFade
+                objectName: "statsOverviewFade"
+                target: overview
+                property: "opacity"
+                duration: Appearance.duration(220)
+            }
             spacing: 12
 
             readonly property int columns: width >= 900 ? 6 : width >= 560 ? 3 : 2
@@ -384,7 +493,8 @@ Flickable {
         Card {
             x: root.margin
             width: root.innerWidth
-            visible: Stats.topTracks.count > 0
+            objectName: "statsTopSongsState"
+            shown: Stats.topTracks.count > 0
             title: qsTr("Top Songs")
             symbol: "music_note"
             iconShape: "heart"
@@ -396,10 +506,11 @@ Flickable {
                 RankRow {
                     required property int index
                     required property var model
+                    readonly property bool included: root.allTracks || index < 10
 
                     width: parent.width
-                    visible: root.allTracks || index < 10
-                    height: visible ? implicitHeight : 0
+                    visible: included
+                    height: included ? implicitHeight : 0
                     rank: model.rank
                     name: model.name
                     subtitle: model.subtitle
@@ -424,10 +535,23 @@ Flickable {
 
         // --- top artists and albums -----------------------------------------------------------
         Shelf {
+            id: artistsShelf
+            readonly property bool shown: Stats.topArtists.count > 0
             width: root.width
             onScreen: root.reaches(column.y + y, height, 0)
             nearScreen: root.reaches(column.y + y, height, root.height / 2)
-            visible: Stats.topArtists.count > 0
+            visible: shown || opacity > 0
+            enabled: shown
+            opacity: 0
+            Component.onCompleted: opacity = shown ? 1 : 0
+            onShownChanged: if (root.motionReady) root.fadeState(artistsShelf, artistsFade, shown)
+            HoverFade {
+                id: artistsFade
+                objectName: "statsArtistsFade"
+                target: artistsShelf
+                property: "opacity"
+                duration: Appearance.duration(220)
+            }
             title: qsTr("Top Artists")
             symbol: "person"
             iconShape: "cookie12"
@@ -451,10 +575,23 @@ Flickable {
         }
 
         Shelf {
+            id: albumsShelf
+            readonly property bool shown: Stats.topAlbums.count > 0
             width: root.width
             onScreen: root.reaches(column.y + y, height, 0)
             nearScreen: root.reaches(column.y + y, height, root.height / 2)
-            visible: Stats.topAlbums.count > 0
+            visible: shown || opacity > 0
+            enabled: shown
+            opacity: 0
+            Component.onCompleted: opacity = shown ? 1 : 0
+            onShownChanged: if (root.motionReady) root.fadeState(albumsShelf, albumsFade, shown)
+            HoverFade {
+                id: albumsFade
+                objectName: "statsAlbumsFade"
+                target: albumsShelf
+                property: "opacity"
+                duration: Appearance.duration(220)
+            }
             title: qsTr("Top Albums")
             symbol: "album"
             iconShape: "sunny"
@@ -481,7 +618,7 @@ Flickable {
         Card {
             x: root.margin
             width: root.innerWidth
-            visible: Stats.topGenres.count > 0 || (!root.usesStatsFm && Stats.hasData)
+            shown: Stats.topGenres.count > 0 || (!root.usesStatsFm && Stats.hasData)
             title: qsTr("Top Genres")
             symbol: "sell"
             iconShape: "clover8"
@@ -541,9 +678,21 @@ Flickable {
         // --- when the listening happens ---------------------------------------------------
         Flow {
             id: activity
+            objectName: "statsActivityState"
+            readonly property bool shown: Stats.hasData
             x: root.margin
             width: root.innerWidth
-            visible: Stats.hasData
+            visible: shown || opacity > 0
+            opacity: 0
+            Component.onCompleted: opacity = shown ? 1 : 0
+            onShownChanged: if (root.motionReady) root.fadeState(activity, activityFade, shown)
+            HoverFade {
+                id: activityFade
+                objectName: "statsActivityFade"
+                target: activity
+                property: "opacity"
+                duration: Appearance.duration(220)
+            }
             spacing: 16
 
             readonly property real cardWidth: root.wide ? (width - spacing) / 2 : width
@@ -593,7 +742,7 @@ Flickable {
         Card {
             x: root.margin
             width: root.innerWidth
-            visible: Stats.calendarTotal > 0
+            shown: Stats.calendarTotal > 0
             title: qsTr("Listening Calendar")
             symbol: "calendar_month"
             iconShape: "squircle"
@@ -611,7 +760,7 @@ Flickable {
         Card {
             x: root.margin
             width: root.innerWidth
-            visible: Stats.recent.count > 0
+            shown: Stats.recent.count > 0
             title: qsTr("Recently Played")
             symbol: "history"
             iconShape: "clamShell"

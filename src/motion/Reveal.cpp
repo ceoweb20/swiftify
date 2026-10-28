@@ -18,6 +18,24 @@ RevealAttached::RevealAttached(QObject *parent)
             m_item->setVisible(false);
         }
     });
+    if (auto *settings = Settings::instance()) {
+        connect(settings, &Settings::performanceModeChanged, this, [this, settings] {
+            if (settings->performanceMode()) {
+                settle();
+            }
+        });
+    }
+}
+
+void RevealAttached::settle()
+{
+    m_animation.stop();
+    if (!m_item) {
+        return;
+    }
+    m_item->setOpacity(m_shown ? 1 : 0);
+    m_item->setScale(1);
+    m_item->setVisible(m_shown);
 }
 
 void RevealAttached::setScaleFrom(qreal scale)
@@ -61,10 +79,7 @@ void RevealAttached::setShown(bool shown)
     }
     const Settings *settings = Settings::instance();
     if (first || (settings && settings->performanceMode())) {
-        m_animation.stop();
-        m_item->setOpacity(shown ? 1 : 0);
-        m_item->setScale(1);
-        m_item->setVisible(shown);
+        settle();
         return;
     }
     animate(shown);

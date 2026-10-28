@@ -101,6 +101,8 @@ matugen is optional. it generates a material-style palette from an image, usuall
 
 the fullscreen player's sound panel has its own visualizer switch. the global visualizer setting still takes priority.
 
+scrolling vertically over a playlist or genre shelf still moves the page. use a horizontal trackpad gesture, shift + mouse wheel, or the horizontal scrollbar to move through the shelf itself.
+
 ### soloist audio and lossless
 
 soloist supports lossless playback up to **24-bit / 44.1 khz** with premium, according to [spotify's documentation](https://github.com/spotify/soloist). availability also depends on the account and region. its current api cannot set or verify the delivered quality, so swiftify does not pretend that a local switch can enable it.

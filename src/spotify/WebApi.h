@@ -3,6 +3,7 @@
 #include "spotify/SpotifyTypes.h"
 
 #include <QByteArray>
+#include <QDeadlineTimer>
 #include <QHash>
 #include <QJsonDocument>
 #include <QUrlQuery>
@@ -83,10 +84,11 @@ private:
     /// of a thousand songs comes in the time of five pages, not twenty.
     QCoro::Task<> collectOffsetPages(QString path, QUrlQuery query, QString accessToken,
                                      std::function<void(const QJsonObject &page)> onPage);
-    /// one page, waited for and asked again once if spotify says to slow down
+    /// one page; rate-limited calls are reported without scheduling a retry
     QCoro::Task<QJsonObject> requestPage(QUrl url, QString accessToken);
 
     QNetworkAccessManager *m_network;
+    QDeadlineTimer m_rateLimitUntil {0};
 };
 
 } // namespace swiftify

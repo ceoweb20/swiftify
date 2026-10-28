@@ -3,8 +3,7 @@ import QtQuick
 import Swiftify
 
 // what a page shows with nothing in it: end4's page placeholder, a symbol on a
-// tonal cookie over a title and a line of explanation. the cookie springs in
-// with a twist each time the placeholder appears.
+// tonal cookie over a title and a line of explanation.
 Column {
     id: root
 
@@ -27,17 +26,28 @@ Column {
     property string title
     property string description
     property MaterialScheme scheme: Appearance.colors
+    property bool ready: false
 
     spacing: 10
     width: Math.min(parent ? parent.width : 400, 420)
 
-    onVisibleChanged: if (visible && !Appearance.performanceMode) arrive.restart()
+    Component.onCompleted: ready = true
+    onVisibleChanged: {
+        if (!visible) arrive.complete()
+        else if (ready && !Appearance.performanceMode) arrive.restart()
+    }
+
+    Connections {
+        target: Appearance
+        function onPerformanceModeChanged() { if (Appearance.performanceMode) arrive.complete() }
+        function onReduceMotionChanged() { if (Appearance.reduceMotion) arrive.complete() }
+    }
 
     MaterialShape {
         id: badge
         anchors.horizontalCenter: parent.horizontalCenter
-        width: 80
-        height: 80
+        width: 72
+        height: 72
         shape: root.shape
         color: root.scheme.secondaryContainer
 
@@ -57,8 +67,9 @@ Column {
 
         ParallelAnimation {
             id: arrive
-            NumberAnimation { target: badge; property: "scale"; from: 0.4; to: 1; duration: 700; easing.type: Easing.OutBack; easing.overshoot: 2.2 }
-            NumberAnimation { target: badge; property: "rotation"; from: -60; to: 0; duration: 900; easing.type: Easing.OutBack; easing.overshoot: 1.4 }
+            objectName: "emptyStateArrival"
+            NumberAnimation { target: badge; property: "opacity"; from: 0; to: 1; duration: Appearance.duration(180); easing.type: Easing.OutCubic }
+            NumberAnimation { target: badge; property: "scale"; from: Appearance.reduceMotion ? 1 : 0.96; to: 1; duration: Appearance.motion(220); easing.type: Easing.OutCubic }
         }
 
         MaterialSymbol {

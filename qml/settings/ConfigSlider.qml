@@ -23,14 +23,18 @@ Column {
 
     Item {
         width: parent.width
-        height: 24
+        height: Math.max(24, caption.implicitHeight, amount.implicitHeight)
 
         StyledText {
+            id: caption
             x: 12
+            width: Math.max(0, amount.x - x - 12)
             anchors.verticalCenter: parent.verticalCenter
             text: root.text
+            wrapMode: Text.Wrap
         }
         StyledText {
+            id: amount
             anchors.right: parent.right
             anchors.rightMargin: 12
             anchors.verticalCenter: parent.verticalCenter

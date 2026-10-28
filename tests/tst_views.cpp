@@ -41,6 +41,7 @@
 #include <QQmlListReference>
 #include <QQmlProperty>
 #include <QPointer>
+#include <QPointingDevice>
 #include <QQuickImageProvider>
 #include <QQuickItem>
 #include <QQuickRenderControl>
@@ -54,6 +55,7 @@
 #include <QtMath>
 #include <rhi/qrhi.h>
 
+#include <algorithm>
 #include <utility>
 
 using namespace swiftify;
@@ -167,6 +169,451 @@ private:
     using Rig = swiftify::testing::ViewRig;
 
 private slots:
+    void scrollingTitlesStayCenteredAfterFontMetricsChange_data()
+    {
+        QTest::addColumn<bool>("performance");
+        QTest::addColumn<bool>("reduced");
+        QTest::newRow("normal") << false << false;
+        QTest::newRow("reduced") << false << true;
+        QTest::newRow("performance") << true << false;
+    }
+
+    void scrollingTitlesStayCenteredAfterFontMetricsChange()
+    {
+        QFETCH(bool, performance);
+        QFETCH(bool, reduced);
+        Rig rig;
+        rig.settings.setPerformanceMode(performance);
+        rig.settings.setReduceMotion(reduced);
+        QQmlComponent component(&rig.engine);
+        component.setData("import QtQuick\nimport Swiftify\n"
+                          "ScrollingText { width: 420; height: 80; text: 'A quiet song'; rounded: true;"
+                          " animateChange: true; font.pixelSize: 32; font.weight: Font.Bold }", QUrl());
+        std::unique_ptr<QQuickItem> title(qobject_cast<QQuickItem *>(component.create()));
+        QVERIFY2(title, qPrintable(component.errorString()));
+        title->setParentItem(rig.window->contentItem());
+        Rig::settle();
+        rig.render();
+        auto *label = title->findChild<QQuickItem *>(QStringLiteral("scrollingTextLabel"));
+        QVERIFY(label);
+        const auto center = [&] {
+            return label->mapToItem(title.get(), QPointF(label->width() / 2, label->height() / 2)).x();
+        };
+        QVERIFY(qAbs(center() - title->width() / 2) <= 0.5);
+        for (int size : {20, 44, 26}) {
+            QVERIFY(QQmlProperty(title.get(), QStringLiteral("font.pixelSize")).write(size));
+            Rig::settle();
+            rig.render();
+            QVERIFY(!title->property("overflows").toBool());
+            QVERIFY2(qAbs(center() - title->width() / 2) <= 0.5,
+                     qPrintable(QStringLiteral("font %1: text center %2, expected %3")
+                                    .arg(size).arg(center()).arg(title->width() / 2)));
+        }
+        title->setProperty("text", QStringLiteral("Hi"));
+        QTRY_COMPARE(label->property("text").toString(), QStringLiteral("Hi"));
+        QTRY_COMPARE(label->opacity(), 1.0);
+        Rig::settle();
+        rig.render();
+        QVERIFY(qAbs(center() - title->width() / 2) <= 0.5);
+    }
+
+    void aboutShowsBetterSwiftifyAndSerenity()
+    {
+        Rig rig;
+        rig.settings.setPerformanceMode(true);
+        const auto pages = rig.show(QStringLiteral("SettingsPages"));
+        QVERIFY(pages);
+        pages->setProperty("page", 6);
+        Rig::settle();
+        auto *name = pages->findChild<QQuickItem *>(QStringLiteral("aboutAppName"));
+        auto *developer = pages->findChild<QQuickItem *>(QStringLiteral("aboutDeveloper"));
+        QVERIFY(name && developer);
+        QVERIFY(name->property("text").toString().startsWith(QStringLiteral("BetterSwiftify ")));
+        QVERIFY(developer->property("text").toString().contains(QStringLiteral("serenity")));
+    }
+
+    void homeListeningLayoutDoesNotDependOnPageVisibility()
+    {
+        Rig rig;
+        rig.settings.setPerformanceMode(true);
+        Song song;
+        song.name = QStringLiteral("A track kept on Home");
+        song.uri = QStringLiteral("spotify:track:home");
+        rig.library.recentlyPlayed()->setSongs({song});
+        const auto home = rig.show(QStringLiteral("HomeView"));
+        QVERIFY(home);
+        auto *workspace = home->findChild<QQuickItem *>(QStringLiteral("homeListeningWorkspace"));
+        auto *dj = home->findChild<QQuickItem *>(QStringLiteral("homeDjControls"));
+        QVERIFY(workspace && dj);
+        const qreal height = workspace->height();
+        const qreal controlsY = dj->y();
+        home->setVisible(false);
+        Rig::settle();
+        QCOMPARE(workspace->height(), height);
+        QCOMPARE(dj->y(), controlsY);
+        home->setVisible(true);
+        Rig::settle();
+        rig.render();
+        QCOMPARE(workspace->height(), height);
+        QCOMPARE(dj->y(), controlsY);
+    }
+
+    void statsCardLayoutDoesNotDependOnPageVisibility()
+    {
+        Rig rig;
+        rig.settings.setPerformanceMode(true);
+        for (int index = 0; index < 12; ++index) {
+            Song song;
+            song.name = QStringLiteral("Track %1").arg(index);
+            song.uri = QStringLiteral("spotify:track:stats%1").arg(index);
+            song.artists = QStringLiteral("Artist");
+            song.durationMs = 180000;
+            QVERIFY(rig.listeningHistory.record(song, QDateTime::currentDateTimeUtc().addSecs(-index * 180), 120000));
+        }
+        QTRY_COMPARE(rig.stats.plays(), 12);
+        const auto view = rig.show(QStringLiteral("StatsView"));
+        QVERIFY(view);
+        auto *card = view->findChild<QQuickItem *>(QStringLiteral("statsTopSongsState"));
+        QVERIFY(card);
+        auto *body = card->findChild<QQuickItem *>(QStringLiteral("statsCardBody"));
+        QVERIFY(body);
+        const qreal bodyY = body->y();
+        QList<QPair<QQuickItem *, qreal>> rowHeights;
+        for (auto *item : body->childItems()) {
+            if (QString::fromLatin1(item->metaObject()->className()).startsWith(QLatin1StringView("RankRow"))) {
+                rowHeights.append({item, item->height()});
+            }
+        }
+        QVERIFY(!rowHeights.isEmpty());
+        view->setVisible(false);
+        Rig::settle();
+        QCOMPARE(body->y(), bodyY);
+        for (const auto &[row, height] : rowHeights) QCOMPARE(row->height(), height);
+        view->setVisible(true);
+        Rig::settle();
+        rig.render();
+        QCOMPARE(body->y(), bodyY);
+
+        const qreal scrollHeight = view->property("contentHeight").toReal();
+        QPointingDevice touchpad(QStringLiteral("stats touchpad"), 9, QInputDevice::DeviceType::TouchPad,
+                                 QPointingDevice::PointerType::Finger,
+                                 QInputDevice::Capability::Position | QInputDevice::Capability::PixelScroll, 2, 0);
+        for (int step = 0; step < 40; ++step) {
+            const qreal before = view->property("contentY").toReal();
+            const QPointF position(640, 400);
+            QWheelEvent wheel(position, position, QPoint(0, -45), {}, Qt::NoButton, Qt::NoModifier,
+                              step == 0 ? Qt::ScrollBegin : Qt::ScrollUpdate, false,
+                              Qt::MouseEventNotSynthesized, &touchpad);
+            wheel.setTimestamp(1000 + step * 20);
+            QCoreApplication::sendEvent(rig.window.get(), &wheel);
+            QTest::qWait(20);
+            rig.render();
+            QCOMPARE(view->property("contentHeight").toReal(), scrollHeight);
+            QVERIFY(view->property("contentY").toReal() >= before - 0.5);
+        }
+        QVERIFY(view->property("contentY").toReal() > 500);
+    }
+
+    void collectionRowsKeepPageMargins_data()
+    {
+        QTest::addColumn<QString>("type");
+        QTest::addColumn<int>("width");
+        for (const auto *type : {"SavedSongsView", "ArtistView"}) {
+            for (int width : {1280, 720}) {
+                QTest::addRow("%s-%d", type, width) << QString::fromLatin1(type) << width;
+            }
+        }
+    }
+
+    void collectionRowsKeepPageMargins()
+    {
+        QFETCH(QString, type);
+        QFETCH(int, width);
+        Rig rig;
+        rig.settings.setPerformanceMode(true);
+        Song song;
+        song.name = QStringLiteral("A track in a collection");
+        song.uri = QStringLiteral("spotify:track:fixture");
+        rig.library.savedSongs()->setSongs({song});
+        rig.library.artistTopSongs()->setSongs({song});
+        const auto page = rig.show(type);
+        QVERIFY(page);
+        page->setWidth(width);
+        Rig::settle();
+        rig.render();
+        const std::function<QQuickItem *(QQuickItem *)> findSurface = [&](QQuickItem *item) -> QQuickItem * {
+            if (item->objectName() == QLatin1StringView("songRowSurface")) return item;
+            for (auto *child : item->childItems()) {
+                if (auto *surface = findSurface(child)) return surface;
+            }
+            return nullptr;
+        };
+        auto *surface = findSurface(page.get());
+        QVERIFY(surface);
+        const QPointF corner = surface->mapToItem(page.get(), QPointF());
+        const qreal margin = page->property("margin").toReal();
+        QVERIFY2(corner.x() >= margin - 0.1, qPrintable(QString::number(corner.x())));
+        QVERIFY2(corner.x() + surface->width() <= width - margin + 0.1,
+                 qPrintable(QString::number(corner.x() + surface->width())));
+    }
+
+    void trackTitlesUseThePlayerWeight()
+    {
+        Rig rig;
+        rig.settings.setPerformanceMode(true);
+        const QList<QPair<QString, QString>> titles {
+            {QStringLiteral("SongRow"), QStringLiteral("songRowTitle")},
+            {QStringLiteral("QueueRow"), QStringLiteral("queueRowTitle")},
+            {QStringLiteral("ImmersiveQueueRow"), QStringLiteral("immersiveQueueTitle")},
+            {QStringLiteral("RankRow"), QStringLiteral("rankRowTitle")},
+            {QStringLiteral("MediaCard"), QStringLiteral("mediaCardTitle")},
+        };
+        for (const auto &[type, name] : titles) {
+            QQmlComponent component(&rig.engine);
+            component.loadFromModule("Swiftify", type);
+            QVariantMap initial;
+            if (type == QStringLiteral("SongRow")) {
+                initial.insert(QStringLiteral("index"), 0);
+                initial.insert(QStringLiteral("song"), QVariant::fromValue(Song {}));
+            }
+            std::unique_ptr<QQuickItem> view(qobject_cast<QQuickItem *>(component.createWithInitialProperties(initial)));
+            QVERIFY2(view, qPrintable(component.errorString()));
+            view->setParentItem(rig.window->contentItem());
+            view->setSize(QSizeF(600, 80));
+            if (type == QStringLiteral("MediaCard")) view->setProperty("songTitle", true);
+            Rig::settle();
+            auto *title = view->findChild<QQuickItem *>(name);
+            QVERIFY2(title, qPrintable(name));
+            QCOMPARE(title->property("font").value<QFont>().weight(), QFont::Bold);
+            if (view->property("current").isValid()) view->setProperty("current", true);
+            Rig::settle();
+            QCOMPARE(title->property("font").value<QFont>().weight(), QFont::Bold);
+            if (type == QStringLiteral("MediaCard")) {
+                view->setProperty("songTitle", false);
+                Rig::settle();
+                QCOMPARE(title->property("font").value<QFont>().weight(), QFont::DemiBold);
+            }
+        }
+    }
+
+    void pageMotionSettlesWhenPerformanceModeChanges()
+    {
+        Rig rig;
+        for (const auto *type : {"PageHost", "EmptyState", "StatsView"}) {
+            rig.settings.setPerformanceMode(false);
+            const auto page = rig.show(QString::fromLatin1(type));
+            QVERIFY(page);
+            if (QString::fromLatin1(type) == QStringLiteral("EmptyState")) {
+                page->setVisible(false);
+                page->setVisible(true);
+            }
+            if (QString::fromLatin1(type) == QStringLiteral("StatsView")) {
+                rig.stats.setSource(QStringLiteral("statsfm"));
+                Rig::settle();
+                rig.stats.setSource(QStringLiteral("local"));
+            }
+            Rig::settle();
+            rig.settings.setPerformanceMode(true);
+            Rig::settle();
+            for (const auto *name : {"pageEntrance", "emptyStateArrival", "statsLoadingFade", "statsEmptyFade",
+                                     "statsOverviewFade", "statsActivityFade", "statsArtistsFade", "statsAlbumsFade", "statsCardFade"}) {
+                for (auto *animation : page->findChildren<QObject *>(QString::fromLatin1(name))) {
+                    QVERIFY2(!animation->property("running").toBool(), name);
+                }
+            }
+        }
+    }
+
+    void pagePolishSnapshots_data()
+    {
+        QTest::addColumn<QString>("type");
+        QTest::addColumn<bool>("populated");
+        QTest::addColumn<int>("width");
+        for (const auto *type : {"HomeView", "SearchView", "PlaylistsView", "PinnedPlaylists", "PersonalizedPlaylists", "SavedSongsView", "AlbumView",
+                                 "PlaylistView", "ArtistView", "StatsView", "SetupView", "StartupView"}) {
+            for (bool populated : {false, true}) {
+                for (int width : {1280, 720}) {
+                    QTest::addRow("%s-%s-%d", type, populated ? "data" : "empty", width)
+                        << QString::fromLatin1(type) << populated << width;
+                }
+            }
+        }
+    }
+
+    // Opt-in native renders for design review; fixtures never use a real account.
+    void pagePolishSnapshots()
+    {
+        const QString output = qEnvironmentVariable("SWIFTIFY_PAGE_SCREENSHOTS");
+        if (output.isEmpty()) QSKIP("set SWIFTIFY_PAGE_SCREENSHOTS to capture design fixtures");
+        QFETCH(QString, type);
+        QFETCH(bool, populated);
+        QFETCH(int, width);
+        fonts::loadIconFont();
+        Rig rig;
+        rig.settings.setPerformanceMode(true);
+        rig.settings.setLanguage(qEnvironmentVariable("SWIFTIFY_SNAPSHOT_LANGUAGE", QStringLiteral("ru")));
+        rig.settings.setThemeMode(qEnvironmentVariable("SWIFTIFY_SNAPSHOT_THEME", QStringLiteral("dark")));
+        if (rig.settings.themeMode() == QStringLiteral("light")) {
+            rig.settings.setThemeSource(QStringLiteral("builtin"));
+            QTRY_VERIFY(!rig.theme.dark());
+        }
+        Translations translations(&rig.settings);
+        connect(&translations, &Translations::languageChanged, &rig.engine, &QQmlEngine::retranslate);
+        rig.window->setColor(rig.theme.colors()->property("surface").value<QColor>());
+        QList<Song> songs;
+        QList<Playlist> playlists;
+        QList<Album> albums;
+        QList<Artist> artists;
+        for (int index = 0; index < 12; ++index) {
+            Song song;
+            song.instanceId = quint64(index + 1);
+            song.name = QStringLiteral("Night Walk %1").arg(index + 1);
+            song.uri = QStringLiteral("spotify:track:fixture%1").arg(index);
+            song.artists = QStringLiteral("Northern Lights");
+            song.albumName = QStringLiteral("After Hours");
+            song.albumId = QStringLiteral("album%1").arg(index % 3);
+            song.durationMs = 180000 + index * 1000;
+            songs.append(song);
+            Playlist playlist;
+            playlist.id = QStringLiteral("playlist%1").arg(index);
+            playlist.uri = QStringLiteral("spotify:playlist:%1").arg(index);
+            playlist.name = QStringLiteral("Late night collection %1").arg(index + 1);
+            playlists.append(playlist);
+            Album album;
+            album.id = song.albumId;
+            album.name = song.albumName;
+            album.artists = song.artists;
+            albums.append(album);
+            Artist artist;
+            artist.id = QStringLiteral("artist%1").arg(index);
+            artist.name = song.artists;
+            artists.append(artist);
+        }
+        if (type == QStringLiteral("AlbumView")) rig.library.selectAlbum(albums.first());
+        if (type == QStringLiteral("ArtistView")) rig.library.selectArtist(artists.first());
+        if (type == QStringLiteral("PlaylistView")) rig.library.selectPlaylist(playlists.first());
+        if (populated) {
+            rig.library.playlists()->setItems(playlists);
+            rig.library.pinnedPlaylists()->setItems(playlists);
+            rig.library.personalizedPlaylists()->setItems(playlists);
+            rig.library.recommendedAlbums()->setItems(albums);
+            rig.library.recommendedArtists()->setItems(artists);
+            rig.library.artistAlbums()->setItems(albums);
+            for (auto *model : {rig.library.savedSongs(), rig.library.recentlyPlayed(), rig.library.albumSongs(),
+                                rig.library.playlistSongs(), rig.library.displayedPlaylistSongs(), rig.library.artistTopSongs(), rig.library.searchSongs()}) {
+                model->setSongs(songs);
+            }
+            for (int index = 0; index < songs.size(); ++index) {
+                QVERIFY(rig.listeningHistory.record(songs.at(index), QDateTime::currentDateTimeUtc().addDays(-index), 120000));
+            }
+            if (type == QStringLiteral("SearchView")) rig.library.setSearchQuery(QStringLiteral("night"));
+            if (type == QStringLiteral("StatsView")) QTRY_COMPARE(rig.stats.plays(), songs.size());
+        }
+        const bool pinned = type == QStringLiteral("PinnedPlaylists");
+        const bool personalized = type == QStringLiteral("PersonalizedPlaylists");
+        const auto page = rig.show(pinned || personalized ? QStringLiteral("PlaylistsView") : type);
+        QVERIFY(page);
+        if (pinned) page->setProperty("pinnedOnly", true);
+        if (personalized) page->setProperty("personalized", true);
+        page->setWidth(width);
+        Rig::settle();
+        rig.render();
+        const std::function<void(QQuickItem *)> positionAtBeginning = [&](QQuickItem *item) {
+            if (item->metaObject()->indexOfMethod("positionViewAtBeginning()") >= 0) {
+                QVERIFY(QMetaObject::invokeMethod(item, "positionViewAtBeginning"));
+            } else if (item == page.get() && item->property("contentY").isValid()) {
+                item->setProperty("contentY", -item->property("topMargin").toReal());
+            }
+            for (auto *child : item->childItems()) positionAtBeginning(child);
+        };
+        positionAtBeginning(page.get());
+        Rig::settle();
+        rig.render();
+        const QString name = QStringLiteral("%1/%2-%3-%4.png").arg(output, type, populated ? QStringLiteral("data") : QStringLiteral("empty")).arg(width);
+        const qreal ratio = rig.window->devicePixelRatio();
+        QVERIFY(rig.render().copy(0, 0, qRound(width * ratio), qRound(Rig::kSize.height() * ratio))
+                    .scaled(width, Rig::kSize.height(), Qt::IgnoreAspectRatio, Qt::SmoothTransformation).save(name));
+    }
+
+    void settingsCardsStayInsideTheirViewport_data()
+    {
+        QTest::addColumn<QSize>("size");
+        QTest::addColumn<QString>("language");
+        QTest::newRow("wide-en") << QSize(1280, 780) << QStringLiteral("en");
+        QTest::newRow("wide-ru") << QSize(1280, 780) << QStringLiteral("ru");
+        QTest::newRow("compact-en") << QSize(526, 410) << QStringLiteral("en");
+        QTest::newRow("compact-ru") << QSize(526, 410) << QStringLiteral("ru");
+    }
+
+    void settingsCardsStayInsideTheirViewport()
+    {
+        QFETCH(QSize, size);
+        QFETCH(QString, language);
+        fonts::loadIconFont();
+        Rig rig;
+        rig.settings.setPerformanceMode(true);
+        rig.settings.setLanguage(language);
+        rig.settings.setThemeMode(QStringLiteral("dark"));
+        Translations translations(&rig.settings);
+        connect(&translations, &Translations::languageChanged, &rig.engine, &QQmlEngine::retranslate);
+        QQmlComponent component(&rig.engine);
+        component.setData("import QtQuick\nimport Swiftify\n"
+                          "Item { id: host; width: 1280; height: 780; property alias dialog: sheet;"
+                          " SettingsDialog { id: sheet; parent: host } }", QUrl());
+        std::unique_ptr<QObject> object(component.create());
+        QVERIFY2(object, qPrintable(component.errorString()));
+        auto *host = qobject_cast<QQuickItem *>(object.get());
+        host->setSize(size);
+        host->setParentItem(rig.window->contentItem());
+        auto *dialog = object->property("dialog").value<QObject *>();
+        QVERIFY(dialog);
+        QVERIFY(QMetaObject::invokeMethod(dialog, "open"));
+        QTRY_VERIFY(dialog->property("opened").toBool());
+        auto *viewport = object->findChild<QQuickItem *>(QStringLiteral("settingsContentViewport"));
+        auto *pages = object->findChild<QQuickItem *>(QStringLiteral("settingsPages"));
+        QVERIFY(viewport);
+        QVERIFY(pages);
+        QVERIFY(viewport->clip());
+        auto *close = object->findChild<QQuickItem *>(QStringLiteral("settingsCloseButton"));
+        QVERIFY(close);
+        QVERIFY(viewport->y() >= close->y() + close->height() + 16);
+        for (int page = 0; page < 7; ++page) {
+            dialog->setProperty("page", page);
+            Rig::settle();
+            rig.render();
+            QVERIFY(pages->width() <= viewport->width());
+            const auto sections = pages->findChildren<QQuickItem *>(QStringLiteral("settingsSection"));
+            QVERIFY(!sections.isEmpty());
+            QList<QRectF> bounds;
+            for (auto *section : sections) {
+                if (!section->isVisible()) continue;
+                const QPointF top = section->mapToItem(pages, QPointF());
+                QVERIFY(top.x() >= 0);
+                QVERIFY(top.x() + section->width() <= pages->width() + 0.1);
+                QVERIFY(section->height() > 0);
+                bounds.append(QRectF(top, section->size()));
+            }
+            std::sort(bounds.begin(), bounds.end(), [](const auto &a, const auto &b) { return a.top() < b.top(); });
+            for (qsizetype i = 1; i < bounds.size(); ++i) QVERIFY(bounds.at(i).top() >= bounds.at(i - 1).bottom());
+            const QString screenshot = qEnvironmentVariable("SWIFTIFY_SETTINGS_SCREENSHOT");
+            if (page == qEnvironmentVariable("SWIFTIFY_SETTINGS_SCREENSHOT_PAGE", QStringLiteral("3")).toInt() && !screenshot.isEmpty()) {
+                if (qEnvironmentVariableIsSet("SWIFTIFY_SETTINGS_SCREENSHOT_END")) {
+                    viewport->setProperty("contentY", std::max(0.0, viewport->property("contentHeight").toReal() - viewport->height()));
+                    Rig::settle();
+                    rig.render();
+                }
+                auto *content = dialog->property("contentItem").value<QQuickItem *>();
+                QVERIFY(content);
+                const QPointF top = content->mapToScene(QPointF());
+                const qreal ratio = rig.window->devicePixelRatio();
+                const QRect area(qRound(top.x() * ratio), qRound(top.y() * ratio),
+                                 qRound(dialog->property("width").toReal() * ratio),
+                                 qRound(dialog->property("height").toReal() * ratio));
+                QVERIFY(rig.render().copy(area).save(QStringLiteral("%1-%2-%3.png").arg(screenshot).arg(size.width()).arg(language)));
+            }
+        }
+    }
+
     void artworkThemeUsesThePlayingCoverWithoutAFeedbackLoop()
     {
         Rig rig;
@@ -226,7 +673,9 @@ private slots:
         Rig rig;
         QQmlComponent component(&rig.engine);
         component.setData("import QtQuick\nimport Swiftify\n"
-                          "Item { width: 500; height: 200;"
+                          "Flickable { id: verticalPage; width: 500; height: 300; contentHeight: 1500;"
+                          " boundsBehavior: Flickable.StopAtBounds; objectName: 'verticalPage';"
+                          " PageWheelHandler { page: verticalPage }"
                           " Shelf { width: 400; pageMargin: 0; rowHeight: 100; model: 12;"
                           " delegate: Rectangle { width: 160; height: 100; color: 'blue' } } }", QUrl());
         std::unique_ptr<QObject> object(component.create());
@@ -237,17 +686,36 @@ private slots:
         Rig::settle();
         rig.render();
         const QPointF position = cards->mapToScene(QPointF(200, 50));
-        const auto scroll = [&](QPoint pixels, QPoint angle) {
+        const auto scroll = [&](QPoint pixels, QPoint angle, Qt::KeyboardModifiers modifiers = Qt::NoModifier) {
             const qreal before = cards->property("contentX").toReal();
-            QWheelEvent event(position, position, pixels, angle, Qt::NoButton, Qt::NoModifier,
+            QWheelEvent event(position, position, pixels, angle, Qt::NoButton, modifiers,
                               Qt::NoScrollPhase, false);
             QCoreApplication::sendEvent(rig.window.get(), &event);
             Rig::settle();
             QVERIFY(cards->property("contentX").toReal() > before);
         };
-        scroll({}, QPoint(0, -120));
+        scroll({}, QPoint(0, -120), Qt::ShiftModifier);
         scroll({}, QPoint(-120, 0));
         scroll(QPoint(-40, 0), {});
+
+        const qreal shelfBefore = cards->property("contentX").toReal();
+        const qreal pageBefore = object->property("contentY").toReal();
+        QWheelEvent vertical(position, position, {}, QPoint(0, -120), Qt::NoButton, Qt::NoModifier,
+                             Qt::NoScrollPhase, false);
+        QCoreApplication::sendEvent(rig.window.get(), &vertical);
+        Rig::settle();
+        QCOMPARE(cards->property("contentX").toReal(), shelfBefore);
+        QTRY_VERIFY(object->property("contentY").toReal() > pageBefore);
+
+        object->setProperty("contentY", 0);
+        Rig::settle();
+        const QPointF diagonalPosition = cards->mapToScene(QPointF(200, 50));
+        QWheelEvent diagonal(diagonalPosition, diagonalPosition, QPoint(-2, -40), {}, Qt::NoButton,
+                             Qt::NoModifier, Qt::NoScrollPhase, false);
+        QCoreApplication::sendEvent(rig.window.get(), &diagonal);
+        Rig::settle();
+        QCOMPARE(cards->property("contentX").toReal(), shelfBefore);
+        QTRY_VERIFY(object->property("contentY").toReal() > 0);
     }
 
     void russianSleepTimerLabelsFitTheirSegments()
@@ -2016,8 +2484,10 @@ private slots:
             return static_cast<QQuickItem *>(nullptr);
         };
         QQuickItem *glow = find(home.get(), QLatin1StringView("ArtworkGlow"));
-        QQuickItem *wash = find(home.get(), QLatin1StringView("QQuickMultiEffect"));
-        QVERIFY(glow && wash);
+        auto *focus = home->findChild<QQuickItem *>(QStringLiteral("homeListeningFocus"));
+        QVERIFY(focus);
+        QQuickItem *artwork = find(focus, QLatin1StringView("ArtworkImage"));
+        QVERIFY(glow && artwork);
         const QColor themed = glow->property("primary").value<QColor>();
 
         Song song;
@@ -2031,13 +2501,12 @@ private slots:
         // the glow takes the cover's colours
         QTRY_VERIFY(glow->property("primary").value<QColor>() != themed);
 
-        // and the card's wash is the cover blurred: red to the left, blue to
-        // the right. read along the card's top, clear of the cover, its glow
-        // and the words
+        // The workspace keeps the actual cover, without the old full-card
+        // blur: red on the left and blue on the right after the load arrives.
         const auto tint = [&](qreal across) {
             const QImage frame = rig.render();
             const qreal ratio = qreal(frame.width()) / rig.window->width();
-            const QPointF at = wash->mapToScene(QPointF(wash->width() * across, 10));
+            const QPointF at = artwork->mapToScene(QPointF(artwork->width() * across, artwork->height() / 2));
             const QColor pixel = frame.pixelColor((at * ratio).toPoint());
             return pixel.blueF() - pixel.redF();
         };
@@ -2184,6 +2653,32 @@ private slots:
         QVERIFY(box->isVisible());
         QTRY_VERIFY(!box->isVisible());
         QCOMPARE(box->opacity(), 0.0);
+    }
+
+    void performanceModeSettlesAnAlreadyRunningReveal()
+    {
+        Rig rig;
+        QQmlComponent component(&rig.engine);
+        component.setData("import QtQuick\nimport Swiftify\n"
+                          "Item { property bool shown: false; property alias box: box;"
+                          " Rectangle { id: box; width: 40; height: 40; Reveal.shown: parent.shown; Reveal.duration: 1000 } }", QUrl());
+        std::unique_ptr<QObject> object(component.create());
+        QVERIFY2(object, qPrintable(component.errorString()));
+        auto *box = object->property("box").value<QQuickItem *>();
+        QVERIFY(box);
+        object->setProperty("shown", true);
+        QVERIFY(box->opacity() < 1);
+        rig.settings.setPerformanceMode(true);
+        QCOMPARE(box->opacity(), 1.0);
+        QCOMPARE(box->scale(), 1.0);
+        QVERIFY(box->isVisible());
+        rig.settings.setPerformanceMode(false);
+        object->setProperty("shown", false);
+        QVERIFY(box->isVisible());
+        rig.settings.setPerformanceMode(true);
+        QVERIFY(!box->isVisible());
+        QCOMPARE(box->opacity(), 0.0);
+        QCOMPARE(box->scale(), 1.0);
     }
 
     void revealedThingsGrowWithReducedMotion_data()
@@ -3222,7 +3717,7 @@ private slots:
     void viewsHoldStillAtRest_data()
     {
         QTest::addColumn<QString>("type");
-        for (const char *type : {"HomeView", "SearchView", "PlaylistsView", "SavedSongsView", "StatsView", "Sidebar",
+        for (const char *type : {"HomeView", "SearchView", "PlaylistsView", "SavedSongsView", "StatsView", "AlbumView", "PlaylistView", "ArtistView", "SetupView", "PageHost", "Sidebar",
                                  "PlayerBar", "SettingsPages", "EmptyState", "Stickers", "ShapeIcon"}) {
             QTest::addRow("%s", type) << QString::fromLatin1(type);
         }
@@ -3368,6 +3863,58 @@ private slots:
         // in or near sight are built, the other two are not
         QTRY_VERIFY(countCardsIn(page.get()) > 0);
         QVERIFY2(countCardsIn(page.get()) <= 24, qPrintable(QString::number(countCardsIn(page.get()))));
+
+        // Shelves unload their delegates, never their layout space. A wheel
+        // stream crossing their boundaries must not collapse Home or pull it
+        // back up as an offscreen shelf is released.
+        const qreal height = page->property("contentHeight").toReal();
+        QPointingDevice touchpad(QStringLiteral("test touchpad"), 7, QInputDevice::DeviceType::TouchPad,
+                                 QPointingDevice::PointerType::Finger,
+                                 QInputDevice::Capability::Position | QInputDevice::Capability::PixelScroll, 2, 0);
+        for (bool fixedPosition : {false, true}) {
+            page->setProperty("contentY", 500);
+            Rig::settle();
+            rig.render();
+            QPointF gesturePosition;
+            for (int step = 0; step < 50; ++step) {
+                const qreal before = page->property("contentY").toReal();
+                QPointF position;
+                const std::function<void(QQuickItem *)> findWheelTarget = [&](QQuickItem *item) {
+                    if (item->objectName() == QLatin1StringView("shelfCards") && item->isVisible()) {
+                        const QRectF shown = item->mapRectToItem(page.get(), QRectF(QPointF(), item->size()))
+                                                 .intersected(QRectF(0, 80, page->width(), page->height() - 160));
+                        if (!shown.isEmpty()) position = page->mapToScene(shown.center());
+                    }
+                    for (auto *child : item->childItems()) findWheelTarget(child);
+                };
+                findWheelTarget(page.get());
+                QVERIFY(!position.isNull());
+                if (step == 0) gesturePosition = position;
+                if (fixedPosition) position = gesturePosition;
+                QWheelEvent wheel(position, position, QPoint(0, -45), {}, Qt::NoButton, Qt::NoModifier,
+                                  step == 0 ? Qt::ScrollBegin : Qt::ScrollUpdate, false,
+                                  Qt::MouseEventNotSynthesized, &touchpad);
+                wheel.setTimestamp(1000 + step * 20);
+                QCoreApplication::sendEvent(rig.window.get(), &wheel);
+                QTest::qWait(20);
+                rig.render();
+                QVERIFY2(qAbs(page->property("contentHeight").toReal() - height) < 0.1, "Home's scroll height changed while unloading shelves");
+                QVERIFY2(page->property("contentY").toReal() >= before - 0.5, "Home jumped upward during a downward wheel stream");
+                const qreal end = height - page->height() + page->property("bottomMargin").toReal();
+                QVERIFY2(page->property("contentY").toReal() <= std::min(end, before + 45) + 0.5,
+                         qPrintable(QStringLiteral("fixed %1 step %2: before %3 after %4 expected %5")
+                                        .arg(fixedPosition).arg(step).arg(before).arg(page->property("contentY").toReal()).arg(std::min(end, before + 45))));
+            }
+            QVERIFY(page->property("contentY").toReal() > 500);
+            const qreal stoppedAt = page->property("contentY").toReal();
+            QWheelEvent end(gesturePosition, gesturePosition, {}, {}, Qt::NoButton, Qt::NoModifier,
+                            Qt::ScrollEnd, false, Qt::MouseEventNotSynthesized, &touchpad);
+            end.setTimestamp(2500);
+            QCoreApplication::sendEvent(rig.window.get(), &end);
+            QTest::qWait(200);
+            rig.render();
+            QCOMPARE(page->property("contentY").toReal(), stoppedAt);
+        }
     }
 
     /// an artist's albums are built only near the screen: a long

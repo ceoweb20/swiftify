@@ -95,11 +95,12 @@ ItemDelegate {
             anchors.verticalCenter: parent.verticalCenter
             spacing: 2
 
-            StyledText {
+            TitleText {
+                objectName: "rankRowTitle"
                 width: parent.width
                 text: root.name
                 elide: Text.ElideRight
-                font.weight: Font.DemiBold
+                font.pixelSize: Appearance.fontSize.small
                 color: root.current ? Appearance.colors.primary : Appearance.colors.onSurface
             }
             StyledText {

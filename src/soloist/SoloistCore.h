@@ -171,6 +171,8 @@ private:
     QString m_failure;
     /// bumped by every message, so a wait can tell old state from new
     quint64 m_messages = 0;
+    /// advances only when Soloist identifies a track, not on clock/status updates
+    quint64 m_itemRevision = 0;
 
     float m_volume = 0.75f;
     /// the song swiftify last asked soloist for, and whether it has started

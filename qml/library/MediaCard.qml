@@ -12,6 +12,7 @@ T.AbstractButton {
     /// what shows in place of a cover it has not got
     property string placeholderSymbol: "music_note"
     property string title
+    property bool songTitle: false
     property string fallbackKey: title
     property string subtitle
     property bool circular: false
@@ -62,6 +63,7 @@ T.AbstractButton {
         // the next card's words in the order things are drawn, and nothing
         // in a shelf could share a draw with its neighbour
         StyledText {
+            objectName: "mediaCardTitle"
             z: -1
             width: root.artworkSize
             text: root.title
@@ -70,7 +72,8 @@ T.AbstractButton {
             elide: Text.ElideRight
             horizontalAlignment: root.circular ? Text.AlignHCenter : Text.AlignLeft
             font.pixelSize: Appearance.fontSize.small
-            font.weight: Font.DemiBold
+            font.weight: root.songTitle ? Font.Bold : Font.DemiBold
+            font.variableAxes: root.songTitle ? ({ "ROND": 100, "wdth": 110, "wght": 720 }) : ({})
         }
 
         StyledText {

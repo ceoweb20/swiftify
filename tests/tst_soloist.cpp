@@ -108,6 +108,7 @@ public:
     QString playError;
     /// plays to leave unanswered, as a soloist stuck loading would
     int ignorePlays = 0;
+    int bufferBeforePlayingMs = 0;
     qint64 durationMs = 200'000;
     QList<QJsonObject> commands;
     int connections = 0;
@@ -140,8 +141,17 @@ private:
                   {QStringLiteral("decorations"), QJsonObject{
                       {QStringLiteral("identity"), QJsonObject{{QStringLiteral("name"), QStringLiteral("Song")}}},
                       {QStringLiteral("playback"), QJsonObject{{QStringLiteral("duration_ms"), durationMs}}}}}}}});
-        send({{QStringLiteral("type"), QStringLiteral("playback_changed")}, {QStringLiteral("status"), QStringLiteral("playing")}});
-        sendPosition(0);
+        if (bufferBeforePlayingMs > 0) {
+            sendStatus(QStringLiteral("buffering"));
+            sendPosition(0, 0.0);
+            QTimer::singleShot(bufferBeforePlayingMs, this, [this] {
+                sendStatus(QStringLiteral("playing"));
+                sendPosition(0);
+            });
+        } else {
+            sendStatus(QStringLiteral("playing"));
+            sendPosition(0);
+        }
     }
 
     QWebSocketServer m_server;
@@ -456,6 +466,27 @@ private slots:
         m_soloist->ignorePlays = 1;
         QCoro::waitFor(m_core->playTrack(QStringLiteral("spotify:track:a")));
         QCOMPARE(m_soloist->commandNames().count(QStringLiteral("play")), 2);
+    }
+
+    void aSongAlreadyBufferingIsNotRestarted()
+    {
+        // A slow but acknowledged stream must not be loaded a second time
+        // by the recovery intended for an ignored play command.
+        m_soloist->bufferBeforePlayingMs = 5'500;
+        QCoro::waitFor(m_core->playTrack(QStringLiteral("spotify:track:a")));
+        QCOMPARE(m_soloist->commandNames().count(QStringLiteral("play")), 1);
+    }
+
+    void staleBufferingDoesNotAcknowledgeAReplay()
+    {
+        const QString uri = QStringLiteral("spotify:track:a");
+        QCoro::waitFor(m_core->playTrack(uri));
+        QSignalSpy state(m_core.get(), &SoloistCore::stateChanged);
+        m_soloist->sendStatus(QStringLiteral("buffering"));
+        QTRY_VERIFY(!state.isEmpty());
+        m_soloist->ignorePlays = 1;
+        QCoro::waitFor(m_core->playTrack(uri));
+        QCOMPARE(m_soloist->commandNames().count(QStringLiteral("play")), 3);
     }
 
     void aSongStartedOverAfterBufferingHasEnded()

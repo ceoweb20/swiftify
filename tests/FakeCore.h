@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <cmath>
 #include <memory>
+#include <optional>
 #include <utility>
 
 namespace swiftify::testing {
@@ -31,10 +32,12 @@ public:
 
     void succeed(const QString &payload = {}) { emit finished(true, false, payload); }
     void fail(const QString &message = QStringLiteral("failed")) { emit finished(false, false, message); }
+    void fail(const SpotifyError &error) { failure = error; emit finished(false, false, error.message()); }
     void cancel() { emit finished(false, true, {}); }
 
     const QString name;
     const QString argument;
+    std::optional<SpotifyError> failure;
 
 signals:
     void finished(bool ok, bool cancelled, const QString &payload);
@@ -195,6 +198,9 @@ private:
             throw Cancelled();
         }
         if (!ok) {
+            if (call->failure) {
+                throw *call->failure;
+            }
             // as RustCore tells a replaced request from a failed one
             throw SpotifyError(payload == QLatin1StringView(SWIFTIFY_CORE_SUPERSEDED)           ? SpotifyError::Kind::Superseded
                                : payload == QLatin1StringView(SWIFTIFY_CORE_UNAVAILABLE)       ? SpotifyError::Kind::Unavailable

@@ -1,211 +1,58 @@
 {
-  "features" : [
-    "refractivity",
-    "specular-location"
-  ],
-  "fill" : {
-    "linear-gradient" : [
-      "display-p3:0.77246,0.65479,0.94922,1.00000",
-      "display-p3:0.71387,0.74512,0.97656,1.00000"
-    ]
+  "fill": {
+    "solid": "srgb:0.12941,0.10196,0.17255,1.00000"
   },
-  "groups" : [
+  "groups": [
     {
-      "blur-material" : null,
-      "layers" : [
+      "layers": [
         {
-          "blend-mode" : "normal",
-          "fill" : {
-            "linear-gradient" : [
-              "display-p3:1.00000,0.64065,0.84845,1.00000",
-              "display-p3:0.99608,0.78431,0.94118,1.00000"
-            ],
-            "orientation" : {
-              "start" : {
-                "x" : 0.5,
-                "y" : 1.1614344255275417
-              },
-              "stop" : {
-                "x" : 0.4536444183277879,
-                "y" : -0.05703403329679371
-              }
-            }
+          "image-name": "betterswiftify-mark.svg",
+          "name": "BetterSwiftify expressive star",
+          "fill": {
+            "solid": "srgb:0.79608,0.70980,1.00000,1.00000"
           },
-          "glass" : true,
-          "hidden" : true,
-          "image-name" : "swift.svg",
-          "name" : "swift",
-          "position" : {
-            "scale" : 0.82,
-            "translation-in-points" : [
-              -39,
-              43
-            ]
-          }
-        }
-      ],
-      "lighting" : "individual",
-      "refractivity" : {
-        "depth" : 0.0097265625,
-        "enabled" : true,
-        "strength" : 0.130625
-      },
-      "shadow" : {
-        "kind" : "layer-color",
-        "opacity" : 0.5
-      },
-      "specular" : true,
-      "translucency" : {
-        "enabled" : true,
-        "value" : 0.3
-      }
-    },
-    {
-      "blur-material" : null,
-      "layers" : [
-        {
-          "fill" : {
-            "linear-gradient" : [
-              "display-p3:1.00000,0.81734,0.97949,1.00000",
-              "display-p3:0.99756,0.64453,0.84131,1.00000"
-            ]
-          },
-          "hidden" : true,
-          "image-name" : "Key_(music)_icon.svg",
-          "name" : "Key_(music)_icon",
-          "position" : {
-            "scale" : 0.55,
-            "translation-in-points" : [
+          "glass": false,
+          "position": {
+            "scale": 1,
+            "translation-in-points": [
               0,
               0
             ]
           }
         },
         {
-          "fill" : {
-            "linear-gradient" : [
-              "display-p3:0.77197,0.65283,0.95312,1.00000",
-              "display-p3:0.71729,0.74951,0.97852,1.00000"
-            ]
+          "image-name": "betterswiftify-notes.svg",
+          "name": "BetterSwiftify joined notes",
+          "fill": {
+            "solid": "srgb:0.12941,0.10196,0.17255,1.00000"
           },
-          "hidden" : false,
-          "image-name" : "Key_(music)_icon.svg",
-          "name" : "Key_(music)_icon",
-          "position" : {
-            "scale" : 0.5,
-            "translation-in-points" : [
-              0,
-              0
-            ]
-          }
-        },
-        {
-          "fill" : "automatic",
-          "hidden" : true,
-          "image-name" : "music-icon.svg",
-          "name" : "music-icon",
-          "position" : {
-            "scale" : 5.48,
-            "translation-in-points" : [
-              -26.02463016247259,
-              -0.010384458672433539
-            ]
-          }
-        },
-        {
-          "fill" : {
-            "linear-gradient" : [
-              "display-p3:0.98340,0.80811,0.97510,1.00000",
-              "display-p3:0.94287,0.60107,0.79248,1.00000"
-            ]
-          },
-          "hidden" : true,
-          "image-name" : "waveform-path-svgrepo-com 2.svg",
-          "name" : "waveform-path-svgrepo-com 2"
-        }
-      ],
-      "lighting" : "individual",
-      "refractivity" : {
-        "depth" : 0,
-        "enabled" : false,
-        "strength" : 1
-      },
-      "shadow" : {
-        "kind" : "layer-color",
-        "opacity" : 0.9199999999999998
-      },
-      "specular" : true,
-      "translucency" : {
-        "enabled" : true,
-        "value" : 0.2
-      }
-    },
-    {
-      "blur-material" : 0.5,
-      "layers" : [
-        {
-          "blend-mode" : "normal",
-          "fill" : "automatic",
-          "glass" : true,
-          "hidden" : true,
-          "image-name" : "circle-15.png",
-          "name" : "circle-15",
-          "position" : {
-            "scale" : 1.68,
-            "translation-in-points" : [
+          "glass": false,
+          "position": {
+            "scale": 1,
+            "translation-in-points": [
               0,
               0
             ]
           }
         }
       ],
-      "lighting" : "combined",
-      "refractivity" : {
-        "depth" : 0.2923828125,
-        "enabled" : true,
-        "strength" : -1
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0
       },
-      "shadow" : {
-        "kind" : "layer-color",
-        "opacity" : 0.86
+      "specular": false,
+      "translucency": {
+        "enabled": false,
+        "value": 0
       },
-      "specular" : "outside",
-      "translucency" : {
-        "enabled" : true,
-        "value" : 0.5
-      }
-    },
-    {
-      "layers" : [
-        {
-          "fill" : {
-            "solid" : "display-p3:0.09412,0.09412,0.14124,1.00000"
-          },
-          "image-name" : "noun_RoundedStar_3910618.svg",
-          "name" : "noun_RoundedStar_3910618",
-          "position" : {
-            "scale" : 11,
-            "translation-in-points" : [
-              -0.10489594485693488,
-              146.72143131356484
-            ]
-          }
-        }
-      ],
-      "shadow" : {
-        "kind" : "neutral",
-        "opacity" : 0.5
-      },
-      "translucency" : {
-        "enabled" : true,
-        "value" : 0.3
+      "refractivity": {
+        "enabled": false,
+        "depth": 0,
+        "strength": 0
       }
     }
   ],
-  "supported-platforms" : {
-    "circles" : [
-      "watchOS"
-    ],
-    "squares" : "shared"
+  "supported-platforms": {
+    "squares": "shared"
   }
 }

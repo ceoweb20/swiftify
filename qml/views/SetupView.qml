@@ -11,7 +11,7 @@ Flickable {
     // background of its own; they start below it
     topMargin: Appearance.sizes.topBarHeight
 
-    contentHeight: Math.max(height, column.implicitHeight + 72)
+    contentHeight: Math.max(height, column.y + column.implicitHeight + 36)
     boundsBehavior: Flickable.StopAtBounds
     ScrollBar.vertical: StyledScrollBar { topPadding: 3 + Appearance.sizes.topBarHeight }
 
@@ -44,7 +44,9 @@ Flickable {
             spacing: 2
 
             StyledText {
+                width: parent.width
                 text: step.title
+                wrapMode: Text.Wrap
                 font.pixelSize: Appearance.fontSize.normal
                 font.weight: Font.DemiBold
             }
@@ -58,18 +60,23 @@ Flickable {
         }
     }
 
-    Stickers {
-        width: root.width
-        height: Math.max(root.height, column.y + column.height)
-        key: "setup"
-        count: 6
+    Rectangle {
+        objectName: "setupInstructionPanel"
+        x: column.x - 24
+        y: column.y - 24
+        width: column.width + 48
+        height: column.implicitHeight + 48
+        radius: 28
+        color: Appearance.colors.surfaceContainer
+        border.width: 1
+        border.color: Qt.alpha(Appearance.colors.outlineVariant, 0.4)
     }
 
     Column {
         id: column
         anchors.horizontalCenter: parent.horizontalCenter
         y: Math.max(36, (root.height - implicitHeight) / 2)
-        width: Math.min(560, root.width - 72)
+        width: Math.min(560, root.width - 2 * Appearance.sizes.pageMargin)
         spacing: 20
 
         MaterialSymbol {
@@ -84,6 +91,9 @@ Flickable {
 
         TitleText {
             anchors.horizontalCenter: parent.horizontalCenter
+            width: parent.width
+            horizontalAlignment: Text.AlignHCenter
+            wrapMode: Text.Wrap
             text: qsTr("Connect Your Music")
             font.pixelSize: Appearance.fontSize.display
             font.weight: Font.Bold
@@ -160,11 +170,13 @@ Flickable {
 
         // the screen stays until both are connected (UiState.needsSetup):
         // each button says when its half is done, and the next one leads
-        Row {
+        Flow {
             anchors.horizontalCenter: parent.horizontalCenter
+            width: Math.min(parent.width, libraryButton.implicitWidth + playbackButton.implicitWidth + spacing)
             spacing: 12
 
             TextButton {
+                id: libraryButton
                 variant: Session.libraryConnected ? TextButton.Tonal : TextButton.Filled
                 symbol: Session.libraryConnected ? "check" : ""
                 text: Session.libraryConnected ? qsTr("Library Connected") : qsTr("Connect Library")
@@ -172,6 +184,7 @@ Flickable {
                 onClicked: Session.beginLibraryLogin()
             }
             TextButton {
+                id: playbackButton
                 variant: Session.libraryConnected && !Session.connected ? TextButton.Filled : TextButton.Tonal
                 symbol: Session.connected ? "check" : ""
                 text: Session.connected ? qsTr("Playback Connected") : qsTr("Connect Playback")

@@ -12,19 +12,20 @@ Rectangle {
     property string symbol
     property string iconShape: "cookie9"
     property bool accent: false
+    readonly property bool compact: width < 180
 
-    implicitHeight: 96
+    implicitHeight: compact ? 124 : 96
     radius: 20
     color: accent ? Appearance.colors.primaryContainer : Appearance.colors.surfaceContainerLow
     border.width: 0.75
-    border.color: Qt.rgba(1, 1, 1, accent ? 0 : 0.07)
+    border.color: Qt.alpha(Appearance.colors.outlineVariant, accent ? 0 : 0.35)
 
     ShapeIcon {
         id: icon
-        x: 16
-        anchors.verticalCenter: parent.verticalCenter
-        size: 44
-        iconSize: 22
+        x: root.compact ? 14 : 16
+        y: root.compact ? 12 : (root.height - height) / 2
+        size: root.compact ? 28 : 44
+        iconSize: root.compact ? 17 : 22
         shape: root.iconShape
         symbol: root.symbol
         hovered: hover.hovered
@@ -33,11 +34,9 @@ Rectangle {
     }
 
     Column {
-        anchors.left: icon.right
-        anchors.leftMargin: 14
-        anchors.right: parent.right
-        anchors.rightMargin: 14
-        anchors.verticalCenter: parent.verticalCenter
+        x: root.compact ? 14 : icon.x + icon.width + 14
+        y: root.compact ? icon.y + icon.height + 6 : (root.height - implicitHeight) / 2
+        width: Math.max(0, root.width - x - 14)
         spacing: 2
 
         TitleText {
@@ -53,6 +52,8 @@ Rectangle {
         StyledText {
             width: parent.width
             text: root.label
+            wrapMode: Text.Wrap
+            maximumLineCount: 2
             elide: Text.ElideRight
             font.pixelSize: Appearance.fontSize.smaller
             color: root.accent ? Appearance.colors.onPrimaryContainer : Appearance.colors.onSurfaceVariant

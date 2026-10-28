@@ -40,35 +40,42 @@ GridView {
 
     header: Item {
         width: root.available
-        height: 64
-        // under the tiles, which the grid puts at 1: its stickers reach down
-        // behind the first row
+        height: headingPanel.height + 20
+        // Keep the heading behind the tiles' hover lift.
         z: 0.5
 
-        Stickers {
-            anchors.fill: parent
-            anchors.topMargin: -24
-            anchors.bottomMargin: -24
-            key: root.pinnedOnly ? "pinned" : "playlists"
-            count: 4
-            maximumSize: 150
-        }
-
-        TitleText {
+        Rectangle {
+            id: headingPanel
+            objectName: "playlistsHeadingPanel"
             x: 10
-            anchors.verticalCenter: parent.verticalCenter
-            text: root.pinnedOnly ? qsTr("Pinned Playlists") : qsTr("My Playlists")
-            font.pixelSize: Appearance.fontSize.display
-            font.weight: Font.Bold
-        }
-        IconButton {
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            visible: root.personalized
-            symbol: "refresh"
-            tooltip: qsTr("Refresh collections")
-            enabled: !Library.loadingDiscovery
-            onClicked: Library.refreshDiscovery()
+            width: parent.width - 20
+            height: Math.max(104, heading.implicitHeight + 40)
+            radius: 24
+            color: Appearance.colors.surfaceContainerHigh
+            border.width: 1
+            border.color: Qt.alpha(Appearance.colors.outlineVariant, 0.4)
+
+            TitleText {
+                id: heading
+                x: 24
+                width: Math.max(0, (refresh.visible ? refresh.x - 16 : parent.width - 20) - x)
+                anchors.verticalCenter: parent.verticalCenter
+                text: root.pinnedOnly ? qsTr("Pinned Playlists") : qsTr("My Playlists")
+                font.pixelSize: headingPanel.width < 500 ? Appearance.fontSize.headline : Appearance.fontSize.display
+                font.weight: Font.Bold
+                wrapMode: Text.Wrap
+            }
+            IconButton {
+                id: refresh
+                anchors.right: parent.right
+                anchors.rightMargin: 20
+                anchors.verticalCenter: parent.verticalCenter
+                visible: root.personalized
+                symbol: "refresh"
+                tooltip: qsTr("Refresh collections")
+                enabled: !Library.loadingDiscovery
+                onClicked: Library.refreshDiscovery()
+            }
         }
     }
 
@@ -161,6 +168,9 @@ GridView {
         anchors.centerIn: parent
         width: Math.max(0, parent.width - 2 * root.margin)
         Reveal.shown: root.personalized && Library.personalizedPlaylists.count === 0
+        Reveal.scaleFrom: 1
+        Reveal.duration: Appearance.duration(220)
+        Reveal.overshoot: 0
         symbol: "auto_awesome"
         title: Library.loadingDiscovery ? qsTr("Loading your mixes…") : qsTr("No personalized playlists yet")
         description: Library.discoveryStatus.length > 0 ? qsTranslate("Discovery", Library.discoveryStatus)
@@ -169,7 +179,11 @@ GridView {
 
     EmptyState {
         anchors.centerIn: parent
+        width: Math.min(420, parent.width - 2 * root.margin)
         Reveal.shown: root.pinnedOnly && Library.pinnedPlaylists.count === 0
+        Reveal.scaleFrom: 1
+        Reveal.duration: Appearance.duration(220)
+        Reveal.overshoot: 0
         symbol: "push_pin"
         title: qsTr("No Pinned Playlists")
         description: qsTr("Right-click a playlist to pin it here.")

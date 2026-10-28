@@ -61,11 +61,13 @@ Item {
 
     Item {
         id: slider
+        objectName: "scrollingTextSlider"
         height: root.height > 0 ? root.height : root.textHeight
         width: Math.max(root.width, root.textWidth * 2 + root.spacing)
 
         StyledText {
             id: label1
+            objectName: "scrollingTextLabel"
             anchors.verticalCenter: parent.verticalCenter
             text: root.text
             font.family: sample.font.family
@@ -141,6 +143,7 @@ Item {
         }
     }
     onWidthChanged: resetPosition()
+    onTextWidthChanged: resetPosition()
     onShouldScrollChanged: resetPosition()
     onHorizontalAlignmentChanged: resetPosition()
     Component.onCompleted: resetPosition()

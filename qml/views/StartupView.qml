@@ -5,41 +5,27 @@ import Swiftify
 // while the saved login is checked (SpotifyStartupLoadingView)
 Item {
     Rectangle {
-        anchors.horizontalCenter: parent.horizontalCenter
-        y: -height / 2
-        width: parent.width * 1.4
-        height: width
-        radius: width / 2
-        gradient: Gradient {
-            orientation: Gradient.Vertical
-            GradientStop { position: 0.5; color: Qt.rgba(Appearance.colors.primary.r, Appearance.colors.primary.g, Appearance.colors.primary.b, 0.16) }
-            GradientStop { position: 1; color: "transparent" }
-        }
-        opacity: 0.8
-    }
-
-    Stickers {
-        anchors.fill: parent
-        key: "startup"
-        count: 6
+        id: panel
+        objectName: "startupStatusPanel"
+        anchors.centerIn: parent
+        width: Math.min(484, parent.width - 2 * Appearance.sizes.pageMargin)
+        height: status.implicitHeight + 64
+        radius: 28
+        color: Appearance.colors.surfaceContainerHigh
+        border.width: 1
+        border.color: Qt.alpha(Appearance.colors.outlineVariant, 0.4)
     }
 
     Column {
+        id: status
         anchors.centerIn: parent
-        spacing: 16
+        width: panel.width - 48
+        spacing: 20
 
         Item {
             anchors.horizontalCenter: parent.horizontalCenter
             width: 64
             height: 64
-
-            SoftShadow {
-                anchors.fill: parent
-                radius: 14
-                blur: 14
-                offset: Qt.vector2d(0, 5)
-                color: Qt.rgba(Appearance.colors.primary.r, Appearance.colors.primary.g, Appearance.colors.primary.b, 0.28)
-            }
 
             Image {
                 anchors.fill: parent
@@ -64,6 +50,9 @@ Item {
 
         StyledText {
             anchors.horizontalCenter: parent.horizontalCenter
+            width: parent.width
+            horizontalAlignment: Text.AlignHCenter
+            wrapMode: Text.Wrap
             text: qsTr("Checking your saved Spotify login…")
             color: Appearance.colors.onSurfaceVariant
         }

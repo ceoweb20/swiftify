@@ -83,6 +83,37 @@ Column {
                     target: null
                     acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
                     onWheel: (event) => {
+                        const pixels = event.pixelDelta.x !== 0 || event.pixelDelta.y !== 0
+                        const horizontal = pixels ? Math.abs(event.pixelDelta.x) > Math.abs(event.pixelDelta.y)
+                                                  : Math.abs(event.angleDelta.x) > Math.abs(event.angleDelta.y)
+                        const shift = (event.modifiers & Qt.ShiftModifier) !== 0
+                        if ((event.modifiers & Qt.ControlModifier) !== 0) {
+                            event.accepted = false
+                            return
+                        }
+                        if (!horizontal && !shift) {
+                            // A horizontal ListView may consume a vertical wheel
+                            // even when this handler rejects it. Route it to the
+                            // enclosing page instead of letting the shelf take it.
+                            event.accepted = true
+                            let ancestor = root.parent
+                            while (ancestor) {
+                                const page = ancestor as Flickable
+                                if (page && page.interactive && page.contentHeight + page.topMargin + page.bottomMargin > page.height) {
+                                    const delta = pixels ? event.pixelDelta.y : event.angleDelta.y / 120 * 60
+                                    const start = -page.topMargin
+                                    const end = Math.max(start, page.contentHeight - page.height + page.bottomMargin)
+                                    const next = Math.max(start, Math.min(end, page.contentY - delta))
+                                    if (next !== page.contentY) {
+                                        page.cancelFlick()
+                                        page.contentY = next
+                                    }
+                                    return
+                                }
+                                ancestor = ancestor.parent
+                            }
+                            return
+                        }
                         const pixel = Math.abs(event.pixelDelta.x) > Math.abs(event.pixelDelta.y)
                                       ? event.pixelDelta.x : event.pixelDelta.y
                         const angle = Math.abs(event.angleDelta.x) > Math.abs(event.angleDelta.y)

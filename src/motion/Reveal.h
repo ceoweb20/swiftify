@@ -44,6 +44,7 @@ signals:
 
 private:
     void animate(bool shown);
+    void settle();
 
     QPointer<QQuickItem> m_item;
     bool m_shown = true;

@@ -50,8 +50,7 @@ constexpr qint64 kEndSlackMs = 30;
 /// what is still on its way through swiftify's output when soloist is done
 /// with a song, when it plays soloist on; the end waits for it
 constexpr qint64 kRouteDelayMs = 80;
-/// a song that has not started this long after it was asked for is asked
-/// for again, once
+/// an unacknowledged play command is asked for again once after this long
 constexpr int kReplayAfterMs = 5'000;
 /// a position this close to the end is near it
 constexpr qint64 kNearEndMs = 3'000;
@@ -556,6 +555,7 @@ void SoloistCore::applyPlaybackState(const QJsonObject &state)
 
 void SoloistCore::applyItem(const QJsonObject &item)
 {
+    ++m_itemRevision;
     const QString uri = item.value(QStringLiteral("uri")).toString();
     // something else taking over at the end of the song swiftify asked for
     // (soloist's autoplay) means that song has ended
@@ -751,9 +751,10 @@ QCoro::Task<> SoloistCore::playTrack(QString spotifyUri)
     // swiftify's output takes soloist's sink over again: after a file, the
     // file output played that instead
     playRouted();
-    send(QStringLiteral("play"), {{QStringLiteral("uri"), spotifyUri}});
+    const quint64 itemBefore = m_itemRevision;
     const quint64 sentAt = m_messages;
-    bool replayed = false;
+    send(QStringLiteral("play"), {{QStringLiteral("uri"), spotifyUri}});
+    bool recoveryChecked = false;
 
     QElapsedTimer waited;
     waited.start();
@@ -774,14 +775,19 @@ QCoro::Task<> SoloistCore::playTrack(QString spotifyUri)
             && estimatedPositionMs() < 10'000) {
             break;
         }
-        // a song asked for just as soloist moved on by itself can be left
-        // loading for good; asking again starts it
-        if (!replayed && waited.elapsed() >= kReplayAfterMs) {
-            replayed = true;
-            qCInfo(lcSoloist) << "Asking again for" << spotifyUri;
-            send(QStringLiteral("play"), {{QStringLiteral("uri"), spotifyUri}});
+        // Recover a command lost during autoplay, but do not restart a stream
+        // Soloist has acknowledged and is still buffering. That discards its
+        // progress and makes a slow connection wait for the same track twice.
+        if (!recoveryChecked && waited.elapsed() >= kReplayAfterMs) {
+            recoveryChecked = true;
+            const bool bufferingRequestedTrack = m_itemRevision > itemBefore
+                && m_itemUri == spotifyUri && m_status == Status::Buffering;
+            if (!bufferingRequestedTrack) {
+                qCInfo(lcSoloist) << "Asking again for" << spotifyUri;
+                send(QStringLiteral("play"), {{QStringLiteral("uri"), spotifyUri}});
+            }
         }
-        const qint64 remaining = (replayed ? kLoadTimeoutMs : kReplayAfterMs) - waited.elapsed();
+        const qint64 remaining = (recoveryChecked ? kLoadTimeoutMs : kReplayAfterMs) - waited.elapsed();
         if (remaining <= 0) {
             throw SpotifyError(SpotifyError::Kind::Core, QStringLiteral("timed out while loading the Spotify track"));
         }
