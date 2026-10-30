@@ -247,10 +247,10 @@ int main(int argc, char *argv[])
 #ifdef Q_OS_MACOS
     startCompact(argv);
 #endif
-    logging::setupLogging();
 #ifdef Q_OS_WIN
     WindowsIntegration::initializeProcess();
 #endif
+    logging::setupLogging();
 #ifdef Q_OS_LINUX
     setupAudioEnvironment();
 #endif
