@@ -1,0 +1,15 @@
+Swiftify's spotify-core has the Rust crates below built into it, each under
+the licence that follows its list. A crate's source is at
+https://crates.io/crates/<name>/<version>, and the patched librespot-core is
+in spotify-core/vendor in Swiftify's source.
+{{#each licenses}}
+
+--------------------------------------------------------------------------------
+
+{{{name}}}, for
+{{#each used_by}}
+    {{crate.name}} {{crate.version}}
+{{/each}}
+
+{{{text}}}
+{{/each}}

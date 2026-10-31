@@ -1,4 +1,20 @@
 #!/usr/bin/env bash
+# Swiftify, a spotify player for desktop
+# Copyright (C) 2026  shred0s
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 # builds a self contained linux x86_64 tarball of swiftify, with qt and its
 # libraries bundled, against a qt kit from the qt installer or aqtinstall
 #
@@ -93,7 +109,7 @@ build_dependency qcoro https://github.com/qcoro/qcoro.git v0.13.0 \
     -DUSE_QT_VERSION=6 -DQCORO_WITH_QTDBUS=OFF -DQCORO_WITH_QTWEBSOCKETS=OFF -DQCORO_WITH_QTQUICK=OFF \
     -DQCORO_WITH_QML=OFF -DQCORO_WITH_QTTEST=OFF -DQCORO_BUILD_EXAMPLES=OFF -DBUILD_TESTING=OFF
 
-cmake -S "$SOURCE" -B "$WORK/swiftify" "${common[@]}" -DCMAKE_INSTALL_PREFIX=/usr \
+cmake -S "$SOURCE" -B "$WORK/swiftify" "${common[@]}" -DCMAKE_INSTALL_PREFIX=/usr -DSWIFTIFY_BUNDLED_QT=ON \
     ${SWIFTIFY_UPDATE_PUBLIC_KEY:+"-DSWIFTIFY_UPDATE_PUBLIC_KEY=$SWIFTIFY_UPDATE_PUBLIC_KEY"} \
     ${SWIFTIFY_UPDATE_REPOSITORY:+"-DSWIFTIFY_UPDATE_REPOSITORY=$SWIFTIFY_UPDATE_REPOSITORY"} \
     ${SWIFTIFY_UPDATE_REPOSITORY_ID:+"-DSWIFTIFY_UPDATE_REPOSITORY_ID=$SWIFTIFY_UPDATE_REPOSITORY_ID"}
@@ -128,6 +144,11 @@ PATH="$WORK/tools:$PATH" "$WORK/tools/linuxdeploy-x86_64.AppImage" \
 [[ -f "$APPDIR/usr/bin/qt.conf" ]] || fail "linuxdeploy wrote no qt.conf"
 [[ -f "$APPDIR/usr/plugins/platforms/libqwayland.so" ]] || fail "the wayland platform plugin is missing"
 [[ -f "$APPDIR/usr/plugins/tls/libqopensslbackend.so" ]] || fail "the openssl tls plugin is missing"
+[[ -f "$APPDIR/usr/share/licenses/swiftify/LICENSE" ]] || fail "the license is missing"
+for license in material-color-utilities.LICENSE rounded-polygon-qmljs.LICENSE material-symbols.LICENSE \
+    rust-crates.LICENSE qt.LICENSE qt.NOTICE qtkeychain.LICENSE qcoro.LICENSE; do
+    [[ -f "$APPDIR/usr/share/licenses/swiftify/$license" ]] || fail "$license is missing"
+done
 
 # what the desktop itself is built on comes from the machine, never the
 # build's ubuntu. an old libsystemd or glib in lib/ is found first by the

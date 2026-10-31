@@ -1,3 +1,21 @@
+/*
+ * Swiftify, a spotify player for desktop
+ * Copyright (C) 2026  shred0s
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #pragma once
 
 #include "core/PlaybackCore.h"
@@ -8,12 +26,14 @@
 #include <QTimer>
 #include <QWebSocket>
 
+#include <atomic>
 #include <memory>
 #include <optional>
 
 namespace swiftify {
 
 class SoloistAudioRoute;
+class SoloistLoopback;
 
 /// where soloist is and the key it starts with
 struct SoloistConfig {
@@ -32,7 +52,9 @@ struct SoloistConfig {
 /// lyrics and playlists. where the sound server allows,
 /// soloist plays into a sink of swiftify's own, recorded and played on through
 /// the rust core, so the equalizer and the visualizers reach it too; tempo
-/// and pitch can't apply to audio that arrives as it plays.
+/// and pitch can't apply to audio that arrives as it plays. on windows soloist
+/// plays to the speakers, and a process loopback of it reaches the
+/// visualizers alone.
 /// swiftify keeps its own queue, so soloist is handed one song at a time, and
 /// the next one goes in as the last ends, before soloist's autoplay would.
 class SoloistCore : public PlaybackCore {
@@ -132,6 +154,8 @@ private:
     Song songFromItem() const;
     /// soloist's volume as 0-100 integer
     int soloistVolume() const;
+    /// how loud soloist plays at `volume` (0...1), as a gain on its full level
+    static float heardGain(float volume);
     /// hands what soloist plays to the rust core, if it is routed through it
     void playRouted();
     void useSoloist();
@@ -145,6 +169,8 @@ private:
 #endif
 #ifdef Q_OS_WIN
     void *m_job = nullptr;
+    /// what soloist plays, recorded for the visualizers
+    std::unique_ptr<SoloistLoopback> m_loopback;
 #endif
     /// soloist plays into m_route's sink
     bool m_routed = false;
@@ -175,6 +201,9 @@ private:
     quint64 m_itemRevision = 0;
 
     float m_volume = 0.75f;
+    /// heardGain(m_volume), for the loopback's thread to undo soloist's
+    /// volume by
+    std::atomic<float> m_heardGain = heardGain(0.75f);
     /// the song swiftify last asked soloist for, and whether it has started
     QString m_expectedUri;
     bool m_expectedStarted = false;

@@ -1,3 +1,21 @@
+/*
+ * Swiftify, a spotify player for desktop
+ * Copyright (C) 2026  shred0s
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 //! audio another program plays, handed over as it plays: spotify soloist's,
 //! recorded from a sink of its own. it goes the way a file does, through the
 //! equalizer and the spectrum to the output, so both work on it too.
@@ -249,6 +267,42 @@ impl LiveSource {
     }
 }
 
+/// audio another program plays to the speakers itself, as soloist does where
+/// it can't be recorded from a sink of swiftify's own (windows): only the
+/// spectrum sees it, gathered into runs as LiveSource gathers them
+pub(crate) struct LiveAnalysis {
+    samples: [f32; ANALYSIS_SAMPLE_COUNT],
+    index: usize,
+}
+
+impl LiveAnalysis {
+    pub(crate) fn new() -> Self {
+        Self {
+            samples: [0.0; ANALYSIS_SAMPLE_COUNT],
+            index: 0,
+        }
+    }
+
+    /// interleaved stereo, heard at `output_gain` of its full level, which
+    /// the spectrum undoes so the bars don't shrink with the volume
+    pub(crate) fn feed(&mut self, spectrum: &SharedSpectrum, mut samples: &[f32], output_gain: f64) {
+        if !spectrum.is_enabled() {
+            self.index = 0;
+            return;
+        }
+        while !samples.is_empty() {
+            let taken = samples.len().min(ANALYSIS_SAMPLE_COUNT - self.index);
+            self.samples[self.index..self.index + taken].copy_from_slice(&samples[..taken]);
+            self.index += taken;
+            samples = &samples[taken..];
+            if self.index == ANALYSIS_SAMPLE_COUNT {
+                spectrum.queue_interleaved_f32(self.samples, output_gain);
+                self.index = 0;
+            }
+        }
+    }
+}
+
 impl Iterator for LiveSource {
     type Item = f32;
 
@@ -294,6 +348,32 @@ impl Source for LiveSource {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn analysis_carries_part_windows_across_pushes() {
+        let spectrum = SharedSpectrum::new();
+        spectrum.set_enabled(true);
+        let mut analysis = LiveAnalysis::new();
+        let quarter = ANALYSIS_SAMPLE_COUNT / 4;
+        analysis.feed(&spectrum, &vec![0.4; quarter * 3], 1.0);
+        assert_eq!(spectrum.queued(), 0);
+        analysis.feed(&spectrum, &vec![0.4; quarter * 2], 1.0);
+        assert_eq!(spectrum.queued(), 1);
+        analysis.feed(&spectrum, &vec![0.4; quarter * 3], 1.0);
+        assert_eq!(spectrum.queued(), 2);
+    }
+
+    #[test]
+    fn a_disabled_spectrum_is_handed_nothing() {
+        let spectrum = SharedSpectrum::new();
+        let mut analysis = LiveAnalysis::new();
+        analysis.feed(&spectrum, &vec![0.4; ANALYSIS_SAMPLE_COUNT * 2 + 10], 1.0);
+        assert_eq!(spectrum.queued(), 0);
+        // what was left over before it was turned off is not carried on
+        spectrum.set_enabled(true);
+        analysis.feed(&spectrum, &vec![0.4; ANALYSIS_SAMPLE_COUNT - 10], 1.0);
+        assert_eq!(spectrum.queued(), 0);
+    }
 
     #[test]
     fn nothing_plays_until_the_cushion_is_there() {

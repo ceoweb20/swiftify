@@ -1,4 +1,22 @@
 /*
+ * Swiftify, a spotify player for desktop
+ * Copyright (C) 2026  shred0s
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+/*
  * the c interface to spotify-core, built with `--features capi`. it mirrors
  * the swift-bridge interface the apple apps use (src/swift_ffi.rs).
  *
@@ -139,6 +157,11 @@ void swiftify_live_buffer_push(const SwiftifyLiveBuffer *buffer, const float *sa
  * whatever played; one already playing carries on */
 char *swiftify_core_play_live(const SwiftifyCore *core, const SwiftifyLiveBuffer *buffer);
 void swiftify_core_stop_live(const SwiftifyCore *core);
+/* hands interleaved stereo audio, heard at output_gain of its full level, to
+ * the spectrum alone, for audio another program plays to the speakers
+ * itself. may be called from any thread. */
+void swiftify_core_analyse_live(const SwiftifyCore *core, const float *samples, size_t count,
+                                float output_gain);
 
 #ifdef __cplusplus
 }

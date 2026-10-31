@@ -255,3 +255,7 @@ report fork-specific problems in [this repository's issues](https://github.com/c
 this is a personal fork, so features and fixes follow what i use. if you want to propose a larger change, open an issue before writing it. upstream remains the source of the original player and most of its interface; please don't send fork-specific bug reports there.
 
 thanks to [the original swiftify project](https://github.com/swiftify-org/swiftify), [librespot](https://github.com/librespot-org/librespot), [spotify soloist](https://developer.spotify.com/documentation/soloist) and the libraries behind the app. the material 3 expressive direction comes from upstream, with inspiration from [end-4](https://github.com/end-4).
+
+## license
+
+swiftify is licensed under the gnu gpl v3 or later, see [LICENSE](LICENSE)

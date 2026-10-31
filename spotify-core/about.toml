@@ -1,0 +1,58 @@
+# the licences of the crates built into spotify-core, which go out with every
+# copy of swiftify as packaging/licenses/rust-crates.LICENSE. when Cargo.lock
+# changes it is made again from this folder with
+#   cargo about generate --locked --no-default-features --features capi about.hbs -o ../packaging/licenses/rust-crates.LICENSE
+
+# apache-2.0 first, as where a crate offers it its text needs no copyright
+# line, and many crates ship none
+accepted = ["Apache-2.0", "MIT", "MPL-2.0", "BSD-3-Clause", "Unicode-3.0", "Zlib"]
+# every platform swiftify is built for, the arch package on aarch64 too
+targets = [
+    "x86_64-unknown-linux-gnu",
+    "aarch64-unknown-linux-gnu",
+    "x86_64-pc-windows-msvc",
+    "x86_64-pc-windows-gnu",
+    "aarch64-apple-darwin",
+]
+ignore-build-dependencies = true
+ignore-dev-dependencies = true
+# spotify-core itself, which is swiftify's own and under its licence. the
+# scan would otherwise give it the vendored librespot-core's
+private = { ignore = true }
+
+# these are published without their licence, so it is read from their
+# repository at the commit they were published from. governor is too, but
+# its repository url ends in .git, which cargo about can't fetch from
+[librespot-audio.clarify]
+license = "MIT"
+git = [{ path = "LICENSE", checksum = "b6e979ad38c429c5811e9eb6930040a984619786f55ebc60660db05df5325ed6" }]
+
+[librespot-connect.clarify]
+license = "MIT"
+git = [{ path = "LICENSE", checksum = "b6e979ad38c429c5811e9eb6930040a984619786f55ebc60660db05df5325ed6" }]
+
+[librespot-discovery.clarify]
+license = "MIT"
+git = [{ path = "LICENSE", checksum = "b6e979ad38c429c5811e9eb6930040a984619786f55ebc60660db05df5325ed6" }]
+
+[librespot-metadata.clarify]
+license = "MIT"
+git = [{ path = "LICENSE", checksum = "b6e979ad38c429c5811e9eb6930040a984619786f55ebc60660db05df5325ed6" }]
+
+[librespot-oauth.clarify]
+license = "MIT"
+git = [{ path = "LICENSE", checksum = "b6e979ad38c429c5811e9eb6930040a984619786f55ebc60660db05df5325ed6" }]
+
+[librespot-playback.clarify]
+license = "MIT"
+git = [{ path = "LICENSE", checksum = "b6e979ad38c429c5811e9eb6930040a984619786f55ebc60660db05df5325ed6" }]
+
+[librespot-protocol.clarify]
+license = "MIT"
+git = [{ path = "LICENSE", checksum = "b6e979ad38c429c5811e9eb6930040a984619786f55ebc60660db05df5325ed6" }]
+
+# libm's licence file holds musl's licence after its own, too much alike for
+# the scan to name it
+[libm.clarify]
+license = "MIT"
+files = [{ path = "LICENSE.txt", checksum = "3823dda7cf046602f4b4e77ec8e227863dc4736037cc85bb33d9f19febe16bb7" }]

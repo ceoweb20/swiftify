@@ -1,3 +1,21 @@
+/*
+ * Swiftify, a spotify player for desktop
+ * Copyright (C) 2026  shred0s
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #include "soloist/SoloistCore.h"
 
 #include "app/Paths.h"
@@ -5,6 +23,9 @@
 #include "spotify/SpotifyError.h"
 #ifdef SWIFTIFY_DESKTOP_INTEGRATION
 #include "soloist/SoloistAudioRoute.h"
+#endif
+#ifdef Q_OS_WIN
+#include "soloist/SoloistLoopback.h"
 #endif
 
 #include <swiftify_core.h>
@@ -90,7 +111,15 @@ SoloistCore::SoloistCore(PlaybackCore *fallback, SoloistConfig config, QObject *
         info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
         ::SetInformationJobObject(m_job, JobObjectExtendedLimitInformation, &info, sizeof(info));
     }
+    m_loopback = std::make_unique<SoloistLoopback>([this](const float *samples, qsizetype count) {
+        m_fallback->analyseLive(samples, count, m_heardGain);
+    });
     connect(&m_process, &QProcess::started, this, [this] {
+        // soloist plays straight to the speakers here; the visualizers hear it
+        // through a loopback of it instead
+        if (qEnvironmentVariable("SWIFTIFY_SOLOIST_ROUTE") != QLatin1StringView("off")) {
+            m_loopback->start(quint32(m_process.processId()));
+        }
         if (!m_job) {
             return;
         }
@@ -108,6 +137,9 @@ SoloistCore::SoloistCore(PlaybackCore *fallback, SoloistConfig config, QObject *
         m_processOutput = (m_processOutput + output).right(kOutputTail);
     });
     connect(&m_process, &QProcess::finished, this, [this](int code, QProcess::ExitStatus status) {
+#ifdef Q_OS_WIN
+        m_loopback->stop();
+#endif
         m_portWatch.stop();
         m_socket.abort();
         m_socketOpen = false;
@@ -209,6 +241,10 @@ SoloistConfig SoloistCore::configured()
 
 void SoloistCore::stopDaemon()
 {
+#ifdef Q_OS_WIN
+    // its thread reads this core, so it goes first
+    m_loopback->stop();
+#endif
     m_portWatch.stop();
     // intentional stops are not failures: no "soloist stopped" error, and no
     // reconnect while the binary is being replaced
@@ -411,6 +447,7 @@ void SoloistCore::handleMessage(const QString &text)
                 const float newVol = float(vol) / 100.0f;
                 if (std::abs(newVol - m_volume) >= 0.005f) {
                     m_volume = newVol;
+                    m_heardGain = heardGain(m_volume);
                     emit remoteVolumeChanged(m_volume);
                 }
             }
@@ -422,6 +459,7 @@ void SoloistCore::handleMessage(const QString &text)
                 const float newVol = float(vol) / 100.0f;
                 if (std::abs(newVol - m_volume) >= 0.005f) {
                     m_volume = newVol;
+                    m_heardGain = heardGain(m_volume);
                     emit remoteVolumeChanged(m_volume);
                 }
             }
@@ -547,6 +585,7 @@ void SoloistCore::applyPlaybackState(const QJsonObject &state)
             const float newVol = float(vol) / 100.0f;
             if (std::abs(newVol - m_volume) >= 0.005f) {
                 m_volume = newVol;
+                m_heardGain = heardGain(m_volume);
                 emit remoteVolumeChanged(m_volume);
             }
         }
@@ -685,6 +724,14 @@ QCoro::Task<> SoloistCore::ensureReady(quint64 resets)
 int SoloistCore::soloistVolume() const
 {
     return int(std::lround(std::clamp(m_volume, 0.0f, 1.0f) * 100));
+}
+
+float SoloistCore::heardGain(float volume)
+{
+    // soloist turns its 0-100 down by about half a decibel a step, 50db in
+    // all (measured from its output); 0 is silent
+    const float steps = std::round(std::clamp(volume, 0.0f, 1.0f) * 100);
+    return steps <= 0 ? 0.0f : std::pow(10.0f, (steps - 100) * 0.5f / 20);
 }
 
 void SoloistCore::playRouted()
@@ -882,6 +929,7 @@ void SoloistCore::seek(quint32 positionMs)
 void SoloistCore::setVolume(float volume)
 {
     m_volume = std::clamp(volume, 0.0f, 1.0f);
+    m_heardGain = heardGain(m_volume);
     if (!m_useSoloist) {
         m_fallback->setVolume(m_volume);
         return;

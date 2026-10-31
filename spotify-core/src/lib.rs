@@ -1,3 +1,21 @@
+/*
+ * Swiftify, a spotify player for desktop
+ * Copyright (C) 2026  shred0s
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 use std::{
     sync::{
         Arc, Mutex,
@@ -237,6 +255,8 @@ pub struct SpotifyCore {
     reporter: Arc<Mutex<Option<Arc<Reporter>>>>,
     /// shared with every sink this core builds, streaming and files alike.
     output_health: OutputHealth,
+    /// what `analyse_live` has gathered towards the spectrum's next run
+    live_analysis: Mutex<live_input::LiveAnalysis>,
 }
 
 impl Default for SpotifyCore {
@@ -245,10 +265,16 @@ impl Default for SpotifyCore {
     }
 }
 
+/// librespot and the core log through the log crate, which drops everything
+/// until a logger is set. this sets one that reads RUST_LOG (Logging.cpp fills
+/// it in when logging is on), unless the host set its own first
+fn start_logging() {
+    let _ = env_logger::Builder::from_default_env().try_init();
+}
+
 impl SpotifyCore {
     pub fn new() -> Self {
-        let _ = env_logger::try_init();
-
+        start_logging();
         Self {
             state: Mutex::new(SpotifyState::default()),
             playback_generation: watch::Sender::new(0),
@@ -259,6 +285,7 @@ impl SpotifyCore {
             volume_normalization: Arc::new(AtomicBool::new(false)),
             reporter: Arc::new(Mutex::new(None)),
             output_health: OutputHealth::new(),
+            live_analysis: Mutex::new(live_input::LiveAnalysis::new()),
         }
     }
 
@@ -1107,6 +1134,14 @@ impl SpotifyCore {
 
     pub fn set_spectrum_enabled(&self, enabled: bool) {
         self.spectrum.set_enabled(enabled);
+    }
+
+    /// hands the spectrum audio another program plays to the speakers by
+    /// itself: interleaved stereo, at `output_gain` of its full level. only
+    /// the visualizers see it; nothing of it is played
+    pub fn analyse_live(&self, samples: &[f32], output_gain: f64) {
+        let mut analysis = self.live_analysis.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        analysis.feed(&self.spectrum, samples, output_gain);
     }
 
     /// the switch lock guards no data, so a panic while it was held leaves

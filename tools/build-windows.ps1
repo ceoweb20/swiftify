@@ -1,3 +1,21 @@
+<#
+    Swiftify, a spotify player for desktop
+    Copyright (C) 2026  shred0s
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#>
+
 [CmdletBinding()]
 param(
     [string]$QtPath,
@@ -243,9 +261,17 @@ function Invoke-WindowsBuild {
 
         Write-Host 'Building Swiftify...'
         $appBuild = Join-Path $buildDirectory 'swiftify'
-        Invoke-Native $cmake (@('-S', $sourceRoot, '-B', $appBuild) + $commonOptions + @("-DRust_TOOLCHAIN=$rustToolchain", "-DRust_CARGO_TARGET=$rustTarget", "-DCMAKE_INSTALL_PREFIX=$($InstallPrefix.Replace('\', '/'))") + $(if ($env:SWIFTIFY_UPDATE_PUBLIC_KEY) { @("-DSWIFTIFY_UPDATE_PUBLIC_KEY=$env:SWIFTIFY_UPDATE_PUBLIC_KEY") } else { @() }) + $(if ($env:SWIFTIFY_UPDATE_REPOSITORY) { @("-DSWIFTIFY_UPDATE_REPOSITORY=$env:SWIFTIFY_UPDATE_REPOSITORY") } else { @() }) + $(if ($env:SWIFTIFY_UPDATE_REPOSITORY_ID) { @("-DSWIFTIFY_UPDATE_REPOSITORY_ID=$env:SWIFTIFY_UPDATE_REPOSITORY_ID") } else { @() })) | Out-Host
+        Invoke-Native $cmake (@('-S', $sourceRoot, '-B', $appBuild) + $commonOptions + @("-DRust_TOOLCHAIN=$rustToolchain", "-DRust_CARGO_TARGET=$rustTarget", '-DSWIFTIFY_BUNDLED_QT=ON', "-DCMAKE_INSTALL_PREFIX=$($InstallPrefix.Replace('\', '/'))") + $(if ($env:SWIFTIFY_UPDATE_PUBLIC_KEY) { @("-DSWIFTIFY_UPDATE_PUBLIC_KEY=$env:SWIFTIFY_UPDATE_PUBLIC_KEY") } else { @() }) + $(if ($env:SWIFTIFY_UPDATE_REPOSITORY) { @("-DSWIFTIFY_UPDATE_REPOSITORY=$env:SWIFTIFY_UPDATE_REPOSITORY") } else { @() }) + $(if ($env:SWIFTIFY_UPDATE_REPOSITORY_ID) { @("-DSWIFTIFY_UPDATE_REPOSITORY_ID=$env:SWIFTIFY_UPDATE_REPOSITORY_ID") } else { @() })) | Out-Host
         Invoke-Native $cmake @('--build', $appBuild, '--parallel', "$Jobs") | Out-Host
         Invoke-Native $cmake @('--install', $appBuild) | Out-Host
+        if (-not (Test-Path -LiteralPath (Join-Path $InstallPrefix 'share\licenses\swiftify\LICENSE') -PathType Leaf)) {
+            throw 'The license was not installed.'
+        }
+        foreach ($license in @('material-color-utilities.LICENSE', 'rounded-polygon-qmljs.LICENSE', 'material-symbols.LICENSE', 'rust-crates.LICENSE', 'qt.LICENSE', 'qt.NOTICE', 'qtkeychain.LICENSE', 'qcoro.LICENSE')) {
+            if (-not (Test-Path -LiteralPath (Join-Path $InstallPrefix "share\licenses\swiftify\$license") -PathType Leaf)) {
+                throw "$license was not installed."
+            }
+        }
         $installBin = Join-Path $InstallPrefix 'bin'
         $executable = Join-Path $installBin 'swiftify.exe'
         Invoke-Native $deployQt @('--release', '--force', '--compiler-runtime', '--qmldir', (Join-Path $sourceRoot 'qml'), $executable) | Out-Host

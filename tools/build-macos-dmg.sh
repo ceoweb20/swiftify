@@ -1,4 +1,20 @@
 #!/usr/bin/env bash
+# Swiftify, a spotify player for desktop
+# Copyright (C) 2026  shred0s
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 # builds an arm64 swiftify.app with qt bundled, signed ad hoc, in a dmg,
 # against a qt kit from the qt installer or aqtinstall
 #
@@ -84,7 +100,7 @@ build_dependency qcoro https://github.com/qcoro/qcoro.git v0.13.0 \
     -DUSE_QT_VERSION=6 -DQCORO_WITH_QTDBUS=OFF -DQCORO_WITH_QTWEBSOCKETS=OFF -DQCORO_WITH_QTQUICK=OFF \
     -DQCORO_WITH_QML=OFF -DQCORO_WITH_QTTEST=OFF -DQCORO_BUILD_EXAMPLES=OFF -DBUILD_TESTING=OFF
 
-cmake -S "$SOURCE" -B "$WORK/swiftify" "${common[@]}" -DRust_CARGO_TARGET=aarch64-apple-darwin
+cmake -S "$SOURCE" -B "$WORK/swiftify" "${common[@]}" -DRust_CARGO_TARGET=aarch64-apple-darwin -DSWIFTIFY_BUNDLED_QT=ON
 cmake --build "$WORK/swiftify" --parallel "$JOBS"
 
 rm -rf "${APP:?}"
@@ -131,6 +147,11 @@ done < <(find "$APP" -type f -print0)
 [[ -d "$APP/Contents/PlugIns/tls" ]] || fail "the tls plugins are missing"
 [[ -f "$APP/Contents/PlugIns/platforms/libqcocoa.dylib" ]] || fail "the cocoa platform plugin is missing"
 [[ -d "$APP/Contents/Resources/qml/QtQuick" ]] || fail "qt's qml modules are missing"
+[[ -f "$APP/Contents/Resources/LICENSE" ]] || fail "the license is missing"
+for license in material-color-utilities.LICENSE rounded-polygon-qmljs.LICENSE material-symbols.LICENSE \
+    rust-crates.LICENSE qt.LICENSE qt.NOTICE qtkeychain.LICENSE qcoro.LICENSE; do
+    [[ -f "$APP/Contents/Resources/$license" ]] || fail "$license is missing"
+done
 
 # the dmg opens to the app beside a link to applications. hdiutil sometimes
 # finds the volume busy on ci, so it gets a few tries

@@ -1,3 +1,21 @@
+<#
+    Swiftify, a spotify player for desktop
+    Copyright (C) 2026  shred0s
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#>
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
@@ -30,6 +48,7 @@ $script:failBuild = $false
 $script:msvcInitializations = 0
 $script:rustToolchains = @{}
 $script:compilerVersion = '15.1.0'
+$script:thirdPartyLicenses = @('material-color-utilities.LICENSE', 'rounded-polygon-qmljs.LICENSE', 'material-symbols.LICENSE', 'rust-crates.LICENSE', 'qt.LICENSE', 'qt.NOTICE', 'qtkeychain.LICENSE', 'qcoro.LICENSE')
 
 function New-FixtureFile {
     param([string]$Path, [string]$Content = 'fixture')
@@ -84,6 +103,10 @@ function Invoke-Native {
                 $project = Split-Path -Leaf $build
                 if ($project -eq 'swiftify') {
                     New-FixtureFile "$prefix\bin\swiftify.exe"
+                    New-FixtureFile "$prefix\share\licenses\swiftify\LICENSE"
+                    foreach ($license in $script:thirdPartyLicenses) {
+                        New-FixtureFile "$prefix\share\licenses\swiftify\$license"
+                    }
                 } else {
                     New-FixtureFile "$prefix\bin\$project.dll"
                 }
@@ -120,6 +143,11 @@ try {
     Assert-True (@($script:invocations | Where-Object { $_.Arguments -contains '-DSWIFTIFY_UPDATE_REPOSITORY_ID=123456789' }).Count -eq 1) 'The stable update repository ID must reach CMake.'
     Assert-True (Test-Path -LiteralPath "$installPrefix\bin\swiftify.exe") 'Swiftify was not installed.'
     Assert-True (-not (Test-Path -LiteralPath "$installPrefix\bin\qtkeychain.dll")) 'The OS credential backend must not be shipped.'
+    Assert-True (Test-Path -LiteralPath "$installPrefix\share\licenses\swiftify\LICENSE") 'The license was not installed.'
+    foreach ($license in $script:thirdPartyLicenses) {
+        Assert-True (Test-Path -LiteralPath "$installPrefix\share\licenses\swiftify\$license") "$license was not installed."
+    }
+    Assert-True (@($script:invocations | Where-Object { $_.Arguments -contains '-DSWIFTIFY_BUNDLED_QT=ON' }).Count -eq 1) 'The bundled Qt must have its license installed.'
     Assert-True (Test-Path -LiteralPath "$installPrefix\bin\qcoro.dll") 'QCoro runtime was not deployed.'
     Assert-True ((Get-Content -LiteralPath "$installPrefix\bin\libstdc++-6.dll" -Raw).Trim() -eq 'selected compiler runtime') 'The selected compiler runtime must replace the deployment tool runtime.'
     Assert-True (@($script:invocations | Where-Object { $_.Arguments -contains '-DRust_TOOLCHAIN=stable-x86_64-pc-windows-gnu' }).Count -eq 1) 'The GNU Rust toolchain must be passed explicitly.'

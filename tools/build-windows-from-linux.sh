@@ -1,4 +1,20 @@
 #!/usr/bin/env bash
+# Swiftify, a spotify player for desktop
+# Copyright (C) 2026  shred0s
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 # cross-builds a self-contained windows x86_64 folder and zip of swiftify from
 # linux, downloading the matching windows mingw qt kit from download.qt.io on
 # the first run so nothing has to be installed or built on windows
@@ -217,6 +233,7 @@ build_dependency qcoro https://github.com/qcoro/qcoro.git v0.13.0 \
 cmake -S "$SOURCE" -B "$WORK/swiftify" "${common[@]}" \
     "-DSWIFTIFY_SHAPE_ATLAS_TOOL=$SHAPE_ATLAS" \
     "${RUST_CMAKE_ARGS[@]}" \
+    -DSWIFTIFY_BUNDLED_QT=ON \
     "-DCMAKE_INSTALL_PREFIX=$STAGE"
 cmake --build "$WORK/swiftify" --parallel "$JOBS"
 rm -rf "${STAGE:?}"
@@ -267,6 +284,12 @@ while :; do
     done < <(find "$BIN" -type f \( -iname '*.exe' -o -iname '*.dll' \) -exec x86_64-w64-mingw32-objdump -p {} + 2>/dev/null \
         | awk '/DLL Name:/ { print $3 }' | sort -u)
     $copied || break
+done
+
+[[ -f "$STAGE/share/licenses/swiftify/LICENSE" ]] || fail "the license is missing"
+for license in material-color-utilities.LICENSE rounded-polygon-qmljs.LICENSE material-symbols.LICENSE \
+    rust-crates.LICENSE qt.LICENSE qt.NOTICE qtkeychain.LICENSE qcoro.LICENSE; do
+    [[ -f "$STAGE/share/licenses/swiftify/$license" ]] || fail "$license is missing"
 done
 
 cat > "$BIN/qt.conf" <<'EOF'

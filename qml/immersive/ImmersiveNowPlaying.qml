@@ -1,3 +1,21 @@
+/*
+ * Swiftify, a spotify player for desktop
+ * Copyright (C) 2026  shred0s
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Effects
@@ -402,11 +420,13 @@ Item {
             Row {
                 id: volume
                 anchors.horizontalCenter: parent.horizontalCenter
+                anchors.horizontalCenterOffset: -muteButton.width / 2
                 spacing: 10
                 opacity: root.controlsOpacity
                 enabled: root.controlsOpacity > 0
 
                 IconButton {
+                    id: muteButton
                     anchors.verticalCenter: parent.verticalCenter
                     scheme: root.scheme
                     symbol: Player.volume <= 0.01 ? "volume_off" : (Player.volume <= 0.5 ? "volume_down" : "volume_up")
@@ -419,7 +439,7 @@ Item {
                 }
                 StyledSlider {
                     anchors.verticalCenter: parent.verticalCenter
-                    width: Math.min(Math.max(0, progress.width - 40), 300)
+                    width: Math.max(0, Math.min(Math.max(0, progress.width - 40), 300) - muteButton.width)
                     scheme: root.scheme
                     trackThickness: 8
                     handleLength: 20

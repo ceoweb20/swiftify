@@ -1,3 +1,21 @@
+#[[
+    Swiftify, a spotify player for desktop
+    Copyright (C) 2026  shred0s
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+]]
+
 cmake_minimum_required(VERSION 3.24)
 
 project(Swiftify
@@ -188,6 +206,37 @@ if(SWIFTIFY_DOWNLOAD_INTERFACE_FONT)
     endif()
 endif()
 
+# --- licences ------------------------------------------------------------------
+
+# the code built into swiftify or bundled with it, whose licences go out with
+# every copy beside its own. they're copied under their installed names first,
+# as the app bundle can't rename what it carries
+set(SWIFTIFY_LICENSE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/licenses)
+configure_file(third_party/material-color-utilities/LICENSE
+    ${SWIFTIFY_LICENSE_DIRECTORY}/material-color-utilities.LICENSE COPYONLY)
+configure_file(third_party/rounded-polygon-qmljs/LICENSE
+    ${SWIFTIFY_LICENSE_DIRECTORY}/rounded-polygon-qmljs.LICENSE COPYONLY)
+set(SWIFTIFY_THIRD_PARTY_LICENSES
+    ${SWIFTIFY_LICENSE_DIRECTORY}/material-color-utilities.LICENSE
+    ${SWIFTIFY_LICENSE_DIRECTORY}/rounded-polygon-qmljs.LICENSE
+    # the rust crates', made with cargo about (spotify-core/about.toml)
+    ${CMAKE_CURRENT_SOURCE_DIR}/packaging/licenses/rust-crates.LICENSE)
+# material symbols, the icon font downloaded above
+if(SWIFTIFY_DOWNLOAD_ICON_FONT)
+    list(APPEND SWIFTIFY_THIRD_PARTY_LICENSES ${CMAKE_CURRENT_SOURCE_DIR}/packaging/licenses/material-symbols.LICENSE)
+endif()
+# the prebuilt downloads bundle qt, qtkeychain and qcoro, and their licences go
+# with them. a distro's package uses the system's and leaves them off
+option(SWIFTIFY_BUNDLED_QT "Install the licences of Qt, QtKeychain and QCoro, for a build that bundles them" OFF)
+if(SWIFTIFY_BUNDLED_QT)
+    configure_file(packaging/licenses/qt.NOTICE.in ${SWIFTIFY_LICENSE_DIRECTORY}/qt.NOTICE @ONLY)
+    list(APPEND SWIFTIFY_THIRD_PARTY_LICENSES
+        ${CMAKE_CURRENT_SOURCE_DIR}/packaging/licenses/qt.LICENSE
+        ${SWIFTIFY_LICENSE_DIRECTORY}/qt.NOTICE
+        ${CMAKE_CURRENT_SOURCE_DIR}/packaging/licenses/qtkeychain.LICENSE
+        ${CMAKE_CURRENT_SOURCE_DIR}/packaging/licenses/qcoro.LICENSE)
+endif()
+
 # --- the app ---------------------------------------------------------------------
 
 file(GLOB_RECURSE SWIFTIFY_SOURCES CONFIGURE_DEPENDS RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
@@ -208,6 +257,10 @@ endif()
 if(NOT SWIFTIFY_DESKTOP_INTEGRATION)
     # routing soloist through swiftify records it with libpulse
     list(FILTER SWIFTIFY_SOURCES EXCLUDE REGEX "^src/soloist/SoloistAudioRoute")
+endif()
+if(NOT WIN32)
+    # the visualizers hear soloist through a windows process loopback
+    list(FILTER SWIFTIFY_SOURCES EXCLUDE REGEX "^src/soloist/SoloistLoopback")
 endif()
 
 file(GLOB_RECURSE SWIFTIFY_QML CONFIGURE_DEPENDS RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
@@ -313,7 +366,7 @@ target_link_libraries(swiftify_app PUBLIC
     spotify_core)
 
 if(WIN32)
-    target_link_libraries(swiftify_app PUBLIC Qt6::Widgets comctl32 dwmapi ole32 shell32 uuid runtimeobject)
+    target_link_libraries(swiftify_app PUBLIC Qt6::Widgets comctl32 dwmapi ole32 shell32 uuid runtimeobject mmdevapi)
 
     # older mingw-w64 headers (qt's bundled mingw 13.1, say) have no
     # SystemMediaTransportControls in windows.media.h; the media controls are
@@ -478,6 +531,10 @@ if(APPLE)
             PROPERTIES MACOSX_PACKAGE_LOCATION Resources/fonts)
         target_sources(swiftify PRIVATE ${SWIFTIFY_INTERFACE_FONT} ${SWIFTIFY_INTERFACE_FONT_LICENSE})
     endif()
+    set_source_files_properties(LICENSE PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+    target_sources(swiftify PRIVATE LICENSE)
+    set_source_files_properties(${SWIFTIFY_THIRD_PARTY_LICENSES} PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+    target_sources(swiftify PRIVATE ${SWIFTIFY_THIRD_PARTY_LICENSES})
     set_target_properties(swiftify PROPERTIES
         MACOSX_BUNDLE ON
         MACOSX_BUNDLE_INFO_PLIST ${CMAKE_CURRENT_SOURCE_DIR}/packaging/macos/Info.plist.in
@@ -511,6 +568,12 @@ endif()
 install(TARGETS swiftify
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
     BUNDLE DESTINATION .)
+# the gpl has to go out with every copy of swiftify, so the tarball and the
+# windows zip carry it here and the app bundle in its resources
+if(NOT APPLE)
+    install(FILES LICENSE DESTINATION ${CMAKE_INSTALL_DATADIR}/licenses/swiftify)
+    install(FILES ${SWIFTIFY_THIRD_PARTY_LICENSES} DESTINATION ${CMAKE_INSTALL_DATADIR}/licenses/swiftify)
+endif()
 if(NOT APPLE AND NOT WIN32)
     # the desktop entry's name is the wayland app id (see main.cpp), which is
     # how hyprland and the tray match the window to its icon

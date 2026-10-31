@@ -4,7 +4,7 @@ pkgver=0.1.1
 pkgrel=1
 pkgdesc='A Spotify player for Wayland, in Material 3 after end4'
 arch=('x86_64' 'aarch64')
-license=('custom')
+license=('GPL-3.0-or-later')
 depends=('qt6-base' 'qt6-declarative' 'qt6-wayland' 'qt6-websockets' 'qcoro' 'libpulse'
          'alsa-lib' 'openssl' 'hicolor-icon-theme')
 makedepends=('cmake' 'ninja' 'rust' 'qt6-shadertools' 'git')
@@ -24,7 +24,4 @@ build() {
 
 package() {
     DESTDIR="$pkgdir" cmake --install build
-    # the bundled colour library is apache-2.0
-    install -Dm644 "$_root/third_party/material-color-utilities/LICENSE" \
-        "$pkgdir/usr/share/licenses/$pkgname/material-color-utilities.LICENSE"
 }

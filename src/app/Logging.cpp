@@ -1,3 +1,21 @@
+/*
+ * Swiftify, a spotify player for desktop
+ * Copyright (C) 2026  shred0s
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #include "app/Logging.h"
 #include "app/Paths.h"
 
@@ -127,17 +145,37 @@ void setupLogging()
         dup2(fd, STDOUT_FILENO);
         fclose(fp);
         setvbuf(stderr, nullptr, _IONBF, 0);
-        setvbuf(stdout, nullptr, _IOLBF, 0);
+        setvbuf(stdout, nullptr, _IONBF, 0);
     }
 #endif
 
 #ifdef Q_OS_WIN
-    if (_isatty(_fileno(stderr))) {
-        s_consoleFd = _dup(_fileno(stderr));
+    HANDLE hStdErr = GetStdHandle(STD_ERROR_HANDLE);
+    if (hStdErr != INVALID_HANDLE_VALUE && hStdErr != nullptr) {
+        const DWORD type = GetFileType(hStdErr);
+        if (type == FILE_TYPE_CHAR || type == FILE_TYPE_PIPE) {
+            HANDLE hConsole = INVALID_HANDLE_VALUE;
+            if (DuplicateHandle(GetCurrentProcess(), hStdErr,
+                                GetCurrentProcess(), &hConsole,
+                                0, FALSE, DUPLICATE_SAME_ACCESS)) {
+                s_consoleFd = _open_osfhandle(reinterpret_cast<intptr_t>(hConsole), _O_TEXT);
+            }
+        }
     }
 
     fflush(stderr);
     fflush(stdout);
+
+    // In a GUI subsystem application (WIN32_EXECUTABLE), stderr and stdout do not have
+    // backing CRT descriptors by default (_fileno returns -2). We must initialize them
+    // (e.g. to NUL) before _dup2 can duplicate our log file descriptor onto them.
+    FILE *dummy = nullptr;
+    if (_fileno(stderr) < 0) {
+        _wfreopen_s(&dummy, L"NUL", L"w", stderr);
+    }
+    if (_fileno(stdout) < 0) {
+        _wfreopen_s(&dummy, L"NUL", L"w", stdout);
+    }
 
     const std::wstring wpath = logFile.toStdWString();
     FILE *fp = _wfsopen(wpath.c_str(), L"w", _SH_DENYNO);
@@ -146,19 +184,25 @@ void setupLogging()
     }
     if (fp) {
         const int fd = _fileno(fp);
-        _dup2(fd, _fileno(stderr));
-        _dup2(fd, _fileno(stdout));
-        HANDLE hErr = reinterpret_cast<HANDLE>(_get_osfhandle(_fileno(stderr)));
-        HANDLE hOut = reinterpret_cast<HANDLE>(_get_osfhandle(_fileno(stdout)));
-        if (hErr != INVALID_HANDLE_VALUE) {
+        const int errFd = _fileno(stderr);
+        const int outFd = _fileno(stdout);
+        if (errFd >= 0) {
+            _dup2(fd, errFd);
+        }
+        if (outFd >= 0) {
+            _dup2(fd, outFd);
+        }
+        HANDLE hErr = reinterpret_cast<HANDLE>(_get_osfhandle(errFd >= 0 ? errFd : fd));
+        HANDLE hOut = reinterpret_cast<HANDLE>(_get_osfhandle(outFd >= 0 ? outFd : fd));
+        if (hErr != INVALID_HANDLE_VALUE && hErr != nullptr) {
             SetStdHandle(STD_ERROR_HANDLE, hErr);
         }
-        if (hOut != INVALID_HANDLE_VALUE) {
+        if (hOut != INVALID_HANDLE_VALUE && hOut != nullptr) {
             SetStdHandle(STD_OUTPUT_HANDLE, hOut);
         }
         fclose(fp);
         setvbuf(stderr, nullptr, _IONBF, 0);
-        setvbuf(stdout, nullptr, _IOLBF, 0);
+        setvbuf(stdout, nullptr, _IONBF, 0);
     }
 #endif
 

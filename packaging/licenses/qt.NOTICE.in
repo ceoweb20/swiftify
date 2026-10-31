@@ -1,0 +1,8 @@
+Swiftify comes with Qt @Qt6_VERSION@ (https://www.qt.io), copyright The Qt
+Company Ltd. and other contributors, under the GNU Lesser General Public
+License version 3. Its text is in qt.LICENSE beside this file, and the GNU
+General Public License version 3 it adds to is in LICENSE.
+
+Swiftify links Qt's libraries dynamically, so they can be swapped for a
+modified build of Qt @Qt6_VERSION@. Qt's source is at
+https://download.qt.io/archive/qt/@Qt6_VERSION_MAJOR@.@Qt6_VERSION_MINOR@/@Qt6_VERSION@/single/

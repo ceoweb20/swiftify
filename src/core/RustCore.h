@@ -1,3 +1,21 @@
+/*
+ * Swiftify, a spotify player for desktop
+ * Copyright (C) 2026  shred0s
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #pragma once
 
 #include "core/PlaybackCore.h"
@@ -60,6 +78,7 @@ public:
     bool playLiveBuffer(SwiftifyLiveBuffer *buffer) override;
     void stopLiveBuffer() override;
     quint32 liveOutputRate() const override;
+    void analyseLive(const float *samples, qsizetype count, float outputGain) override;
 
     void setSpectrumEnabled(bool enabled) override;
     int spectrumLevels(float *out, int capacity) const override;

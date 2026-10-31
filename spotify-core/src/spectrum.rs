@@ -1,3 +1,21 @@
+/*
+ * Swiftify, a spotify player for desktop
+ * Copyright (C) 2026  shred0s
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 use std::{
     collections::VecDeque,
     f32::consts::TAU,
@@ -128,6 +146,12 @@ impl SharedSpectrum {
 
     pub(crate) fn is_enabled(&self) -> bool {
         self.enabled.load(Ordering::Relaxed)
+    }
+
+    /// analysis windows queued so far
+    #[cfg(test)]
+    pub(crate) fn queued(&self) -> u64 {
+        self.sequence.load(Ordering::Relaxed)
     }
 
     pub(crate) fn levels(&self) -> Vec<f32> {

@@ -1,3 +1,21 @@
+/*
+ * Swiftify, a spotify player for desktop
+ * Copyright (C) 2026  shred0s
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #include "app/ErrorCenter.h"
 #include "app/Settings.h"
 #include "app/Translations.h"
@@ -88,6 +106,10 @@ private slots:
                  QStringLiteral("Soloist завершил работу с кодом 10. Соединение отклонено"));
         QCOMPARE(QCoreApplication::translate("Soloist", "Could not create /Users/test/Music"),
                  QStringLiteral("Не удалось создать /Users/test/Music"));
+        QCOMPARE(QCoreApplication::translate("Errors", "Spotify token exchange failed: Connection refused"),
+                 QStringLiteral("Не удалось получить токен Spotify: Соединение отклонено"));
+        QCOMPARE(QCoreApplication::translate("Errors", "Spotify API request failed: /Users/test/Music"),
+                 QStringLiteral("Ошибка запроса к API Spotify: /Users/test/Music"));
         QCOMPARE(QCoreApplication::translate("metadata", "Could not create a playlist"),
                  QStringLiteral("Could not create a playlist"));
         QCOMPARE(QCoreApplication::translate("Errors", "custom playlist"), QStringLiteral("custom playlist"));

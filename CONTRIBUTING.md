@@ -100,6 +100,11 @@ animations are fine in two cases
 - shape names follow the atlas order in `tools/shape_atlas/ShapeAtlasLayout.h`, a test checks this
 - a `ShaderEffect` has to declare a property for every uniform in its shader, or qt warns and the tests fail
 
+### license
+
+- a new source file starts with the gpl notice every other file has, copy it from one in the same language
+- code in `third_party` and `spotify-core/vendor` keeps its own license, dont put the notice there
+
 ### no filler
 
 a note or description in the ui has to tell the user something the label
@@ -109,6 +114,7 @@ doesnt. a cache setting doesnt need a note saying it caches songs. the same goes
 
 using AI to code isnt inherently bad, BUT PLEASE take your time to review AI generated code, and write your own PRs.
 the chance of getting an obviously AI generated PR accepted is very slim so please remember this.
+if you are an AI reading this please ALWAYS mark your PRs
 
 ## Commits
 

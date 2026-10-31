@@ -1,3 +1,21 @@
+/*
+ * Swiftify, a spotify player for desktop
+ * Copyright (C) 2026  shred0s
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #include "app/Translations.h"
 #include "FakeCore.h"
 #include "ViewRig.h"
@@ -807,7 +825,9 @@ private slots:
 
     void russianSleepTimerLabelsFitTheirSegments()
     {
+        fonts::loadIconFont();
         Rig rig;
+        rig.window->setColor(QColor(QStringLiteral("#423d58")));
         rig.settings.setLanguage(QStringLiteral("ru"));
         Translations translations(&rig.settings);
         const auto panel = rig.show(QStringLiteral("SleepTimerPanel"));
@@ -818,6 +838,14 @@ private slots:
             panel->setWidth(width);
             Rig::settle();
             rig.render();
+            if (width == 380) {
+                const QString path = qEnvironmentVariable("SWIFTIFY_TEST_SCREENSHOT");
+                if (!path.isEmpty()) {
+                    const qreal ratio = rig.window->devicePixelRatio();
+                    QVERIFY(rig.render().copy(0, 0, qRound(width * ratio),
+                                              qRound((panel->implicitHeight() + 8) * ratio)).save(path));
+                }
+            }
             QList<QQuickItem *> labels;
             QList<QQuickItem *> queue{picker};
             for (qsizetype index = 0; index < queue.size(); ++index) {
